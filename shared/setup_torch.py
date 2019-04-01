@@ -7,3 +7,6 @@ os.environ['GOTOBLAS_MAIN_FREE'] = '1'
 
 import torch
 torch.set_num_threads(1)
+
+import numpy as np
+np.seterr('raise')

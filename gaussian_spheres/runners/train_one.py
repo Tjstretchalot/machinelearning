@@ -1,14 +1,15 @@
 """This runner trains a single recurrent network on the gaussian spheres task"""
 
-import shared.setup_torch
+import shared.setup_torch #pylint: disable=unused-import
+from shared.models.rnn import NaturalRNN
+from shared.teachers import RNNTeacher
+import shared.trainer as tnr
+import shared.weight_inits as wi
 import torch
 from gaussian_spheres.pwl import GaussianSpheresPWLP
-from shared.models.rnn import NaturalRNN
-import shared.trainer as tnr
-from shared.teachers import RNNTeacher
-import shared.weight_inits as wi
 
 def main():
+    """Entry point"""
     pwl = GaussianSpheresPWLP.create(
         epoch_size=1800, input_dim=200, output_dim=2, cube_half_side_len=2,
         num_clusters=60, std_dev=0.04, mean=0, min_sep=0.1

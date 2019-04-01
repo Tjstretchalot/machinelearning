@@ -171,3 +171,4 @@ class NaturalRNN(Network):
                 hidden_acts @ self.output_weights + self.output_biases.expand(batch_size, -1)
             )
         )
+
