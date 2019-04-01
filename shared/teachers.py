@@ -33,33 +33,3 @@ class NetworkTeacher:
         """
 
         raise NotImplementedError()
-
-class RNNTeacher(NetworkTeacher):
-    """Describes something which can teach an rnn
-
-    Attributes:
-        recurrent_times (int): how many times to recur
-        input_times (int): how many times to present the input
-    """
-
-    def __init__(self, recurrent_times: int, input_times: int = 1):
-        self.recurrent_times = recurrent_times
-        self.input_times = input_times
-
-    def teach_many(self, network: Network, optimizer: torch.optim.Optimizer, criterion: typing.Any,
-                   points: torch.tensor, labels: torch.tensor):
-        network.train()
-        with torch.set_grad_enabled(True):
-            network.zero_grad()
-            optimizer.zero_grad()
-            result = network(points, self.recurrent_times, None, self.input_times)
-            loss = criterion(result, labels)
-            loss.backward()
-            optimizer.step()
-        return loss.item()
-
-    def classify_many(self, network: Network, points: torch.tensor, out: torch.tensor):
-        network.eval()
-        with torch.no_grad():
-            result = network(points, self.recurrent_times, None, self.input_times)
-        out.copy_(result)

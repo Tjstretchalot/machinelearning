@@ -1,10 +1,10 @@
 """This runner trains a single recurrent network on the gaussian spheres task"""
 
 import shared.setup_torch #pylint: disable=unused-import
-from shared.models.rnn import NaturalRNN
-from shared.teachers import RNNTeacher
+from shared.models.rnn import NaturalRNN, RNNTeacher
 import shared.trainer as tnr
 import shared.weight_inits as wi
+import shared.measures.pca as pca
 import torch
 from gaussian_spheres.pwl import GaussianSpheresPWLP
 
@@ -45,11 +45,22 @@ def main():
      .reg(tnr.AccuracyTracker(5, 1000, True))
     )
 
-    result = trainer.train(network)
+    print('--saving pcs before training--')
+    traj = pca.find_trajectory(network, pwl, 10, 2)
 
+    savepath = 'out/runners/gaussian_spheres/train_one/pca_before'
+    pca.plot_trajectory(traj, savepath, savepath, exist_ok=True)
+    del traj
+
+    print('--training--')
+    result = trainer.train(network)
     print('--finished training--')
     print(result)
+    print('--saving pcs after training--')
+    traj = pca.find_trajectory(network, pwl, 10, 2)
 
+    savepath = 'out/runners/gaussian_spheres/train_one/pca_after'
+    pca.plot_trajectory(traj, savepath, savepath, exist_ok=True)
 
 if __name__ == '__main__':
     main()

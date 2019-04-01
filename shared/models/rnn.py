@@ -6,6 +6,7 @@ import torch.nn
 
 import shared.weight_inits as wi
 from shared.models.generic import Network
+from shared.teachers import NetworkTeacher
 
 class RNNHiddenActivations(typing.NamedTuple):
     """This is the named tuple which is passed to the hidden activations
@@ -64,7 +65,7 @@ class NaturalRNN(Network):
             input_weights: wi.WeightInitializer, input_biases: wi.WeightInitializer,
             hidden_weights: wi.WeightInitializer, hidden_biases: wi.WeightInitializer,
             output_weights: wi.WeightInitializer, output_biases: wi.WeightInitializer
-            ) -> 'NaturalRNN':
+        ) -> 'NaturalRNN':
         """An alternative constructor which can be called more easily from a serialized dictionary.
         Each of the wi.WeightInitializer's are runtime type-checked and, if they fail, are sent
         through wi.deserialize which will error on failure.
@@ -172,3 +173,32 @@ class NaturalRNN(Network):
             )
         )
 
+class RNNTeacher(NetworkTeacher):
+    """Describes something which can teach an rnn
+
+    Attributes:
+        recurrent_times (int): how many times to recur
+        input_times (int): how many times to present the input
+    """
+
+    def __init__(self, recurrent_times: int, input_times: int = 1):
+        self.recurrent_times = recurrent_times
+        self.input_times = input_times
+
+    def teach_many(self, network: Network, optimizer: torch.optim.Optimizer, criterion: typing.Any,
+                   points: torch.tensor, labels: torch.tensor):
+        network.train()
+        with torch.set_grad_enabled(True):
+            network.zero_grad()
+            optimizer.zero_grad()
+            result = network(points, self.recurrent_times, None, self.input_times)
+            loss = criterion(result, labels)
+            loss.backward()
+            optimizer.step()
+        return loss.item()
+
+    def classify_many(self, network: Network, points: torch.tensor, out: torch.tensor):
+        network.eval()
+        with torch.no_grad():
+            result = network(points, self.recurrent_times, None, self.input_times)
+        out.copy_(result)

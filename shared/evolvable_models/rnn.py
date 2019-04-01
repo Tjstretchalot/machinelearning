@@ -3,8 +3,7 @@ solve"""
 
 import typing
 import shared.evolution as evo
-from shared.models.rnn import NaturalRNN
-from shared.teachers import RNNTeacher
+from shared.models.rnn import NaturalRNN, RNNTeacher
 import shared.weight_inits as wi
 import shared.trainer as tnr
 import torch
