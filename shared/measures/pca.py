@@ -197,14 +197,18 @@ def get_hidden_pcs(hidden_acts: torch.tensor, num_pcs: int):
         last = float(_reig)
     return reig, reig_vecs
 
-def project_to_pcs(points, pcs, out):
+def project_to_pcs(points, pcs, out) -> torch.tensor:
     """Projects the given points to the given principal component vectors
 
     Args:
         points (torch.tensor[num_points x points_dim]): The points to project
         pcs (torch.tensor[num_pcs x points_dim]): The principal component vectors to project onto
         out (torch.tensor[num_points x num_pcs]): (the result): the projection of the points along
-            the pcs, overwritten
+            the pcs, overwritten. Optional.
+
+    Returns:
+        out (torch.tensor[num_points x num_pcs]): the projection of the points salong the pcs.
+            If out is provided, this is just out.
     """
     if not torch.is_tensor(points):
         raise ValueError(f'expected points is torch.tensor, got {points}')
@@ -215,20 +219,24 @@ def project_to_pcs(points, pcs, out):
     if len(pcs.shape) != 2:
         raise ValueError(f'expected pcs.shape is (num_pcs, points_dim) but got {pcs.shape}')
     if points.shape[1] != pcs.shape[1]:
-        raise ValueError(f'expected points.shape is (num_points, points_dim) and pcs.shape is (num_pcs, points_dim) but points.shape={points.shape} and points_dim.shape={points.shape} (dont match on dim 1)')
-    if not torch.is_tensor(out):
-        raise ValueError(f'expected out is torch.tensor, got {out}')
-    if len(out.shape) != 2:
-        raise ValueError(f'expected out.shape is (num_points, num_pcs) but got {out.shape}')
-    if out.shape[0] != points.shape[0]:
-        raise ValueError(f'expected points.shape is (num_points, points_dim) and out.shape is (num_points, num_pcs) but points.shape={points.shape} and out.shape={out.shape} (dont match on dim 0)')
-    if out.shape[1] != pcs.shape[0]:
-        raise ValueError(f'expected pcs.shape is (num_pcs, points_dim) and out.shape is (num_points, num_pcs) but pcs.shape={pcs.shape} and out.shape={out.shape} (num_pcs not the same)')
+        raise ValueError(f'expected points.shape is (num_points, points_dim) and pcs.shape is (num_pcs, points_dim) but points.shape={points.shape} and pcs.shape={pcs.shape} (dont match on dim 1)')
+    if out is not None:
+        if not torch.is_tensor(out):
+            raise ValueError(f'expected out is torch.tensor, got {out}')
+        if len(out.shape) != 2:
+            raise ValueError(f'expected out.shape is (num_points, num_pcs) but got {out.shape}')
+        if out.shape[0] != points.shape[0]:
+            raise ValueError(f'expected points.shape is (num_points, points_dim) and out.shape is (num_points, num_pcs) but points.shape={points.shape} and out.shape={out.shape} (dont match on dim 0)')
+        if out.shape[1] != pcs.shape[0]:
+            raise ValueError(f'expected pcs.shape is (num_pcs, points_dim) and out.shape is (num_points, num_pcs) but pcs.shape={pcs.shape} and out.shape={out.shape} (num_pcs not the same)')
     pca_proj = np.dot(points.numpy(), pcs.transpose(0, 1).numpy())
-    out[:] = torch.tensor(pca_proj)
+    if out is not None:
+        out[:] = torch.tensor(pca_proj)
+        return out
+    return torch.tensor(pca_proj)
 
 def find_trajectory(model: NaturalRNN, pwl_prod: PointWithLabelProducer,
-                    duration: int, num_pcs: int):
+                    duration: int, num_pcs: int) -> PCTrajectory:
     """Finds the trajectory of the given model using the given point with label producer. Goes
     through the entire epoch for the point with label producer.
 
@@ -240,8 +248,8 @@ def find_trajectory(model: NaturalRNN, pwl_prod: PointWithLabelProducer,
         num_pcs (int): The number of principal vectors to find
     """
 
-    num_samples = pwl_prod.epoch_size
-    sample_points = torch.zeros((num_samples, model.hidden_dim), dtype=torch.double)
+    num_samples = min(pwl_prod.epoch_size, 100 * pwl_prod.output_dim)
+    sample_points = torch.zeros((num_samples, model.input_dim), dtype=torch.double)
     sample_labels = torch.zeros((num_samples,), dtype=torch.long)
     hid_acts = torch.zeros((duration+1, num_samples, model.hidden_dim), dtype=torch.double)
     hid_pc_vals = torch.zeros((duration+1, num_pcs), dtype=torch.double)
@@ -355,13 +363,12 @@ def plot_snapshot(axis: plt.Axes, projected: torch.tensor, labels: torch.tensor,
         labelbottom=False,
         labelleft=False)
 
-def plot_trajectory(traj: PCTrajectory, filepath: str, datapath: str, exist_ok: bool = False):
+def plot_trajectory(traj: PCTrajectory, filepath: str, exist_ok: bool = False):
     """Plots the given trajectory and saves it to the given filepath.
 
     Args:
         traj (PCTrajectory): the trajectory to plot
-        filepath (str): where to save the image(s). should have extension 'zip' or no extension
-        datapath (str): where to save the trajectory data, should have the extension 'zip'
+        filepath (str): where to save the images and data. should have extension 'zip' or no extension
         exist_ok (bool, default false): if true we will overwrite existing files rather than error
     """
 
@@ -369,37 +376,23 @@ def plot_trajectory(traj: PCTrajectory, filepath: str, datapath: str, exist_ok: 
         raise ValueError(f'expected traj is PCTrajectory, got {traj} (type={type(traj)})')
     if not isinstance(filepath, str):
         raise ValueError(f'expected filepath is str, got {filepath} (type={type(filepath)})')
-    if not isinstance(datapath, str):
-        raise ValueError(f'expected datapath is str, got {datapath} (type={type(datapath)})')
-
-    if filepath == datapath:
-        dp_split = os.path.splitext(datapath)
-        datapath = dp_split[0] + '_data' + dp_split[1]
 
     filepath_wo_ext = os.path.splitext(filepath)[0]
     if filepath_wo_ext == filepath:
         filepath += '.zip'
-    datapath_wo_ext = os.path.splitext(datapath)[0]
-    if datapath_wo_ext == datapath:
-        datapath += '.zip'
 
     if os.path.exists(filepath_wo_ext):
         raise FileExistsError(f'for filepath {filepath} we require {filepath_wo_ext} is available (already exists)')
-    if os.path.exists(datapath_wo_ext):
-        raise FileExistsError(f'for datapath {datapath} we require {datapath_wo_ext} is available (already exists)')
 
-    if not exist_ok:
-        if os.path.exists(filepath):
-            raise FileExistsError(f'filepath {filepath} already exists (use exist_ok=True to overwrite)')
-        if os.path.exists(datapath):
-            raise FileExistsError(f'datapath {datapath} already exists (use exist_ok=True to overwrite)')
+    if not exist_ok and os.path.exists(filepath):
+        raise FileExistsError(f'filepath {filepath} already exists (use exist_ok=True to overwrite)')
 
     os.makedirs(filepath_wo_ext)
 
     closest_square: int = int(np.ceil(np.sqrt(traj.get_num_timesteps())))
-    num_rows: int = int(math.ceil(traj.get_num_timesteps() / closest_square))
-    local_fig, local_axs = plt.subplots(closest_square, num_rows, squeeze=False)
-    global_fig, global_axs = plt.subplots(closest_square, num_rows, squeeze=False)
+    num_cols: int = int(math.ceil(traj.get_num_timesteps() / closest_square))
+    local_fig, local_axs = plt.subplots(num_cols, closest_square, squeeze=False)
+    global_fig, global_axs = plt.subplots(num_cols, closest_square, squeeze=False)
 
     global_min_x = torch.min(traj.projected_samples[:, :, 0]).item()
     global_min_y = torch.min(traj.projected_samples[:, :, 1]).item()
@@ -409,8 +402,8 @@ def plot_trajectory(traj: PCTrajectory, filepath: str, datapath: str, exist_ok: 
     global_padding_y = (global_max_y - global_min_y) * .1
 
     timestep: int = 0
-    for x in range(closest_square):
-        for y in range(num_rows):
+    for x in range(num_cols):
+        for y in range(closest_square):
             if timestep >= traj.get_num_timesteps():
                 local_axs[x][y].remove()
                 global_axs[x][y].remove()
@@ -444,6 +437,7 @@ def plot_trajectory(traj: PCTrajectory, filepath: str, datapath: str, exist_ok: 
 
     local_path = os.path.join(filepath_wo_ext, 'local.png')
     global_path = os.path.join(filepath_wo_ext, 'global.png')
+    data_path = os.path.join(filepath_wo_ext, 'data.npz')
 
     local_fig.tight_layout()
     global_fig.tight_layout()
@@ -451,15 +445,20 @@ def plot_trajectory(traj: PCTrajectory, filepath: str, datapath: str, exist_ok: 
     local_fig.savefig(local_path, transparent=True)
     global_fig.savefig(global_path, transparent=True)
 
+    np.savez(data_path, principal_vectors=traj.principal_vectors.numpy(),
+             principal_values=traj.principal_values.numpy(),
+             projected_samples=traj.projected_samples.numpy(),
+             projected_sample_labels=traj.projected_sample_labels.numpy())
+
     counter = 0
-    local_exists, global_exists = os.path.exists(local_path), os.path.exists(global_path)
-    while not local_exists or not global_exists:
+    local_exists, global_exists, data_exists = os.path.exists(local_path), os.path.exists(global_path), os.path.exists(data_path)
+    while not local_exists or not global_exists or not data_exists:
         if counter == 1:
-            warnings.warn(f'waiting on either {local_path} (exists: {local_exists}) or {global_path} (exists: {global_exists})', UserWarning)
+            warnings.warn(f'waiting on either {local_path} (exists: {local_exists}) or {global_path} (exists: {global_exists}) or {data_path} (exists: {data_exists})', UserWarning)
         if counter > 10:
-            raise Exception(f'savefig failed; local_exists={local_exists}, global_exists={global_exists}')
+            raise Exception(f'savefig failed; local_exists={local_exists}, global_exists={global_exists}, data_exists={data_exists}')
         time.sleep(0.05)
-        local_exists, global_exists = os.path.exists(local_path), os.path.exists(global_path)
+        local_exists, global_exists, data_exists = os.path.exists(local_path), os.path.exists(global_path), os.path.exists(data_path)
         counter += 1
 
     if os.path.exists(filepath):
@@ -469,17 +468,4 @@ def plot_trajectory(traj: PCTrajectory, filepath: str, datapath: str, exist_ok: 
     shutil.make_archive(filepath_wo_ext, 'zip', filepath_wo_ext)
     os.chdir(cwd)
     shutil.rmtree(filepath_wo_ext)
-    os.chdir(cwd)
-
-    os.makedirs(datapath_wo_ext)
-
-    numpy_datapath = os.path.join(datapath_wo_ext, 'trajectory.npz')
-    np.savez(numpy_datapath, principal_vectors=traj.principal_vectors.numpy(),
-             principal_values=traj.principal_values.numpy(),
-             projected_samples=traj.projected_samples.numpy(),
-             projected_sample_labels=traj.projected_sample_labels.numpy())
-
-    shutil.make_archive(datapath_wo_ext, 'zip', datapath_wo_ext)
-    os.chdir(cwd)
-    shutil.rmtree(datapath_wo_ext)
     os.chdir(cwd)

@@ -12,7 +12,7 @@ import os
 INPUT_DIM = 200
 OUTPUT_DIM = 2
 MODULE_NAME = 'gaussian_spheres.runners.train_evolve'
-SAVE_PATH = os.path.join('out', 'gaussian_spheres', 'runners', 'train_evolve')
+SAVE_PATH = os.path.join('out', 'gaussian_spheres', 'runners', 'rnn', 'train_evolve')
 
 def create_data() -> GaussianSpheresPWLP:
     """Create the task to solve"""

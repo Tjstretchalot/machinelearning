@@ -5,8 +5,12 @@ from shared.models.rnn import NaturalRNN, RNNTeacher
 import shared.trainer as tnr
 import shared.weight_inits as wi
 import shared.measures.pca as pca
+import shared.measures.dist_through_time as dtt
 import torch
 from gaussian_spheres.pwl import GaussianSpheresPWLP
+import os
+
+SAVEDIR = os.path.join('out', 'gaussian_spheres', 'runners', 'rnn', 'train_one')
 
 def main():
     """Entry point"""
@@ -48,8 +52,12 @@ def main():
     print('--saving pcs before training--')
     traj = pca.find_trajectory(network, pwl, 10, 2)
 
-    savepath = 'out/runners/gaussian_spheres/train_one/pca_before'
-    pca.plot_trajectory(traj, savepath, savepath, exist_ok=True)
+    print('--saving distance through time before training--')
+    savepath = os.path.join(SAVEDIR, 'dtt_before')
+    dtt.measure_dtt(network, pwl, 10, savepath, verbose=True, exist_ok=True)
+
+    savepath = os.path.join(SAVEDIR, 'pca_before')
+    pca.plot_trajectory(traj, savepath, exist_ok=True)
     del traj
 
     print('--training--')
@@ -59,8 +67,12 @@ def main():
     print('--saving pcs after training--')
     traj = pca.find_trajectory(network, pwl, 10, 2)
 
-    savepath = 'out/runners/gaussian_spheres/train_one/pca_after'
-    pca.plot_trajectory(traj, savepath, savepath, exist_ok=True)
+    print('--saving distance through time after training--')
+    savepath = os.path.join(SAVEDIR, 'dtt_after')
+    dtt.measure_dtt(network, pwl, 10, savepath, verbose=True, exist_ok=True)
+
+    savepath = os.path.join(SAVEDIR, 'pca_after')
+    pca.plot_trajectory(traj, savepath, exist_ok=True)
 
 if __name__ == '__main__':
     main()
