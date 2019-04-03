@@ -199,7 +199,7 @@ class FeedforwardLarge(FeedforwardNetwork):
         Args:
             input_dim (int): the input dimensionality
             output_dim (int): the output dimensionality
-            nonlinearity (str): one of 'relu' or 'tanh'
+            nonlinearity (str): one of 'relu', 'tanh', 'none'
             weights (wi.WeightInitializer): the initializer for the weights between layesr
             biases (wi.WeightInitializer): the initializer for the biases of each layer
             layer_sizes (typing.Iterable[int]): one int for the number of nodes in each layer.
@@ -211,7 +211,7 @@ class FeedforwardLarge(FeedforwardNetwork):
             raise ValueError(f'expected input_dim is int, got {input_dim} (type={type(input_dim)})')
         if not isinstance(output_dim, int):
             raise ValueError(f'expected output_dim is int, got {output_dim} (type={type(output_dim)})')
-        if nonlinearity not in ('relu', 'tanh'):
+        if nonlinearity not in ('relu', 'tanh', 'none'):
             raise ValueError(f'expected nonlinearity is \'relu\' or \'tanh\', got {nonlinearity}')
 
         layers = []
@@ -231,7 +231,13 @@ class FeedforwardLarge(FeedforwardNetwork):
         wi.deser_or_noop(biases).initialize(layer.bias.data)
         layers.append(layer)
 
-        _nonlinearity = torch.tanh if nonlinearity == 'tanh' else torch.relu
+        _nonlinearity = {
+            'tanh': torch.tanh,
+            'relu': torch.relu,
+            'none': lambda x: x
+        }[nonlinearity]
+
+        print(f'nonlinearity: {nonlinearity}')
 
         return cls(layers, _nonlinearity)
 

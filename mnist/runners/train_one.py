@@ -1,4 +1,4 @@
-"""Trains a single feedforward model on the classifications task
+"""Trains a single feedforward model on the mnist task
 """
 
 import shared.setup_torch #pylint: disable=unused-import
@@ -20,10 +20,11 @@ def main():
     test_pwl = MNISTData.load_test().to_pwl().restrict_to(set(range(10))).rescale()
 
     network = FeedforwardLarge.create(
-        input_dim=train_pwl.input_dim, output_dim=train_pwl.output_dim, nonlinearity='tanh',
+        input_dim=train_pwl.input_dim, output_dim=train_pwl.output_dim, nonlinearity='none',
         weights=wi.GaussianWeightInitializer(mean=0, vari=0.3, normalize_dim=1),
         biases=wi.ZerosWeightInitializer(),
-        layer_sizes=[200, 100, 50, 50, 50, 25]
+        #layer_sizes=[200, 100, 50, 50, 50, 25]
+        layer_sizes=[500, 200]
     )
 
     trainer = tnr.GenericTrainer(
