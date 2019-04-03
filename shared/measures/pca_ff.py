@@ -199,13 +199,14 @@ def find_trajectory(model: FeedforwardNetwork, pwl_prod: PointWithLabelProducer,
 
     return PCTrajectoryFF(snapshots)
 
-def plot_trajectory(traj: PCTrajectoryFF, filepath: str, exist_ok: bool = False):
+def plot_trajectory(traj: PCTrajectoryFF, filepath: str, exist_ok: bool = False, alpha=0.5):
     """Plots the given trajectory and saves it to the given filepath.
 
     Args:
         traj (PCTrajectoryFF): the trajectory to plot
         filepath (str): where to save the images and data. should have extension 'zip' or no extension
         exist_ok (bool, default false): if true we will overwrite existing files rather than error
+        alpha (float): alpha for the points
     """
     if not isinstance(traj, PCTrajectoryFF):
         raise ValueError(f'expected traj to be PCTrajectoryFF, got {traj} (type={type(traj)})')
@@ -213,6 +214,10 @@ def plot_trajectory(traj: PCTrajectoryFF, filepath: str, exist_ok: bool = False)
         raise ValueError(f'expected filepath to be str, got {filepath} (type={type(filepath)})')
     if not isinstance(exist_ok, bool):
         raise ValueError(f'expected exist_ok to be bool, got {exist_ok} (type={type(exist_ok)})')
+    if not isinstance(alpha, float):
+        raise ValueError(f'expected alpha is float, got {alpha} (type={type(alpha)})')
+    if alpha < 0 or alpha > 1:
+        raise ValueError(f'expected alpha in [0, 1], got {alpha}')
 
     filepath_wo_ext = os.path.splitext(filepath)[0]
     if filepath_wo_ext == filepath:
@@ -256,7 +261,7 @@ def plot_trajectory(traj: PCTrajectoryFF, filepath: str, exist_ok: bool = False)
             padding_y = (max_y - min_y) * .1
 
             plot_snapshot(local_axs[x][y], projected, projected_lbls, min_x - padding_x, max_x + padding_x,
-                          min_y - padding_y, max_y + padding_y)
+                          min_y - padding_y, max_y + padding_y, alpha=alpha)
             layer += 1
 
     local_path = os.path.join(filepath_wo_ext, 'local.png')

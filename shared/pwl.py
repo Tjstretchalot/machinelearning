@@ -2,6 +2,7 @@
 
 import typing
 import torch
+import numpy as np
 
 class PointWithLabel(typing.NamedTuple):
     """Describes a simple point with a label
@@ -133,10 +134,88 @@ class SimplePointWithLabelProducer(PointWithLabelProducer):
     """
 
     def __init__(self, real_points: torch.tensor, real_labels: torch.tensor, output_dim: int):
+        if not torch.is_tensor(real_points):
+            raise ValueError(f'expected real_points is tensor, got {real_points}')
+        if len(real_points.shape) != 2:
+            raise ValueError(f'expected real_points has shape (num_samples, input_dim), got {real_points.shape}')
+        if real_points.dtype not in (torch.float, torch.double):
+            raise ValueError(f'expected real_points has dtype float or double, got {real_points.dtype}')
+        if not torch.is_tensor(real_labels):
+            raise ValueError(f'expected real_labels is tensor, got {real_labels}')
+        if len(real_labels.shape) != 1:
+            raise ValueError(f'expected real_labels has shape (num_samples), got {real_labels.shape}')
+        if real_labels.dtype not in (torch.uint8, torch.int, torch.long):
+            raise ValueError(f'expected real_labels has int-like dtype, got {real_labels.dtype}')
+        if real_points.shape[0] != real_labels.shape[0]:
+            raise ValueError(f'exepcted real_points has shape (num_samples, input_dim) and real_labels has shape (num_samples) but real_points.shape={real_points.shape} and real_labels.shape={real_labels.shape} (mismatch on dim 0)')
         super().__init__(real_points.shape[0], real_points.shape[1], output_dim)
 
         self.real_points = real_points
         self.real_labels = real_labels
+
+    def restrict_to(self, labels: typing.Set[int]) -> 'SimplePointWithLabelProducer':
+        """Creates a copy of this producer which is restricted to using the given
+        labels. This always produces a balanced set with the maximum number of points
+        possible in a random order, with label values rescaled to be a range
+
+        Args:
+            labels (typing.Set[int]): the values of the labels to include
+        """
+        if not isinstance(labels, (set, frozenset)):
+            raise ValueError(f'expected labels is set, got {labels} (type={type(labels)})')
+        for lbl in labels:
+            if not isinstance(lbl, int):
+                raise ValueError(f'expected labels is set[int], but contains {lbl} (type={type(lbl)})')
+
+        num_per_lbl = self.epoch_size
+        for lbl in labels:
+            avail = int((self.real_labels == lbl).sum())
+            if avail == 0:
+                raise ValueError(f'expected all of labels are in dataset, but there are none with lbl={lbl}')
+            num_per_lbl = min(num_per_lbl, avail)
+
+        result_points = torch.zeros((len(labels) * num_per_lbl, self.input_dim), dtype=self.real_points.dtype)
+        result_labels = torch.zeros((len(labels) * num_per_lbl), dtype=self.real_labels.dtype)
+
+        label_mapping = dict()
+        for lbl in labels:
+            label_mapping[lbl] = len(label_mapping)
+
+        cur_ind = 0
+        for lbl in labels:
+            inds = self.real_labels == lbl
+            result_points[cur_ind:cur_ind + num_per_lbl] = self.real_points[inds][:num_per_lbl]
+            result_labels[cur_ind:cur_ind + num_per_lbl] = label_mapping[lbl]
+            cur_ind += num_per_lbl
+
+        permut = torch.randperm(result_points.shape[0])
+        result_points[:] = result_points[permut]
+        result_labels[:] = result_labels[permut]
+        return SimplePointWithLabelProducer(result_points, result_labels, len(labels))
+
+    def rescale(self, mean=0, quartile=0.3, tmax=1.0) -> 'SimplePointWithLabelProducer':
+        """Creates a copy of this dataset so that the label data has the given mean
+        (by subtracting the old mean and adding the target mean) and so that 75% of
+        values have the given absolute value or below quartile (by multiplying by
+        quartile/old_quartile). If that would leave the max greater than tmax, then
+        we rescale again by tmax/old_max
+
+        Arguments:
+            mean (int, optional): Defaults to 0. The target mean
+            quartile (float, optional): Defaults to 0.3. The target quartile
+        """
+
+        old_mean = self.real_points.mean()
+        new_points = self.real_points.clone() - old_mean + mean
+
+        old_quartile = np.percentile(np.abs(new_points.numpy()), 75)
+        new_points *= (quartile / old_quartile)
+
+        old_max = new_points.max()
+        if old_max > tmax:
+            new_points *= (tmax/old_max)
+
+        return SimplePointWithLabelProducer(new_points, self.real_labels.clone(), self.output_dim)
 
     def _fill(self, points: torch.tensor, labels: torch.tensor) -> None:
         pos = self.position

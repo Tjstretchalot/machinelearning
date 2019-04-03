@@ -316,7 +316,8 @@ def find_trajectory(model: NaturalRNN, pwl_prod: PointWithLabelProducer,
     return PCTrajectory(hid_pc_vecs, hid_pc_vals, proj_samples, sample_labels, duration)
 
 def plot_snapshot(axis: plt.Axes, projected: torch.tensor, labels: torch.tensor,
-                  min_x: float, max_x: float, min_y: float, max_y: float) -> None:
+                  min_x: float, max_x: float, min_y: float, max_y: float,
+                  alpha: float = 0.5) -> None:
     """Plots the given projected points to the given matplotlib axis.
 
     Args:
@@ -328,6 +329,8 @@ def plot_snapshot(axis: plt.Axes, projected: torch.tensor, labels: torch.tensor,
         max_x (float): the right edge of the graph (x: pc 0)
         min_y (float): the top edge of the graph (y: pc 1)
         max_y (float): the bottom edge of the graph (y: pc 1)
+
+        alpha (float): the alpha for the points
     """
 
     if not torch.is_tensor(projected):
@@ -344,13 +347,19 @@ def plot_snapshot(axis: plt.Axes, projected: torch.tensor, labels: torch.tensor,
         raise ValueError(f'expected min_x is float, got {min_x} (type={type(min_x)})')
     if not isinstance(max_x, float):
         raise ValueError(f'expected max_x is float, got {max_x} (type={type(max_x)})')
+    if min_x > max_x:
+        raise ValueError(f'expected min_x < max_x, but min_x={min_x} and max_x={max_x}')
     if not isinstance(min_y, float):
         raise ValueError(f'expected min_y is float, got {min_y} (type={type(min_y)})')
     if not isinstance(max_y, float):
         raise ValueError(f'expected max_y is float, got {max_y} (type={type(max_y)})')
+    if min_y > max_y:
+        raise ValueError(f'expected min_y < max_y, but min_y={min_y} and max_y={max_y}')
+    if not isinstance(alpha, float):
+        raise ValueError(f'expected alpha is float, got {alpha}')
 
     axis.scatter(projected[:, 0].numpy(), projected[:, 1].numpy(),
-                 s=1, alpha=0.3, c=labels.numpy())
+                 s=1, alpha=alpha, c=labels.numpy())
 
     axis.set_xlim([min_x, max_x])
     axis.set_ylim([min_y, max_y])

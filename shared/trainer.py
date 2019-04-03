@@ -145,6 +145,9 @@ class GenericTrainer:
         )
         del _logger
 
+        for param_group in context.optimizer.param_groups:
+            param_group['lr'] = self.learning_rate
+
         self.setup(context, **kwargs)
 
         while True:
@@ -335,7 +338,7 @@ class AccuracyTracker:
     Attributes:
         measure_every (int): the number of epochs between accuracy measures
         num_points (int): the number of points to measure
-        validation (bool): true for a validation measure, false for a test data measure
+        validation (bool): true for a validation measure, false for a train data measure
 
         last_measure_epoch (int): the last epoch we measured at
         accuracy (float): the accuracy percentage on the last check

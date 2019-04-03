@@ -36,7 +36,7 @@ def main():
         test_pwl=pwl,
         teacher=FFTeacher(),
         batch_size=30,
-        learning_rate=0.05,
+        learning_rate=0.001,
         optimizer=torch.optim.RMSprop([p for p in network.parameters() if p.requires_grad], lr=0.001, alpha=0.9),
         criterion=torch.nn.CrossEntropyLoss()
     )
