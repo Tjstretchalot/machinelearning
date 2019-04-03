@@ -23,7 +23,7 @@ def main():
         input_dim=train_pwl.input_dim, output_dim=train_pwl.output_dim, nonlinearity='tanh',
         weights=wi.GaussianWeightInitializer(mean=0, vari=0.3, normalize_dim=1),
         biases=wi.ZerosWeightInitializer(),
-        layer_sizes=[256, 256]
+        layer_sizes=[200, 100, 100, 100, 100, 100]
     )
 
     trainer = tnr.GenericTrainer(
@@ -31,8 +31,8 @@ def main():
         test_pwl=test_pwl,
         teacher=FFTeacher(),
         batch_size=30,
-        learning_rate=0.001,
-        optimizer=torch.optim.Adam([p for p in network.parameters() if p.requires_grad], lr=0.001),
+        learning_rate=0.003,
+        optimizer=torch.optim.Adam([p for p in network.parameters() if p.requires_grad], lr=0.003),
         criterion=torch.nn.CrossEntropyLoss()
     )
 
