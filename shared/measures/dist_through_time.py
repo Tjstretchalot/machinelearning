@@ -15,6 +15,7 @@ import logging
 from shared.models.rnn import NaturalRNN, RNNHiddenActivations
 from shared.models.ff import FeedforwardNetwork, FFHiddenActivations
 from shared.pwl import PointWithLabelProducer
+from shared.filetools import zipdir
 
 import scipy.spatial.distance as sdist
 
@@ -52,6 +53,10 @@ def measure_instant(hid_acts: torch.tensor,
         raise ValueError(f'expected labels to have dtype long, has dtype {labels.dtype}')
     if labels.shape[0] != hid_acts.shape[0]:
         raise ValueError(f'expected hid_acts to have shape (number_samples, hidden_dim) and labels to have shape (number_samples), but hid_acts.shape={hid_acts.shape} and labels.shape={labels.shape} (dont match on dim 0)')
+
+    for lbl in range(num_labels):
+        if (labels == lbl).sum() <= 5:
+            raise ValueError(f'not enough points with label {lbl} (got {(labels == lbl).sum()})')
 
     within_dists = None
     across_dists = None
@@ -107,7 +112,7 @@ def measure_dtt(model: NaturalRNN, pwl_prod: PointWithLabelProducer,
         raise FileExistsError(f'outfile {outfile} already exists (use exist_ok=True) to overwrite')
 
 
-    num_samples = min(pwl_prod.epoch_size, 50)
+    num_samples = min(pwl_prod.epoch_size, 50 * pwl_prod.output_dim)
     sample_points = torch.zeros((num_samples, model.input_dim), dtype=torch.double)
     sample_labels = torch.zeros((num_samples,), dtype=torch.long)
     hid_acts = torch.zeros((duration+1, num_samples, model.hidden_dim), dtype=torch.double)
@@ -236,7 +241,7 @@ def measure_dtt_ff(model: FeedforwardNetwork, pwl_prod: PointWithLabelProducer,
     if not exist_ok and os.path.exists(outfile):
         raise FileExistsError(f'outfile {outfile} already exists (use exist_ok=True) to overwrite')
 
-    num_samples = min(pwl_prod.epoch_size, 50)
+    num_samples = min(pwl_prod.epoch_size, 50 * pwl_prod.output_dim)
 
     sample_points = torch.zeros((num_samples, model.input_dim), dtype=torch.double)
     sample_labels = torch.zeros((num_samples,), dtype=torch.long)
@@ -330,8 +335,4 @@ def measure_dtt_ff(model: FeedforwardNetwork, pwl_prod: PointWithLabelProducer,
     if os.path.exists(outfile):
         os.remove(outfile)
 
-    cwd = os.getcwd()
-    shutil.make_archive(outfile_wo_ext, 'zip', outfile_wo_ext)
-    os.chdir(cwd)
-    shutil.rmtree(outfile_wo_ext)
-    os.chdir(cwd)
+    zipdir(outfile_wo_ext)

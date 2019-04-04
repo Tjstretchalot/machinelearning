@@ -18,6 +18,7 @@ import os
 import shutil
 import time
 import warnings
+import typing
 
 class PCTrajectory:
     """Describes the principal components of a recurrent network through time
@@ -138,7 +139,7 @@ class PCTrajectory:
         return (self.projected_samples[recur_time, sample_ind],
                 self.projected_sample_labels[recur_time, sample_ind])
 
-def get_hidden_pcs(hidden_acts: torch.tensor, num_pcs: int):
+def get_hidden_pcs(hidden_acts: torch.tensor, num_pcs: typing.Optional[int]):
     """Fetches the principal component values and vectors corresponding with the given hidden
     activations.
 
@@ -147,7 +148,7 @@ def get_hidden_pcs(hidden_acts: torch.tensor, num_pcs: int):
             The hidden activations across the samples of interest. Two dimensional array:
                 1. The first index tells you which sample
                 2. The second index tells you which hidden node
-        num_pcs (int): The number of pcs to return (-1 for all)
+        num_pcs (int): The number of pcs to return (None for all)
 
     Returns:
         eigs (torch.tensor[num_pcs]): the relative importance in sorted descending order for the pc vectors
@@ -157,9 +158,9 @@ def get_hidden_pcs(hidden_acts: torch.tensor, num_pcs: int):
         raise ValueError(f'expected hidden_acts is torch.tensor, got {hidden_acts}')
     if len(hidden_acts.shape) != 2:
         raise ValueError(f'expected hidden_acts.shape is (num_samples, num_hidden), got {hidden_acts}')
-    if not isinstance(num_pcs, int):
+    if num_pcs is not None and not isinstance(num_pcs, int):
         raise ValueError(f'expected num_pcs is int, got {num_pcs}')
-    if num_pcs < 1:
+    if num_pcs is not None and num_pcs < 1:
         raise ValueError(f'expected num_pcs is positive, got {num_pcs}')
 
     hidden_acts_np = hidden_acts.numpy()
@@ -170,8 +171,9 @@ def get_hidden_pcs(hidden_acts: torch.tensor, num_pcs: int):
     eig_vecs = np.real(eig_vecs[:, ind])
     eig = eig[ind]
 
-    eig_vecs = eig_vecs[:, 0:num_pcs]
-    eig = eig[0:num_pcs]
+    if num_pcs is not None:
+        eig_vecs = eig_vecs[:, 0:num_pcs]
+        eig = eig[0:num_pcs]
 
     eig_vecs = eig_vecs.transpose()
 
@@ -181,20 +183,20 @@ def get_hidden_pcs(hidden_acts: torch.tensor, num_pcs: int):
         raise ValueError(f'expected reig is torch.tensor, got {reig}')
     if len(reig.shape) != 1:
         raise ValueError(f'expected reig.shape=(num_pcs), got {reig.shape}')
-    if reig.shape[0] != num_pcs:
+    if num_pcs is not None and reig.shape[0] != num_pcs:
         raise ValueError(f'expected reig.shape=(num_pcs), got ({reig.shape[0]}) (num_pcs={num_pcs})')
     if not torch.is_tensor(reig_vecs):
         raise ValueError(f'expected reig_vecs is torch.tensor, got {reig_vecs}')
     if len(reig_vecs.shape) != 2:
         raise ValueError(f'expected reig_vecs.shape=(num_pcs, num_hidden), got {reig_vecs.shape}')
-    if reig_vecs.shape[0] != num_pcs or reig_vecs.shape[1] != hidden_acts.shape[1]:
+    if (num_pcs is not None and reig_vecs.shape[0] != num_pcs) or reig_vecs.shape[1] != hidden_acts.shape[1]:
         raise ValueError(f'expected reig_vecs.shape=(num_pcs, num_hidden), got {reig_vecs.shape} (num_pcs={num_pcs}, num_hidden={hidden_acts.shape[1]})')
 
     last = float('inf')
     for _reig in reig:
-        if _reig >= last:
+        if abs(_reig) >= abs(last) + 1e-8: # small epsilon required
             raise ValueError(f'expected reig to be sorted, but got {reig} (_reig={_reig}, last={last})')
-        last = float(_reig)
+        last = abs(float(_reig))
     return reig, reig_vecs
 
 def project_to_pcs(points, pcs, out) -> torch.tensor:

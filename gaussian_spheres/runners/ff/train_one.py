@@ -7,12 +7,14 @@ import shared.trainer as tnr
 import shared.weight_inits as wi
 import shared.measures.dist_through_time as dtt
 import shared.measures.pca_ff as pca_ff
+import shared.measures.participation_ratio as pr
+import shared.filetools
 import torch
 from gaussian_spheres.pwl import GaussianSpheresPWLP
 import os
 
-FOLDER_NAME = os.path.splitext(os.path.basename(__file__))[0]
-SAVEDIR = os.path.join('out', 'gaussian_spheres', 'runners', 'ff', FOLDER_NAME)
+
+SAVEDIR = shared.filetools.savepath()
 
 INPUT_DIM = 200
 OUTPUT_DIM = 2
@@ -61,6 +63,12 @@ def main():
     pca_ff.plot_trajectory(traj, savepath, exist_ok=True)
     del traj
 
+    print('--saving pr before training--')
+    savepath = os.path.join(SAVEDIR, 'pr_before')
+    traj = pr.measure_pr_ff(network, pwl)
+    pr.plot_pr_trajectory(traj, savepath, exist_ok=True)
+    del traj
+
     trainer.train(network)
 
     print('--saving distance through layers after training--')
@@ -72,6 +80,11 @@ def main():
     savepath = os.path.join(SAVEDIR, 'pca_after')
     traj = pca_ff.find_trajectory(network, pwl, 2)
     pca_ff.plot_trajectory(traj, savepath, exist_ok=True)
+
+    print('--saving pr after training--')
+    savepath = os.path.join(SAVEDIR, 'pr_after')
+    traj = pr.measure_pr_ff(network, pwl)
+    pr.plot_pr_trajectory(traj, savepath, exist_ok=True)
 
 if __name__ == '__main__':
     main()

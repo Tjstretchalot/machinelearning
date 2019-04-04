@@ -6,11 +6,12 @@ import shared.trainer as tnr
 import shared.weight_inits as wi
 import shared.measures.pca as pca
 import shared.measures.dist_through_time as dtt
+import shared.filetools
 import torch
 from gaussian_spheres.pwl import GaussianSpheresPWLP
 import os
 
-SAVEDIR = os.path.join('out', 'gaussian_spheres', 'runners', 'rnn', 'train_one')
+SAVEDIR = shared.filetools.savepath()
 
 def main():
     """Entry point"""

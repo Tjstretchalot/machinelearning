@@ -3,6 +3,7 @@
 import typing
 import torch
 import numpy as np
+import shared.filetools # TODO
 
 class PointWithLabel(typing.NamedTuple):
     """Describes a simple point with a label

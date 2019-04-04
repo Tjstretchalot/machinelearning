@@ -7,12 +7,13 @@ import shared.trainer as tnr
 import shared.weight_inits as wi
 import shared.measures.dist_through_time as dtt
 import shared.measures.pca_ff as pca_ff
+import shared.measures.participation_ratio as pr
+import shared.filetools
 import torch
 from mnist.pwl import MNISTData
 import os
 
-FOLDER_NAME = os.path.splitext(os.path.basename(__file__))[0]
-SAVEDIR = os.path.join('out', 'mnist', 'runners', FOLDER_NAME)
+SAVEDIR = shared.filetools.savepath()
 
 def main():
     """Entry point"""
@@ -20,10 +21,10 @@ def main():
     test_pwl = MNISTData.load_test().to_pwl().restrict_to(set(range(10))).rescale()
 
     network = FeedforwardLarge.create(
-        input_dim=train_pwl.input_dim, output_dim=train_pwl.output_dim, nonlinearity='none',
+        input_dim=train_pwl.input_dim, output_dim=train_pwl.output_dim, nonlinearity='tanh',
         weights=wi.GaussianWeightInitializer(mean=0, vari=0.3, normalize_dim=1),
         biases=wi.ZerosWeightInitializer(),
-        layer_sizes=[200, 100, 50, 50, 50, 25]
+        layer_sizes=[90, 90, 90, 90, 90, 25]
         #layer_sizes=[500, 200]
     )
 
@@ -57,6 +58,12 @@ def main():
     pca_ff.plot_trajectory(traj, savepath, exist_ok=True, alpha=1.0)
     del traj
 
+    print('--saving pr before training--')
+    savepath = os.path.join(SAVEDIR, 'pr_before_train')
+    traj = pr.measure_pr_ff(network, train_pwl)
+    pr.plot_pr_trajectory(traj, savepath, exist_ok=True)
+    del traj
+
     trainer.train(network)
 
     print('--saving distance through layers after training (train)--')
@@ -75,8 +82,18 @@ def main():
 
     print('--saving pca after training (test)--')
     savepath = os.path.join(SAVEDIR, 'pca_after_test')
-    traj = pca_ff.find_trajectory(network, train_pwl, 2)
+    traj = pca_ff.find_trajectory(network, test_pwl, 2)
     pca_ff.plot_trajectory(traj, savepath, exist_ok=True, alpha=1.0)
+
+    print('--saving pr after training (train)--')
+    savepath = os.path.join(SAVEDIR, 'pr_after_train')
+    traj = pr.measure_pr_ff(network, train_pwl)
+    pr.plot_pr_trajectory(traj, savepath, exist_ok=True)
+
+    print('--saving pr after training (test)--')
+    savepath = os.path.join(SAVEDIR, 'pr_after_test')
+    traj = pr.measure_pr_ff(network, test_pwl)
+    pr.plot_pr_trajectory(traj, savepath, exist_ok=True)
 
 if __name__ == '__main__':
     main()

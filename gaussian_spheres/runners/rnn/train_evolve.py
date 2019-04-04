@@ -5,6 +5,7 @@ import shared.evolution as evo
 import shared.evolvable_models.rnn as ernn
 import shared.evolvable_models.sensitives as esens
 from shared.models.rnn import NaturalRNN
+import shared.filetools
 import torch
 from gaussian_spheres.pwl import GaussianSpheresPWLP
 import os
@@ -12,7 +13,7 @@ import os
 INPUT_DIM = 200
 OUTPUT_DIM = 2
 MODULE_NAME = 'gaussian_spheres.runners.train_evolve'
-SAVE_PATH = os.path.join('out', 'gaussian_spheres', 'runners', 'rnn', 'train_evolve')
+SAVE_PATH = shared.filetools.savepath()
 
 def create_data() -> GaussianSpheresPWLP:
     """Create the task to solve"""
