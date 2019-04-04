@@ -278,7 +278,7 @@ def measure_dtt_ff(model: FeedforwardNetwork, pwl_prod: PointWithLabelProducer,
     _dbg(verbose, logger, 'measure_dtt_ff getting raw data')
     model(sample_points, on_hidacts)
 
-    within_col, across_col = 'tab:cyan', 'r'
+    within_col, across_col, ratio_col = 'tab:cyan', 'r', 'k'
 
     fig_mean_with_stddev, ax_mean_with_stddev = plt.subplots()
     fig_mean_with_sem, ax_mean_with_sem = plt.subplots()
@@ -306,11 +306,13 @@ def measure_dtt_ff(model: FeedforwardNetwork, pwl_prod: PointWithLabelProducer,
         xvals = np.zeros(across_dists[lay].shape, dtype='uint8') + lay
         ax_mean_with_scatter.scatter(xvals, across_dists[lay], 1, across_col, alpha=0.3)
 
-    _dbg(verbose, logger, 'measure_dtt_ff saving and cleaning up')
+    ratios = across_means.clone() / within_means
     for ax in (ax_mean_with_stddev, ax_mean_with_sem, ax_mean_with_scatter):
+        ax.plot(layers, ratios.numpy(), linestyle='dashed', color=ratio_col, label='Across/Within')
         ax.legend()
         ax.set_xticks(layers)
 
+    _dbg(verbose, logger, 'measure_dtt_ff saving and cleaning up')
     for fig in (fig_mean_with_stddev, fig_mean_with_sem, fig_mean_with_scatter):
         fig.tight_layout()
 
