@@ -21,7 +21,7 @@ def main():
     test_pwl = MNISTData.load_test().to_pwl().restrict_to(set(range(10))).rescale()
 
     network = FeedforwardLarge.create(
-        input_dim=train_pwl.input_dim, output_dim=train_pwl.output_dim, nonlinearity='none',
+        input_dim=train_pwl.input_dim, output_dim=train_pwl.output_dim, nonlinearity='tanh',
         weights=wi.GaussianWeightInitializer(mean=0, vari=0.3, normalize_dim=1),
         biases=wi.ZerosWeightInitializer(),
         layer_sizes=[90, 90, 90, 90, 90, 25]
