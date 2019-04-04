@@ -23,8 +23,8 @@ def main():
         input_dim=train_pwl.input_dim, output_dim=train_pwl.output_dim, nonlinearity='none',
         weights=wi.GaussianWeightInitializer(mean=0, vari=0.3, normalize_dim=1),
         biases=wi.ZerosWeightInitializer(),
-        #layer_sizes=[200, 100, 50, 50, 50, 25]
-        layer_sizes=[500, 200]
+        layer_sizes=[200, 100, 50, 50, 50, 25]
+        #layer_sizes=[500, 200]
     )
 
     trainer = tnr.GenericTrainer(
