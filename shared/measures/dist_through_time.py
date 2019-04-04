@@ -15,7 +15,7 @@ import logging
 from shared.models.rnn import NaturalRNN, RNNHiddenActivations
 from shared.models.ff import FeedforwardNetwork, FFHiddenActivations
 from shared.pwl import PointWithLabelProducer
-from shared.filetools import zipdir
+from shared.filetools import zipdir, unzip
 
 import scipy.spatial.distance as sdist
 
@@ -219,6 +219,7 @@ def measure_dtt_ff(model: FeedforwardNetwork, pwl_prod: PointWithLabelProducer,
                    outfile: str, exist_ok: bool = False,
                    logger: typing.Optional[logging.Logger] = None,
                    verbose: bool = False) -> None:
+    """Analogue to measure_dtt for feed-forward networks"""
     if not isinstance(model, FeedforwardNetwork):
         raise ValueError(f'expected model is FeedforwardNetwork, got {model} (type={type(model)})')
     if not isinstance(pwl_prod, PointWithLabelProducer):
@@ -278,53 +279,12 @@ def measure_dtt_ff(model: FeedforwardNetwork, pwl_prod: PointWithLabelProducer,
     _dbg(verbose, logger, 'measure_dtt_ff getting raw data')
     model(sample_points, on_hidacts)
 
-    within_col, across_col, ratio_col = 'tab:cyan', 'r', 'k'
-
-    fig_mean_with_stddev, ax_mean_with_stddev = plt.subplots()
-    fig_mean_with_sem, ax_mean_with_sem = plt.subplots()
-    fig_mean_with_scatter, ax_mean_with_scatter = plt.subplots()
-
-    ax_mean_with_stddev.set_title('Distances Through Layers (error: 1.96 std dev)')
-    ax_mean_with_sem.set_title('Distances Through Layers (error: 1.96 sem)')
-    ax_mean_with_scatter.set_title('Distances Through Layers')
-
     layers = np.arange(model.num_layers+1)
 
-    _dbg(verbose, logger, 'measure_dtt_ff plotting mean_with_stddev')
-    ax_mean_with_stddev.errorbar(layers, within_means.numpy(), within_stds.numpy() * 1.96, color=within_col, label='Within')
-    ax_mean_with_stddev.errorbar(layers, across_means.numpy(), across_stds.numpy() * 1.96, color=across_col, label='Across')
-    _dbg(verbose, logger, 'measure_dtt_ff plotting mean_with_sem')
-    ax_mean_with_sem.errorbar(layers, within_means.numpy(), within_sems.numpy() * 1.96, color=within_col, label='Within')
-    ax_mean_with_sem.errorbar(layers, across_means.numpy(), across_sems.numpy() * 1.96, color=across_col, label='Across')
-    _dbg(verbose, logger, 'measure_dtt_ff plotting mean_with_scatter')
-    ax_mean_with_scatter.plot(layers, within_means.numpy(), color=within_col, label='Within')
-    ax_mean_with_scatter.plot(layers, across_means.numpy(), color=across_col, label='Across')
-
-    for lay in layers:
-        xvals = np.zeros(within_dists[lay].shape, dtype='uint8') + lay
-        ax_mean_with_scatter.scatter(xvals, within_dists[lay], 1, within_col, alpha=0.3)
-        xvals = np.zeros(across_dists[lay].shape, dtype='uint8') + lay
-        ax_mean_with_scatter.scatter(xvals, across_dists[lay], 1, across_col, alpha=0.3)
-
-    ratios = across_means.clone() / within_means
-    for ax in (ax_mean_with_stddev, ax_mean_with_sem, ax_mean_with_scatter):
-        ax.plot(layers, ratios.numpy(), linestyle='dashed', color=ratio_col, label='Across/Within')
-        ax.legend()
-        ax.set_xticks(layers)
-
-    _dbg(verbose, logger, 'measure_dtt_ff saving and cleaning up')
-    for fig in (fig_mean_with_stddev, fig_mean_with_sem, fig_mean_with_scatter):
-        fig.tight_layout()
-
-    os.makedirs(outfile_wo_ext)
-
-    fig_mean_with_stddev.savefig(os.path.join(outfile_wo_ext, 'mean_with_stddev.png'), transparent=True)
-    fig_mean_with_sem.savefig(os.path.join(outfile_wo_ext, 'mean_with_sem.png'), transparent=True)
-    fig_mean_with_scatter.savefig(os.path.join(outfile_wo_ext, 'mean_with_scatter.png'), transparent=True)
-
-    plt.close(fig_mean_with_stddev)
-    plt.close(fig_mean_with_sem)
-    plt.close(fig_mean_with_scatter)
+    _plot_dtt_ff(layers, within_means, within_stds, within_sems,
+                 across_means, across_stds, across_sems,
+                 within_dists, across_dists, outfile_wo_ext,
+                 verbose, logger)
 
     np.savez(os.path.join(outfile_wo_ext, 'sample.npz'),
         sample_points=sample_points.numpy(),
@@ -338,3 +298,128 @@ def measure_dtt_ff(model: FeedforwardNetwork, pwl_prod: PointWithLabelProducer,
         os.remove(outfile)
 
     zipdir(outfile_wo_ext)
+
+def replot_dtt_ff(infile: str, verbose: bool = True, logger: logging.Logger = None):
+    """Recreates the dtt_ff plots for the given zip, replacing them inside the zip.
+
+    Args:
+        infile (str): the outfile that you used when measuring
+        verbose (bool): if this should print progress information
+        logger (Logger): the logger to use, None for print
+    """
+    if not isinstance(infile, str):
+        raise ValueError(f'expected infile is str, got {infile} (type={type(infile)})')
+    if not isinstance(verbose, bool):
+        raise ValueError(f'expected verbose is bool, got {verbose} (type={type(verbose)})')
+    if logger is not None and not isinstance(logger, logging.Logger):
+        raise ValueError(f'expected logger is optional[logging.Logger], got {logger} (type={type(logger)})')
+
+    _dbg(verbose, logger, f'unpacking {infile}')
+    unzip(infile)
+
+    infile_wo_ext = os.path.splitext(infile)[0]
+    _dbg(verbose, logger, f'fetching data')
+    try:
+        within_dists, across_dists = [], []
+        num_samples: int
+
+        with np.load(os.path.join(infile_wo_ext, 'within.npz')) as within_dict:
+            i = 0
+            while f'arr_{i}' in within_dict:
+                within_dists.append(within_dict[f'arr_{i}'])
+                i += 1
+
+        with np.load(os.path.join(infile_wo_ext, 'across.npz')) as across_dict:
+            i = 0
+            while f'arr_{i}' in across_dict:
+                across_dists.append(across_dict[f'arr_{i}'])
+                i += 1
+
+        with np.load(os.path.join(infile_wo_ext, 'sample.npz')) as sample_dict:
+            num_samples = sample_dict['sample_labels'].shape[0]
+
+        num_layers = len(within_dists) - 1
+        if len(across_dists) != num_layers + 1:
+            raise ValueError(f'expected within_dists has same len as across_dists, but len(within_dists)={len(within_dists)}, len(across_dists)={len(across_dists)}')
+
+
+        within_means = torch.zeros(num_layers+1, dtype=torch.double)
+        within_stds = torch.zeros(num_layers+1, dtype=torch.double)
+        within_sems = torch.zeros(num_layers+1, dtype=torch.double)
+        across_means = torch.zeros(num_layers+1, dtype=torch.double)
+        across_stds = torch.zeros(num_layers+1, dtype=torch.double)
+        across_sems = torch.zeros(num_layers+1, dtype=torch.double)
+
+        for i in range(num_layers+1):
+            within_means[i] = within_dists[i].mean()
+            within_stds[i] = within_dists[i].std()
+            within_sems[i] = within_stds[i] / np.sqrt(num_samples)
+            across_means[i] = across_dists[i].mean()
+            across_stds[i] = across_dists[i].std()
+            across_sems[i] = across_stds[i] / np.sqrt(num_samples)
+
+        layers = np.arange(num_layers+1)
+
+        _plot_dtt_ff(layers, within_means, within_stds, within_sems,
+                    across_means, across_stds, across_sems,
+                    within_dists, across_dists, infile_wo_ext,
+                    verbose, logger)
+    finally:
+        _dbg(verbose, logger, f'repacking {infile}')
+        zipdir(infile_wo_ext)
+
+def _plot_dtt_ff(layers, within_means, within_stds, within_sems,
+                 across_means, across_stds, across_sems,
+                 within_dists, across_dists, outfile_wo_ext,
+                 verbose, logger):
+    within_col, across_col, ratio_col = 'tab:cyan', 'r', 'k'
+
+    fig_mean_with_stddev, ax_mean_with_stddev = plt.subplots()
+    fig_mean_with_sem, ax_mean_with_sem = plt.subplots()
+    fig_mean_with_scatter, ax_mean_with_scatter = plt.subplots()
+
+    ax_mean_with_stddev.set_title('Distances Through Layers (error: 1.96 std dev)')
+    ax_mean_with_sem.set_title('Distances Through Layers (error: 1.96 sem)')
+    ax_mean_with_scatter.set_title('Distances Through Layers')
+
+    _dbg(verbose, logger, 'plotting mean_with_stddev')
+    ax_mean_with_stddev.errorbar(layers, within_means.numpy(), within_stds.numpy() * 1.96, color=within_col, label='Within')
+    ax_mean_with_stddev.errorbar(layers, across_means.numpy(), across_stds.numpy() * 1.96, color=across_col, label='Across')
+    _dbg(verbose, logger, 'plotting mean_with_sem')
+    ax_mean_with_sem.errorbar(layers, within_means.numpy(), within_sems.numpy() * 1.96, color=within_col, label='Within')
+    ax_mean_with_sem.errorbar(layers, across_means.numpy(), across_sems.numpy() * 1.96, color=across_col, label='Across')
+    _dbg(verbose, logger, 'plotting mean_with_scatter')
+    ax_mean_with_scatter.plot(layers, within_means.numpy(), color=within_col, label='Within')
+    ax_mean_with_scatter.plot(layers, across_means.numpy(), color=across_col, label='Across')
+
+    for lay in layers:
+        xvals = np.zeros(within_dists[lay].shape, dtype='uint8') + lay
+        ax_mean_with_scatter.scatter(xvals, within_dists[lay], 1, within_col, alpha=0.3)
+        xvals = np.zeros(across_dists[lay].shape, dtype='uint8') + lay
+        ax_mean_with_scatter.scatter(xvals, across_dists[lay], 1, across_col, alpha=0.3)
+
+    _dbg(verbose, logger, 'plotting ratios')
+    ratios = across_means.clone() / within_means
+    for ax in (ax_mean_with_stddev, ax_mean_with_sem, ax_mean_with_scatter):
+        twinned = ax.twinx()
+        twinned.plot(layers[:-1], ratios[:-1].numpy(), linestyle='dashed', color=ratio_col, label='Across/Within', alpha=0.8)
+        twinned.legend(loc=2)
+        twinned.set_ylabel('Across / Within (ratio)')
+        ax.set_ylabel('Distances (Euclidean)')
+        ax.set_xlabel('Layer')
+        ax.legend(loc=1)
+        ax.set_xticks(layers)
+
+    _dbg(verbose, logger, 'saving and cleaning up')
+    for fig in (fig_mean_with_stddev, fig_mean_with_sem, fig_mean_with_scatter):
+        fig.tight_layout()
+
+    os.makedirs(outfile_wo_ext, exist_ok=True)
+
+    fig_mean_with_stddev.savefig(os.path.join(outfile_wo_ext, 'mean_with_stddev.png'), transparent=True)
+    fig_mean_with_sem.savefig(os.path.join(outfile_wo_ext, 'mean_with_sem.png'), transparent=True)
+    fig_mean_with_scatter.savefig(os.path.join(outfile_wo_ext, 'mean_with_scatter.png'), transparent=True)
+
+    plt.close(fig_mean_with_stddev)
+    plt.close(fig_mean_with_sem)
+    plt.close(fig_mean_with_scatter)

@@ -38,3 +38,26 @@ def zipdir(dirpath: str):
     os.chdir(cwd)
     shutil.rmtree(dirpath)
     os.chdir(cwd)
+
+def unzip(archivepath: str):
+    """Unzips the given archive and deletes it
+
+    Args:
+        archivepath (str): the archive to unzip
+    """
+
+    if not isinstance(archivepath, str):
+        raise ValueError(f'expected archivepath is str, got {archivepath}')
+    if not os.path.exists(archivepath):
+        raise ValueError(f'expected {archivepath} exists to extract, but does not')
+
+    wo_ext = os.path.splitext(archivepath)[0]
+    if wo_ext == archivepath:
+        raise ValueError(f'expected {archivepath} has archive extension, but does not')
+    if os.path.exists(wo_ext):
+        raise ValueError(f'expected {wo_ext} does not exist to extract {archivepath}, but it does')
+
+    cwd = os.getcwd()
+    shutil.unpack_archive(archivepath, wo_ext)
+    os.chdir(cwd)
+    os.remove(archivepath)
