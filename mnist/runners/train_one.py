@@ -8,6 +8,7 @@ import shared.weight_inits as wi
 import shared.measures.dist_through_time as dtt
 import shared.measures.pca_ff as pca_ff
 import shared.measures.participation_ratio as pr
+import shared.measures.svm as svm
 import shared.filetools
 import torch
 from mnist.pwl import MNISTData
@@ -64,6 +65,13 @@ def main():
     pr.plot_pr_trajectory(traj, savepath, exist_ok=True)
     del traj
 
+    print('--saving svm traj before training--')
+    savepath = os.path.join(SAVEDIR, 'svm_before_train')
+    traj = svm.train_svms_ff(network, train_pwl)
+    svm.plot_traj_ff(traj, savepath, exist_ok=True)
+    del traj
+
+
     trainer.train(network)
 
     print('--saving distance through layers after training (train)--')
@@ -94,6 +102,18 @@ def main():
     savepath = os.path.join(SAVEDIR, 'pr_after_test')
     traj = pr.measure_pr_ff(network, test_pwl)
     pr.plot_pr_trajectory(traj, savepath, exist_ok=True)
+
+    print('--saving svm traj after training (train)--')
+    savepath = os.path.join(SAVEDIR, 'svm_after_train')
+    traj = svm.train_svms_ff(network, train_pwl)
+    svm.plot_traj_ff(traj, savepath, exist_ok=True)
+    del traj
+
+    print('--saving svm traj after training (test)--')
+    savepath = os.path.join(SAVEDIR, 'svm_after_test')
+    traj = svm.train_svms_ff(network, test_pwl)
+    svm.plot_traj_ff(traj, savepath, exist_ok=True)
+    del traj
 
 if __name__ == '__main__':
     main()
