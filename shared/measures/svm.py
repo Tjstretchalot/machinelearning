@@ -8,10 +8,10 @@ import sklearn.svm as svm
 import matplotlib.pyplot as plt
 
 import typing
-from shared.models.generic import Network
 from shared.models.ff import FeedforwardNetwork, FFHiddenActivations
 from shared.pwl import PointWithLabelProducer
 from shared.filetools import zipdir
+from shared.trainer import GenericTrainingContext
 
 import os
 
@@ -215,9 +215,9 @@ def plot_traj_ff(traj: SVMTrajectory, outfile: str, exist_ok: bool = False):
                     continue
 
                 yvals = traj.by_label_vs_all[:, lbl].numpy()
+                ax.set_title(str(lbl))
                 ax.plot(layers, yvals, label=str(lbl))
                 ax.axhline(chance_perc, layers.min(), layers.max(), linestyle='dashed', color='k', label='Chance Acc.', alpha=0.6)
-                ax.legend(loc='lower left')
                 lbl += 1
 
         axes[0][0].set_xticks(layers)
@@ -228,4 +228,28 @@ def plot_traj_ff(traj: SVMTrajectory, outfile: str, exist_ok: bool = False):
         os.remove(outfile)
     zipdir(outfile_wo_ext)
 
+
+def during_training_ff(savepath: str, train: bool):
+    """Returns a callable that is good for OnEpochCaller or similar intermediaries
+    that saves the svm information to the given directory. The filenames will be
+    svm_{hint}.zip. This expects that savepath will not exist.
+
+    Args:
+        savepath (str): the folder to save to
+        train (bool): true for training data, false for test data
+
+    Returns:
+        a callable that accepts a GenericTrainingContext
+    """
+
+    if os.path.exists(savepath):
+        raise ValueError(f'{savepath} already exists')
+
+    def on_step(context: GenericTrainingContext, fname_hint: str):
+        context.logger.info('[SVM] Measuring SVM Through Layers (hint: %s)', fname_hint)
+        pwl = context.train_pwl if train else context.test_pwl
+        traj = train_svms_ff(context.model, pwl)
+        plot_traj_ff(traj, os.path.join(savepath, f'svm_{fname_hint}'), False)
+
+    return on_step
 

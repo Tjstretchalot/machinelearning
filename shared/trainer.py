@@ -7,11 +7,13 @@ import torch.nn
 import torch.optim
 import logging
 import math
+import os
 
 from shared.models.generic import Network
 from shared.events import Event
 from shared.pwl import PointWithLabelProducer
 from shared.teachers import NetworkTeacher
+from shared.filetools import zipdir
 
 class GenericTrainingContext(typing.NamedTuple):
     """Describes the training context. Acts a store for the common variables we need in
@@ -174,11 +176,13 @@ class EpochsTracker:
     Attributes:
         epochs (float): the number of epochs we've gone through (correct from post_train (inclusive) to pre_loop (exclusive))
         new_epoch (bool): True if this is a new epoch, false otherwise
+        first (bool): True if this is the first loop, false otherwise
     """
 
     def __init__(self):
         self.epochs = 0.0
         self.new_epoch = False
+        self.first = True
 
     def setup(self, context, **kwargs):
         """Initializes epochs to 0 and new_epoch to false"""
@@ -186,9 +190,11 @@ class EpochsTracker:
         context.logger.debug('[EpochsTracker] starting epoch 0')
         self.epochs = 0.0
         self.new_epoch = False
+        self.first = True
 
     def pre_loop(self, context: GenericTrainingContext) -> None:
         """Updates epochs and new_epoch"""
+        self.first = self.epochs == 0
         future_pos = context.train_pwl.position + context.batch_size
         if future_pos >= context.train_pwl.epoch_size:
             future_pos -= context.train_pwl.epoch_size
@@ -217,6 +223,66 @@ class EpochsStopper:
     def stopper(self, context: GenericTrainingContext) -> bool:
         """Returns true if self.stop_after epochs have passed"""
         return context.shared['epochs'].epochs >= self.stop_after
+
+class OnEpochCaller:
+    """Calls a particular function after a certain number of epochs have passed
+    with the current training context. Requires an EpochsTracker and expects to
+    be after it.
+
+    Attributes:
+        epoch_filter (callable -> bool): returns the filter for the epoch.
+            Accepts the numeric epoch and returns True if on_epoch should be
+            called and False otherwise. several defaults are available through
+            the create_ methods.
+        on_epoch (callable): the object to call with the context and a filename
+            hint
+    """
+
+    def __init__(self, epoch_filter: typing.Callable, on_epoch: typing.Callable):
+        if not callable(epoch_filter):
+            raise ValueError(f'expected epoch_filter is callable, got {epoch_filter} (type={type(epoch_filter)})')
+        if not callable(on_epoch):
+            raise ValueError(f'expected on_epoch is callable, got {on_epoch} (type={type(on_epoch)})')
+
+        self.epoch_filter = epoch_filter
+        self.on_epoch = on_epoch
+
+    @classmethod
+    def create_every(cls, on_epoch: typing.Callable,
+                     start=0, skip=1, stop=None) -> 'OnEpochCaller':
+        """Calls the given callable every skip epochs after start, not including
+        the stop epoch or any epoch after that.
+
+        Args:
+            on_epoch (typing.Callable): the thing to do
+            start (int, optional): Defaults to 0. the first epoch which on_epoch is called
+            skip (int, optional): Defaults to 1. the number of epochs to wait between on_epoch
+            stop (int, optional): Defaults to None. if set, on_epoch is not called at stop or
+                later epochs
+
+        Returns:
+            caller (OnEpochCaller): the classlike object to register with the trainer
+        """
+
+        def epoch_filter(epoch: int):
+            if epoch < start:
+                return False
+            if (epoch - start) % skip != 0:
+                return False
+            if stop is not None and epoch >= stop:
+                return False
+            return True
+        return cls(epoch_filter, on_epoch)
+
+    def pre_loop(self, context: GenericTrainingContext):
+        """Checks epoch"""
+        tracker = context.shared['epochs']
+        if (tracker.first or tracker.new_epoch) and self.epoch_filter(int(tracker.epochs)):
+            self.on_epoch(context, f'epoch_{int(tracker.epochs)}')
+
+    def finished(self, context: GenericTrainingContext, result: dict) -> None: # pylint: disable=unused-argument
+        """Saves final_epoch"""
+        self.on_epoch(context, 'epoch_finished')
 
 class DecayOnPlateau:
     """Decays the loss if there has been no improvement in a certain number of epochs.
@@ -389,3 +455,22 @@ class AccuracyTracker:
         """Remeasures and stores accuracy"""
         self.measure(context)
         result['accuracy'] = self.accuracy
+
+class ZipDirOnFinish:
+    """Zips a particular directory to directory + .zip when finished. Deletes the
+    zip if it already exists
+
+    Attributes:
+        dirpath (str): the directory to zip
+    """
+
+    def __init__(self, dirpath: str):
+        if not isinstance(dirpath, str):
+            raise ValueError(f'expected dirpath is str, got {dirpath} (type={type(dirpath)})')
+        self.dirpath = dirpath
+
+    def finished(self, context: GenericTrainingContext, result: dict) -> None: #pylint: disable=unused-argument
+        """Zips the directory"""
+        if os.path.exists(self.dirpath + '.zip'):
+            os.remove(self.dirpath + '.zip')
+        zipdir(self.dirpath)

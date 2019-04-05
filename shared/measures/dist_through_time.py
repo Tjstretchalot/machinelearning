@@ -16,6 +16,7 @@ from shared.models.rnn import NaturalRNN, RNNHiddenActivations
 from shared.models.ff import FeedforwardNetwork, FFHiddenActivations
 from shared.pwl import PointWithLabelProducer
 from shared.filetools import zipdir, unzip
+from shared.trainer import GenericTrainingContext
 
 import scipy.spatial.distance as sdist
 
@@ -423,3 +424,27 @@ def _plot_dtt_ff(layers, within_means, within_stds, within_sems,
     plt.close(fig_mean_with_stddev)
     plt.close(fig_mean_with_sem)
     plt.close(fig_mean_with_scatter)
+
+def during_training_ff(savepath: str, train: bool, **kwargs):
+    """Fetches the on_step/on_epoch for things like OnEpochsCaller
+    that saves into the given directory.
+
+    Args:
+        savepath (str): where to save
+        train (bool): true to use training data, false to use validation data
+        kwargs (dict): passed to measure_dtt_ff
+    """
+    if not isinstance(savepath, str):
+        raise ValueError(f'expected savepath is str, got {savepath} (type={type(savepath)})')
+    if not isinstance(train, bool):
+        raise ValueError(f'expected train is bool, got {train} (type={type(train)})')
+
+    if os.path.exists(savepath):
+        raise ValueError(f'{savepath} already exists')
+
+    def on_step(context: GenericTrainingContext, fname_hint: str):
+        context.logger.info('[DTT] Measuring DTT Through Layers (hint: %s)', fname_hint)
+        pwl = context.train_pwl if train else context.test_pwl
+        measure_dtt_ff(context.model, pwl, os.path.join(savepath, f'dtt_{fname_hint}', **kwargs))
+
+    return on_step

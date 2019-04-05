@@ -44,6 +44,10 @@ def main():
         criterion=torch.nn.CrossEntropyLoss()
     )
 
+    dtt_training_dir = os.path.join(SAVEDIR, 'dtt')
+    pca_training_dir = os.path.join(SAVEDIR, 'pca')
+    pr_training_dir = os.path.join(SAVEDIR, 'pr')
+    svm_training_dir = os.path.join(SAVEDIR, 'svm')
     (trainer
      .reg(tnr.EpochsTracker())
      .reg(tnr.EpochsStopper(150))
@@ -52,52 +56,16 @@ def main():
      .reg(tnr.LRMultiplicativeDecayer())
      .reg(tnr.DecayOnPlateau())
      .reg(tnr.AccuracyTracker(5, 1000, True))
+     .reg(tnr.OnEpochCaller.create_every(dtt.during_training_ff(dtt_training_dir, True), skip=10))
+     .reg(tnr.OnEpochCaller.create_every(pca_ff.during_training(pca_training_dir, True), skip=10))
+     .reg(tnr.OnEpochCaller.create_every(pr.during_training_ff(pr_training_dir, True), skip=10))
+     .reg(tnr.OnEpochCaller.create_every(svm.during_training_ff(svm_training_dir, True), skip=10))
+     .reg(tnr.ZipDirOnFinish(dtt_training_dir))
+     .reg(tnr.ZipDirOnFinish(pca_training_dir))
+     .reg(tnr.ZipDirOnFinish(pr_training_dir))
+     .reg(tnr.ZipDirOnFinish(svm_training_dir))
     )
-
-    print('--saving distance through layers before training--')
-    savepath = os.path.join(SAVEDIR, 'dtt_before')
-    dtt.measure_dtt_ff(network, pwl, savepath, verbose=True, exist_ok=True)
-
-    print('--saving pca before training--')
-    savepath = os.path.join(SAVEDIR, 'pca_before')
-    traj = pca_ff.find_trajectory(network, pwl, 2)
-    pca_ff.plot_trajectory(traj, savepath, exist_ok=True)
-    del traj
-
-    print('--saving pr before training--')
-    savepath = os.path.join(SAVEDIR, 'pr_before')
-    traj = pr.measure_pr_ff(network, pwl)
-    pr.plot_pr_trajectory(traj, savepath, exist_ok=True)
-    del traj
-
-    print('--saving svm traj before training--')
-    savepath = os.path.join(SAVEDIR, 'svm_before')
-    traj = svm.train_svms_ff(network, pwl)
-    svm.plot_traj_ff(traj, savepath, exist_ok=True)
-    del traj
-
     trainer.train(network)
-
-    print('--saving distance through layers after training--')
-    savepath = os.path.join(SAVEDIR, 'dtt_after')
-    dtt.measure_dtt_ff(network, pwl, savepath, verbose=True, exist_ok=True)
-
-
-    print('--saving pca after training--')
-    savepath = os.path.join(SAVEDIR, 'pca_after')
-    traj = pca_ff.find_trajectory(network, pwl, 2)
-    pca_ff.plot_trajectory(traj, savepath, exist_ok=True)
-
-    print('--saving pr after training--')
-    savepath = os.path.join(SAVEDIR, 'pr_after')
-    traj = pr.measure_pr_ff(network, pwl)
-    pr.plot_pr_trajectory(traj, savepath, exist_ok=True)
-
-    print('--saving svm traj after training--')
-    savepath = os.path.join(SAVEDIR, 'svm_after')
-    traj = svm.train_svms_ff(network, pwl)
-    svm.plot_traj_ff(traj, savepath, exist_ok=True)
-    del traj
 
 if __name__ == '__main__':
     main()

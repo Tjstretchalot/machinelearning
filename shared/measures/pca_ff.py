@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 from shared.models.ff import FeedforwardNetwork, FFHiddenActivations
 from shared.pwl import PointWithLabelProducer
 from shared.measures.pca import get_hidden_pcs, project_to_pcs, plot_snapshot
+from shared.trainer import GenericTrainingContext
 
 import typing
 import os
@@ -281,3 +282,28 @@ def plot_trajectory(traj: PCTrajectoryFF, filepath: str, exist_ok: bool = False,
     os.chdir(cwd)
     shutil.rmtree(filepath_wo_ext)
     os.chdir(cwd)
+
+def during_training(savepath: str, train: bool):
+    """Fetches the on_step/on_epoch for things like OnEpochsCaller
+    that saves into the given directory.
+
+    Args:
+        savepath (str): where to save
+        train (bool): true to use training data, false to use validation data
+    """
+    if not isinstance(savepath, str):
+        raise ValueError(f'expected savepath is str, got {savepath} (type={type(savepath)})')
+    if not isinstance(train, bool):
+        raise ValueError(f'expected train is bool, got {train} (type={type(train)})')
+
+    if os.path.exists(savepath):
+        raise ValueError(f'{savepath} already exists')
+
+    def on_step(context: GenericTrainingContext, fname_hint: str):
+        context.logger.info('[PCA_FF] Measuring PCA Through Layers (hint: %s)', fname_hint)
+        pwl = context.train_pwl if train else context.test_pwl
+        traj = find_trajectory(context.model, pwl, 2)
+        plot_trajectory(traj, os.path.join(savepath, f'pca_{fname_hint}'))
+
+    return on_step
+

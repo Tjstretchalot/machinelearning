@@ -11,6 +11,7 @@ import shared.measures.pca as pca
 from shared.models.ff import FeedforwardNetwork, FFHiddenActivations
 from shared.pwl import PointWithLabelProducer
 from shared.filetools import zipdir
+from shared.trainer import GenericTrainingContext
 
 def measure_pr(hidden_acts: torch.tensor) -> float:
     """Measures the participation ratio of the specified hidden acts, plotting
@@ -181,3 +182,28 @@ def plot_pr_trajectory(traj: PRTrajectory, savepath: str, exist_ok: bool = False
         os.remove(savepath)
 
     zipdir(savepath_wo_ext)
+
+def during_training_ff(savepath: str, train: bool, **kwargs):
+    """Fetches the on_step/on_epoch for things like OnEpochsCaller
+    that saves into the given directory.
+
+    Args:
+        savepath (str): where to save
+        train (bool): true to use training data, false to use validation data
+        kwargs (dict): passed to plot_pr_trajectory
+    """
+    if not isinstance(savepath, str):
+        raise ValueError(f'expected savepath is str, got {savepath} (type={type(savepath)})')
+    if not isinstance(train, bool):
+        raise ValueError(f'expected train is bool, got {train} (type={type(train)})')
+
+    if os.path.exists(savepath):
+        raise ValueError(f'{savepath} already exists')
+
+    def on_step(context: GenericTrainingContext, fname_hint: str):
+        context.logger.info('[PR] Measuring PR Through Layers (hint: %s)', fname_hint)
+        pwl = context.train_pwl if train else context.test_pwl
+        traj = measure_pr_ff(context.model, pwl)
+        plot_pr_trajectory(traj, os.path.join(savepath, f'pr_{fname_hint}'), **kwargs)
+
+    return on_step
