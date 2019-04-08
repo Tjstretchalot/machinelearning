@@ -73,6 +73,8 @@ class PointWithLabelProducer:
             raise ValueError('expected points [batch_size x input_dim] and labels [batch_size] to'
                              + f' have same first dimension, but points.shape[0]={points.shape[0]}'
                              + f' and labels.shape[0]={labels.shape[0]}')
+        if points.shape[1] != self.input_dim:
+            raise ValueError(f'expected points has shape [batch_size x input_dim], input_dim={self.input_dim}, points.shape={points.shape}')
 
         batch_size = points.shape[0]
         avail = self.remaining_in_epoch
