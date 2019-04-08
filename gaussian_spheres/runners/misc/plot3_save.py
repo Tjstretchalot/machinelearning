@@ -28,7 +28,6 @@ def main():
     ax.legend(loc=1)
 
     def update(time_ms: float):
-        print(f'time_ms={time_ms}')
         duration = 12000                    # 12000
         if time_ms < duration: # spin
             progress = time_ms / duration
@@ -49,6 +48,7 @@ def main():
             elev = 30 - 60 * pytweening.easeInOutBack(progress)
             ax.view_init(elev, 0)
             return ax
+        time_ms -= duration
         duration = 1500                     # 19500
         if time_ms < duration: # wait
             if time_ms - 16.67 <= 0:
@@ -73,7 +73,6 @@ def main():
 
     anim = FuncAnimation(fig, update, frames=np.arange(0, 24000, 16.67), interval=16.67)
     anim.save(os.path.join(shared.filetools.savepath(), 'out.mp4'), dpi=100, writer='ffmpeg')
-
 
 if __name__ == '__main__':
     main()
