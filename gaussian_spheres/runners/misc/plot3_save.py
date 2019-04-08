@@ -28,6 +28,7 @@ def main():
     ax.legend(loc=1)
 
     def update(time_ms: float):
+        print(f'time_ms={time_ms}')
         duration = 12000                    # 12000
         if time_ms < duration: # spin
             progress = time_ms / duration
