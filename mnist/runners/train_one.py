@@ -10,6 +10,7 @@ import shared.measures.pca_ff as pca_ff
 import shared.measures.participation_ratio as pr
 import shared.measures.svm as svm
 import shared.filetools
+import shared.measures.pca_3d as pca_3d
 import torch
 from mnist.pwl import MNISTData
 import os
@@ -39,6 +40,10 @@ def main():
         criterion=torch.nn.CrossEntropyLoss()
     )
 
+    dig3d = pca_3d.create_digestor('train_one', 4)
+    pca_3d.plot_ff(pca_ff.find_trajectory(network, train_pwl, 3), os.path.join(SAVEDIR, 'pca_3d_start_train'), True, dig3d)
+    pca_3d.plot_ff(pca_ff.find_trajectory(network, test_pwl, 3), os.path.join(SAVEDIR, 'pca_3d_start_test'), True, dig3d)
+
     dtt_training_dir = os.path.join(SAVEDIR, 'dtt')
     pca_training_dir = os.path.join(SAVEDIR, 'pca')
     pr_training_dir = os.path.join(SAVEDIR, 'pr')
@@ -62,6 +67,10 @@ def main():
     )
 
     trainer.train(network)
+
+    pca_3d.plot_ff(pca_ff.find_trajectory(network, train_pwl, 3), os.path.join(SAVEDIR, 'pca_3d_end_train'), True, dig3d)
+    pca_3d.plot_ff(pca_ff.find_trajectory(network, test_pwl, 3), os.path.join(SAVEDIR, 'pca_3d_end_test'), True, dig3d)
+    dig3d.archive_raw_inputs(os.path.join(SAVEDIR, 'pca_3d_raw'))
 
 if __name__ == '__main__':
     main()
