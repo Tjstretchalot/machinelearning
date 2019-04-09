@@ -1,0 +1,249 @@
+"""A numpy-targetted multiprocessing module which is assumed to store its result
+to file. The usage looks very similar to calling the target function on a separate
+process while also releasing the memory on the main thread. Also passes json serializable
+arguments
+"""
+import psutil
+import warnings
+import os
+import shutil
+import typing
+import json
+import importlib
+import time
+from multiprocessing import Process
+import numpy as np
+from shared.filetools import zipdir
+
+_PRIMS = (bool, int, float, str)
+
+def _get_working_dir(iden: str):
+    return os.path.join('tmp', 'npmp', iden)
+
+def _worker_target(identifier: str, worker_id: int, target_module: str, target_name: str):
+    mod = importlib.import_module(target_module)
+    target = getattr(mod, target_name)
+
+    worker_path = os.path.join(_get_working_dir(identifier), str(worker_id))
+    numpy_path = os.path.join(worker_path, 'numpy.npz')
+    json_path = os.path.join(worker_path, 'other.json')
+
+    prims_raw: dict
+    with open(json_path, 'r') as infile:
+        prims_raw = json.load(infile)
+
+    if not 'num_args' in prims_raw:
+        raise ValueError(f'expected num_args in prims_raw but it is not')
+    num_args = prims_raw['num_args']
+    del prims_raw['num_args']
+    if not isinstance(num_args, int):
+        raise ValueError(f'expected num_args is int, got {num_args} (type={type(num_args)})')
+
+    numpy_raw = dict()
+    with np.load(numpy_path) as indata:
+        for key, val in indata.items():
+            numpy_raw[key] = val
+
+    args = []
+    kwargs = dict()
+
+    for argn in range(num_args):
+        sargn = f'marg_{argn}'
+        if sargn in prims_raw:
+            args.append(prims_raw[sargn])
+            del prims_raw[sargn]
+        else:
+            args.append(numpy_raw[sargn])
+            del numpy_raw[sargn]
+
+    for k, v in prims_raw.items():
+        kwargs[k] = v
+    for k, v in numpy_raw.items():
+        kwargs[k] = v
+
+    target(*args, **kwargs)
+
+class NPDigestor:
+    """The wrapper class that should be used instead of calling the function directly.
+
+    Attributes:
+        identifier (str): a unique identifier to this digestor
+        workers_spawned (int): the number of workers spawned in total
+        workers (list[Process]): the workers that were started but have not confirmed
+            to have finished yet
+        max_workers (int): the maximum number of workers out at one time
+        target_module (str): the module path (i.e., 'shared.pca') which will be invoked
+        target_name (str): the name of the function (i.e. 'plot_pc_trajectory') which
+            is in the target module and will be invoked
+
+        _prepared (bool): if we have prepare() d
+    """
+
+    def __init__(self, identifier: str, target_module: str, target_name: str, max_workers: int):
+        if not isinstance(identifier, str):
+            raise ValueError(f'expected identifier is str, got {identifier} (type={type(identifier)})')
+        if not isinstance(target_module, str):
+            raise ValueError(f'expected target_module is str, got {target_module} (type={type(target_module)})')
+        if not isinstance(target_name, str):
+            raise ValueError(f'expected target_name is str, got {target_name} (type={type(target_name)})')
+        if not isinstance(max_workers, int):
+            raise ValueError(f'expected max_workers is int, got {max_workers} (type={type(max_workers)})')
+        if max_workers <= 0:
+            raise ValueError(f'expected a positive number of workers, got {max_workers}')
+
+        phys_cpus = psutil.cpu_count(logical=False)
+        if max_workers > phys_cpus:
+            warnings.warn(f'too many workers suggested ({max_workers}) compared to cores ({phys_cpus}) (auto decreased)', UserWarning)
+            max_workers = phys_cpus
+
+        self.identifier = identifier
+        self.target_module = target_module
+        self.target_name = target_name
+        self.max_workers = max_workers
+
+        self.workers = []
+        self.workers_spawned = 0
+
+        self._prepared = False
+
+    def prepare(self):
+        """Does not need to be called externally. This verifies that working folders are
+        available.
+        """
+        if self._prepared:
+            return
+        self._prepared = True
+
+        working = _get_working_dir(self.identifier)
+        if os.path.exists(working):
+            cwd = os.getcwd()
+            shutil.rmtree(working)
+            os.chdir(cwd)
+
+        os.makedirs(working)
+
+    def _check_container(self, cont):
+        stack = []
+        seen = set()
+        stack.append(cont)
+        while stack:
+            cur = stack.pop()
+            seen.add(cur)
+            if isinstance(cur, (list, tuple, dict)):
+                iterable = cur.values() if isinstance(cur, dict) else cur
+                for val in iterable:
+                    if isinstance(val, _PRIMS):
+                        continue
+                    if val in seen:
+                        raise ValueError(f'found recursive reference {val}')
+                    seen.add(val)
+                    stack.append(val)
+            else:
+                raise ValueError(f'unknown type {cur}')
+
+    def separate(self, *args, **kwargs) -> typing.Tuple[dict, dict]:
+        """Prepares the specified arguments to be passed to a different thread
+        by separating them into two dictionaries; one of which has values which
+        are numpy arrays and the other which is json serializable
+        """
+        numpy_ready = dict()
+        json_ready = dict()
+
+        for argn, arg in enumerate(args):
+            if isinstance(arg, np.ndarray):
+                numpy_ready[f'marg_{argn}'] = arg
+            elif isinstance(arg, _PRIMS):
+                json_ready[f'marg_{argn}'] = arg
+            else:
+                try:
+                    self._check_container(arg)
+                except Exception as exc:
+                    raise ValueError(f'failed to separate arg {argn} = {arg}') from exc
+
+                json_ready[f'marg_{argn}'] = arg
+
+        for argn, arg in kwargs.items():
+            if not isinstance(argn, str):
+                raise ValueError(f'expected kwargs argn={argn} is str, but is {type(argn)}')
+            if argn.startswith('marg_') or argn == 'num_args':
+                raise ValueError(f'reserved arg name: {argn}')
+
+            if isinstance(arg, np.ndarray):
+                numpy_ready[argn] = arg
+            elif isinstance(arg, _PRIMS):
+                json_ready[argn] = arg
+            else:
+                try:
+                    self._check_container(arg)
+                except Exception as exc:
+                    raise ValueError(f'failed to separate kwarg {argn}') from exc
+
+                json_ready[argn] = arg
+
+        json_ready['num_args'] = len(args)
+        return numpy_ready, json_ready
+
+    def _setup_worker_files(self, worker_id: int, numpy_ready: dict, json_ready: dict):
+        worker_folder = os.path.join(_get_working_dir(self.identifier), str(worker_id))
+        os.makedirs(worker_folder)
+
+        numpy_file = os.path.join(worker_folder, 'numpy.npz')
+        json_file = os.path.join(worker_folder, 'other.json')
+
+        np.savez_compressed(numpy_file, **numpy_ready)
+        with open(json_file, 'w') as outfile:
+            json.dump(json_ready, outfile)
+
+    def _spawn(self, worker_id: int) -> Process:
+        proc = Process(target=_worker_target,
+                       args=(self.identifier, worker_id,
+                             self.target_module, self.target_name))
+        proc.daemon = True
+        proc.start()
+        return proc
+
+    def _prune(self):
+        for i in range(len(self.workers) - 1, -1, -1):
+            if not self.workers[i].is_alive():
+                del self.workers[i]
+
+    def __call__(self, *args, **kwargs):
+        if not self._prepared:
+            self.prepare()
+
+        worker_id = self.workers_spawned
+        self.workers_spawned += 1
+
+        numpy_ready, json_ready = self.separate(*args, **kwargs)
+        self._setup_worker_files(worker_id, numpy_ready, json_ready)
+
+        self._prune()
+        while len(self.workers) >= self.max_workers:
+            time.sleep(0.01)
+            self._prune()
+
+        self.workers.append(self._spawn(worker_id))
+
+    def join(self):
+        """Waits until all workers finish"""
+        self._prune()
+        while self.workers:
+            time.sleep(0.05)
+            self._prune()
+
+    def archive_raw_inputs(self, archive_path: str):
+        """Archives the raw data to the workers to the given path
+
+        Args:
+            archive_path (str): the path to archive data to
+        """
+
+        if not isinstance(archive_path, str):
+            raise ValueError(f'expected archive path is str, got {archive_path}')
+        self.join()
+
+        working_path = _get_working_dir(self.identifier)
+        zipdir(working_path)
+        os.rename(working_path + '.zip', archive_path)
+        self._prepared = False
+

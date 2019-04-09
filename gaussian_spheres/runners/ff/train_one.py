@@ -7,9 +7,11 @@ import shared.trainer as tnr
 import shared.weight_inits as wi
 import shared.measures.dist_through_time as dtt
 import shared.measures.pca_ff as pca_ff
+import shared.measures.pca_3d as pca_3d
 import shared.measures.participation_ratio as pr
 import shared.measures.svm as svm
 import shared.filetools
+import shared.npmp as npmp
 import torch
 from gaussian_spheres.pwl import GaussianSpheresPWLP
 import os
@@ -44,6 +46,8 @@ def main():
         criterion=torch.nn.CrossEntropyLoss()
     )
 
+    dig3d = pca_3d.create_digestor('train_one', 2)
+    pca_3d.plot_ff(pca_ff.find_trajectory(network, pwl, 3), os.path.join(SAVEDIR, 'pca_3d_start'), True, dig3d)
     dtt_training_dir = os.path.join(SAVEDIR, 'dtt')
     pca_training_dir = os.path.join(SAVEDIR, 'pca')
     pr_training_dir = os.path.join(SAVEDIR, 'pr')
@@ -56,16 +60,18 @@ def main():
      .reg(tnr.LRMultiplicativeDecayer())
      .reg(tnr.DecayOnPlateau())
      .reg(tnr.AccuracyTracker(5, 1000, True))
-     .reg(tnr.OnEpochCaller.create_every(dtt.during_training_ff(dtt_training_dir, True), skip=10))
-     .reg(tnr.OnEpochCaller.create_every(pca_ff.during_training(pca_training_dir, True), skip=10))
-     .reg(tnr.OnEpochCaller.create_every(pr.during_training_ff(pr_training_dir, True), skip=10))
-     .reg(tnr.OnEpochCaller.create_every(svm.during_training_ff(svm_training_dir, True), skip=10))
+     .reg(tnr.OnEpochCaller.create_every(dtt.during_training_ff(dtt_training_dir, True), skip=1000))
+     .reg(tnr.OnEpochCaller.create_every(pca_ff.during_training(pca_training_dir, True), skip=1000))
+     .reg(tnr.OnEpochCaller.create_every(pr.during_training_ff(pr_training_dir, True), skip=1000))
+     .reg(tnr.OnEpochCaller.create_every(svm.during_training_ff(svm_training_dir, True), skip=1000))
      .reg(tnr.ZipDirOnFinish(dtt_training_dir))
      .reg(tnr.ZipDirOnFinish(pca_training_dir))
      .reg(tnr.ZipDirOnFinish(pr_training_dir))
      .reg(tnr.ZipDirOnFinish(svm_training_dir))
     )
     trainer.train(network)
+    pca_3d.plot_ff(pca_ff.find_trajectory(network, pwl, 3), os.path.join(SAVEDIR, 'pca_3d_end'), True, dig3d)
+    dig3d.archive_raw_inputs(os.path.join(SAVEDIR, 'pca_3d_raw'))
 
 if __name__ == '__main__':
     main()

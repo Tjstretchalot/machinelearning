@@ -1,7 +1,7 @@
 """Same concept as plot3 except we try to save it as a gif"""
 
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
+from mpl_toolkits.mplot3d import Axes3D # pylint: disable=unused-import
 import numpy as np
 import torch
 from gaussian_spheres.pwl import GaussianSpheresPWLP
