@@ -84,11 +84,12 @@ def _plot_ff_real(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool):
 
     _visible_layer = None
     _scatter = None
-    def rotate_xz(perc):
-        ax.view_init(30, 45 + 360 * perc)
+    def rotate_xz(perc, force=None):
+        angle = 45 + 360 * perc if force is None else 45 + force
+        ax.view_init(30, angle)
         return ax
 
-    def movetime(perc, force=None):
+    def movetime(perc, force=None, norotate=False):
         nonlocal _visible_layer, _scatter
 
         target_layer = force if force is not None else int(perc * traj.num_layers)
@@ -106,7 +107,8 @@ def _plot_ff_real(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool):
                                   snapsh.projected_samples[:, 2].numpy(),
                                   s=1,
                                   c=snapsh.projected_sample_labels.numpy())
-            ax.view_init(30, 45)
+            if not norotate:
+                ax.view_init(30, 45)
             return (ax, _scatter)
 
         _scatter._offsets3d = (snapsh.projected_samples[:, 0].numpy(),
@@ -151,7 +153,25 @@ def _plot_ff_real(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool):
     movetime(0)
 
     anim = FuncAnimation(fig, update, frames=np.arange(0, total_time+1, frame_time), interval=frame_time)
-    anim.save(os.path.join(outfile_wo_ext, 'out.mp4'), dpi=100, writer='ffmpeg')
+    #anim.save(os.path.join(outfile_wo_ext, 'out.mp4'), dpi=100, writer='ffmpeg')
+
+    plt.close(fig)
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    _visible_layer = None # force redraw
+    _scatter = None
+
+    snapshotdir = os.path.join(outfile_wo_ext, 'snapshots')
+    os.makedirs(snapshotdir)
+
+    for lyr in range(traj.num_layers):
+        for angle in (15, 0, -15, 90, 180, 270):
+            movetime(0, force=lyr, norotate=True)
+            rotate_xz(0, angle)
+            fig.savefig(os.path.join(snapshotdir, f'snapshot_{angle+45}_{lyr}.png'))
+
+    plt.close(fig)
 
     if os.path.exists(outfile):
         os.remove(outfile)

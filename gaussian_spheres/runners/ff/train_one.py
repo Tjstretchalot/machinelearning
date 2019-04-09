@@ -48,6 +48,8 @@ def main():
 
     dig3d = pca_3d.create_digestor('train_one', 2)
     pca_3d.plot_ff(pca_ff.find_trajectory(network, pwl, 3), os.path.join(SAVEDIR, 'pca_3d_start'), True, dig3d)
+    dig3d.join()
+    exit()
     dtt_training_dir = os.path.join(SAVEDIR, 'dtt')
     pca_training_dir = os.path.join(SAVEDIR, 'pca')
     pr_training_dir = os.path.join(SAVEDIR, 'pr')
@@ -71,7 +73,7 @@ def main():
     )
     trainer.train(network)
     pca_3d.plot_ff(pca_ff.find_trajectory(network, pwl, 3), os.path.join(SAVEDIR, 'pca_3d_end'), True, dig3d)
-    dig3d.archive_raw_inputs(os.path.join(SAVEDIR, 'pca_3d_raw'))
+    dig3d.archive_raw_inputs(os.path.join(SAVEDIR, 'pca_3d_raw.zip'))
 
 if __name__ == '__main__':
     main()

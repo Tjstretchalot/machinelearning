@@ -70,7 +70,7 @@ def main():
 
     pca_3d.plot_ff(pca_ff.find_trajectory(network, train_pwl, 3), os.path.join(SAVEDIR, 'pca_3d_end_train'), True, dig3d)
     pca_3d.plot_ff(pca_ff.find_trajectory(network, test_pwl, 3), os.path.join(SAVEDIR, 'pca_3d_end_test'), True, dig3d)
-    dig3d.archive_raw_inputs(os.path.join(SAVEDIR, 'pca_3d_raw'))
+    dig3d.archive_raw_inputs(os.path.join(SAVEDIR, 'pca_3d_raw.zip'))
 
 if __name__ == '__main__':
     main()

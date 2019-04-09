@@ -400,12 +400,12 @@ def _plot_dtt_ff(layers, within_means, within_stds, within_sems,
         ax_mean_with_scatter.scatter(xvals, across_dists[lay], 1, across_col, alpha=0.3)
 
     _dbg(verbose, logger, 'plotting ratios')
-    ratios = across_means.clone() / within_means
+    ratios = within_means.clone() / across_means
     for ax in (ax_mean_with_stddev, ax_mean_with_sem, ax_mean_with_scatter):
         twinned = ax.twinx()
-        twinned.plot(layers[:-1], ratios[:-1].numpy(), linestyle='dashed', color=ratio_col, label='Across/Within', alpha=0.8)
+        twinned.plot(layers, ratios.numpy(), linestyle='dashed', color=ratio_col, label='Within/Across', alpha=0.8)
         twinned.legend(loc=2)
-        twinned.set_ylabel('Across / Within (ratio)')
+        twinned.set_ylabel('Within / Across (ratio)')
         ax.set_ylabel('Distances (Euclidean)')
         ax.set_xlabel('Layer')
         ax.legend(loc=1)
