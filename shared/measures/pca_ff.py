@@ -331,17 +331,18 @@ def during_training(savepath: str, train: bool, digestor: typing.Optional[npmp.N
     def on_step(context: GenericTrainingContext, fname_hint: str):
         context.logger.info('[PCA_FF] Measuring PCA Through Layers (hint: %s)', fname_hint)
         pwl = context.train_pwl if train else context.test_pwl
+        outfile = os.path.join(savepath, f'pca_{fname_hint}')
 
         if digestor is not None:
             num_samples = min(200 * pwl.output_dim, pwl.epoch_size)
             hacts = mutils.get_hidacts_ff(context.model, pwl, num_samples).numpy()
-            digestor(hacts.sample_points, hacts.sample_labels, *hacts.hid_acts, savepath=savepath,
+            digestor(hacts.sample_points, hacts.sample_labels, *hacts.hid_acts, savepath=outfile,
                      target_module='shared.measures.pca_ff',
                      target_name='digest_find_and_plot_traj')
             return
 
         traj = find_trajectory(context.model, pwl, 2)
-        plot_trajectory(traj, os.path.join(savepath, f'pca_{fname_hint}'))
+        plot_trajectory(traj, outfile)
 
     return on_step
 

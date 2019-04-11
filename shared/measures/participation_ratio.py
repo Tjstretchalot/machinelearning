@@ -238,17 +238,18 @@ def during_training_ff(savepath: str, train: bool,
     def on_step(context: GenericTrainingContext, fname_hint: str):
         context.logger.info('[PR] Measuring PR Through Layers (hint: %s)', fname_hint)
         pwl = context.train_pwl if train else context.test_pwl
+        outfile = os.path.join(savepath, f'pr_{fname_hint}')
 
         if digestor is not None:
             hacts = mutils.get_hidacts_ff(context.model, pwl).numpy()
             digestor(hacts.sample_points, hacts.sample_labels, *hacts.hid_acts,
-                     savepath=savepath,
+                     savepath=outfile,
                      target_module='shared.measures.participation_ratio',
                      target_name='digest_measure_and_plot_pr_ff',
                      **kwargs)
             return
 
         traj = measure_pr_ff(context.model, pwl)
-        plot_pr_trajectory(traj, os.path.join(savepath, f'pr_{fname_hint}'), **kwargs)
+        plot_pr_trajectory(traj, outfile, **kwargs)
 
     return on_step

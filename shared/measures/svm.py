@@ -289,6 +289,7 @@ def during_training_ff(savepath: str, train: bool,
     def on_step(context: GenericTrainingContext, fname_hint: str):
         context.logger.info('[SVM] Measuring SVM Through Layers (hint: %s)', fname_hint)
         pwl = context.train_pwl if train else context.test_pwl
+        outfile = os.path.join(savepath, f'svm_{fname_hint}')
 
         if digestor is not None:
             num_points = min(150*pwl.output_dim, pwl.epoch_size)
@@ -296,10 +297,10 @@ def during_training_ff(savepath: str, train: bool,
             digestor(hacts.sample_points, hacts.sample_labels, *hacts.hid_acts,
                      target_module='shared.measures.svm',
                      target_name='digest_train_and_plot_ff',
-                     savepath=savepath)
+                     savepath=outfile)
             return
         traj = train_svms_ff(context.model, pwl)
-        plot_traj_ff(traj, os.path.join(savepath, f'svm_{fname_hint}'), False)
+        plot_traj_ff(traj, outfile, False)
 
     return on_step
 
