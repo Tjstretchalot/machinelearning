@@ -153,7 +153,7 @@ def _plot_ff_real(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool,
     movetime(0)
 
     anim = FuncAnimation(fig, update, frames=np.arange(0, total_time+1, frame_time), interval=frame_time)
-    #anim.save(os.path.join(outfile_wo_ext, 'out.mp4'), dpi=100, writer='ffmpeg')
+    anim.save(os.path.join(outfile_wo_ext, 'out.mp4'), dpi=100, writer='ffmpeg')
 
     plt.close(fig)
 
