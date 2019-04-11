@@ -201,16 +201,20 @@ class NPDigestor:
         json_ready['num_args'] = len(args)
         return target_module, target_name, numpy_ready, json_ready
 
-    def _setup_worker_files(self, worker_id: int, numpy_ready: dict, json_ready: dict):
+    def _setup_worker_files(self, worker_id: int, numpy_ready: dict, json_ready: dict,
+                            target_module: str, target_name: str):
         worker_folder = os.path.join(_get_working_dir(self.identifier), str(worker_id))
         os.makedirs(worker_folder)
 
         numpy_file = os.path.join(worker_folder, 'numpy.npz')
         json_file = os.path.join(worker_folder, 'other.json')
+        meta_file = os.path.join(worker_folder, 'meta.json')
 
         np.savez_compressed(numpy_file, **numpy_ready)
         with open(json_file, 'w') as outfile:
             json.dump(json_ready, outfile)
+        with open(meta_file, 'w') as outfile:
+            json.dump({'target_module': target_module, 'target_name': target_name}, outfile)
 
     def _spawn(self, worker_id: int, target_module: str, target_name: str) -> Process:
         if not isinstance(target_module, str):
@@ -245,25 +249,37 @@ class NPDigestor:
         self.workers_spawned += 1
 
         target_module, target_name, numpy_ready, json_ready = self.separate(*args, **kwargs)
-        self._setup_worker_files(worker_id, numpy_ready, json_ready)
+        self._setup_worker_files(worker_id, numpy_ready, json_ready, target_module, target_name)
 
         self._invoke_blocking(worker_id, target_module, target_name)
 
     def repeat_raw(self, inpath: str, target_module: typing.Optional[str] = None,
                    target_name: typing.Optional[str] = None):
-        """Takes a path to a folder that was archived and reruns it
+        """Takes a path to a folder that was archived and reruns it.
 
         Args:
             inpath (str): the path to the input folder
             target_module (str, optional): Defaults to None. If specified, the callable to invoke,
-                otherwise self.target_module is used
+                otherwise if the meta.json file exists that is used, otherwise
+                self.target_module is used
             target_name (str, optional): Defaults to None. If specified, the callable to invoke,
-                otherwise self.target_name is used
+                otherwise if the meta.json file exists that is used, otherwise
+                self.target_name is used
         """
-        if target_module is None:
-            target_module = self.target_module
-        if target_name is None:
-            target_name = self.target_name
+        if target_module is None or target_name is None:
+            metapath = os.path.join(inpath, 'meta.json')
+            if os.path.exists(metapath):
+                with open(metapath, 'r') as infile:
+                    meta = json.load(infile)
+                if target_module is None:
+                    target_module = meta['target_module']
+                if target_name is None:
+                    target_name = meta['target_name']
+            else:
+                if target_module is None:
+                    target_module = self.target_module
+                if target_name is None:
+                    target_name = self.target_name
 
         if not isinstance(inpath, str):
             raise ValueError(f'expected inpath is str, got {inpath}')

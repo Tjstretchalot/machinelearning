@@ -41,12 +41,11 @@ def main():
         criterion=torch.nn.CrossEntropyLoss()
     )
 
-    dig3d = npmp.NPDigestor('train_one', 4)
-    pca_3d.plot_ff(pca_ff.find_trajectory(network, train_pwl, 3), os.path.join(SAVEDIR, 'pca_3d_start_train'), True, dig3d)
-    pca_3d.plot_ff(pca_ff.find_trajectory(network, test_pwl, 3), os.path.join(SAVEDIR, 'pca_3d_start_test'), True, dig3d)
+    dig = npmp.NPDigestor('train_one', 35)
 
     dtt_training_dir = os.path.join(SAVEDIR, 'dtt')
     pca_training_dir = os.path.join(SAVEDIR, 'pca')
+    pca3d_training_dir = os.path.join(SAVEDIR, 'pca3d')
     pr_training_dir = os.path.join(SAVEDIR, 'pr')
     svm_training_dir = os.path.join(SAVEDIR, 'svm')
     (trainer
@@ -57,10 +56,12 @@ def main():
      .reg(tnr.LRMultiplicativeDecayer())
      .reg(tnr.DecayOnPlateau())
      .reg(tnr.AccuracyTracker(5, 1000, True))
-     .reg(tnr.OnEpochCaller.create_every(dtt.during_training_ff(dtt_training_dir, True), skip=100))
-     .reg(tnr.OnEpochCaller.create_every(pca_ff.during_training(pca_training_dir, True), skip=100))
-     .reg(tnr.OnEpochCaller.create_every(pr.during_training_ff(pr_training_dir, True), skip=100))
-     .reg(tnr.OnEpochCaller.create_every(svm.during_training_ff(svm_training_dir, True), skip=100))
+     .reg(tnr.OnEpochCaller.create_every(dtt.during_training_ff(dtt_training_dir, True, dig), skip=1, stop=10))
+     .reg(tnr.OnEpochCaller.create_every(pca_3d.during_training(pca3d_training_dir, True, dig), skip=1, stop=10))
+     .reg(tnr.OnEpochCaller.create_every(pca_ff.during_training(pca_training_dir, True, dig), skip=100))
+     .reg(tnr.OnEpochCaller.create_every(pr.during_training_ff(pr_training_dir, True, dig), skip=100))
+     .reg(tnr.OnEpochCaller.create_every(svm.during_training_ff(svm_training_dir, True, dig), skip=100))
+     .reg(tnr.OnFinishCaller(lambda *args, **kwargs: dig.join()))
      .reg(tnr.ZipDirOnFinish(dtt_training_dir))
      .reg(tnr.ZipDirOnFinish(pca_training_dir))
      .reg(tnr.ZipDirOnFinish(pr_training_dir))
@@ -68,10 +69,7 @@ def main():
     )
 
     trainer.train(network)
-
-    pca_3d.plot_ff(pca_ff.find_trajectory(network, train_pwl, 3), os.path.join(SAVEDIR, 'pca_3d_end_train'), True, dig3d)
-    pca_3d.plot_ff(pca_ff.find_trajectory(network, test_pwl, 3), os.path.join(SAVEDIR, 'pca_3d_end_test'), True, dig3d)
-    dig3d.archive_raw_inputs(os.path.join(SAVEDIR, 'pca_3d_raw.zip'))
+    dig.archive_raw_inputs(os.path.join(SAVEDIR, 'digestor_raw.zip'))
 
 if __name__ == '__main__':
     main()

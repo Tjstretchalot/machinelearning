@@ -7,12 +7,14 @@ import shared.measures.pca_ff as pca_ff
 import numpy as np
 import torch
 import os
+import typing
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D # pylint: disable=unused-import
 from matplotlib.animation import FuncAnimation
 import pytweening
 from shared.filetools import zipdir
 from shared.npmp import NPDigestor
+from shared.trainer import GenericTrainingContext
 
 def _plot_npmp(projected_sample_labels: np.ndarray, *args, outfile: str = None, exist_ok=False,
                frame_time: float = 16.67):
@@ -221,3 +223,35 @@ def plot_ff(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool,
     digestor(sample_labels, *args, outfile=outfile, exist_ok=exist_ok,
              frame_time=frame_time, target_module='shared.measures.pca_3d',
              target_name='_plot_npmp')
+
+
+def during_training(savepath: str, train: bool, digestor: typing.Optional[NPDigestor] = None,
+                    frame_time: float = 16.67):
+    """Fetches the on_step/on_epoch for things like OnEpochsCaller
+    that saves into the given directory.
+
+    Args:
+        savepath (str): where to save
+        train (bool): true to use training data, false to use validation data
+        digestor (NPDigestor, optional): if specified, used for multiprocessing
+        frame_time (float, optional): the milliseconds per frame
+    """
+    if not isinstance(savepath, str):
+        raise ValueError(f'expected savepath is str, got {savepath} (type={type(savepath)})')
+    if not isinstance(train, bool):
+        raise ValueError(f'expected train is bool, got {train} (type={type(train)})')
+    if digestor is not None and not isinstance(digestor, NPDigestor):
+        raise ValueError(f'expected digestor is NPDigestor, got {digestor} (type={type(digestor)})')
+
+    if os.path.exists(savepath):
+        raise ValueError(f'{savepath} already exists')
+
+    def on_step(context: GenericTrainingContext, fname_hint: str):
+        context.logger.info('[PCA_FF] Measuring PCA (3D) Through Layers (hint: %s)', fname_hint)
+        pwl = context.train_pwl if train else context.test_pwl
+        outfile = os.path.join(savepath, f'pca_{fname_hint}')
+        traj = pca_ff.find_trajectory(context.model, pwl, 3)
+        plot_ff(traj, outfile, False, frame_time, digestor)
+
+    return on_step
+
