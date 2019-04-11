@@ -77,7 +77,7 @@ def train_svms_with(sample_points: torch.tensor, sample_labels: torch.tensor,
         if output_dim > 2:
             layer_accs = []
             for lbl in range(output_dim):
-                classifier = svm.LinearSVC(5000)
+                classifier = svm.LinearSVC(max_iter=5000)
                 classifier.fit(state[:train_points], masks[lbl][:train_points])
                 mean_acc = classifier.score(state[train_points:], masks[lbl][train_points:])
                 layer_accs.append(mean_acc)
