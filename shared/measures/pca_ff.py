@@ -12,6 +12,8 @@ from shared.models.ff import FeedforwardNetwork, FFHiddenActivations
 from shared.pwl import PointWithLabelProducer
 from shared.measures.pca import get_hidden_pcs, project_to_pcs, plot_snapshot
 from shared.trainer import GenericTrainingContext
+import shared.npmp as npmp
+import shared.measures.utils as mutils
 
 import typing
 import os
@@ -283,18 +285,38 @@ def plot_trajectory(traj: PCTrajectoryFF, filepath: str, exist_ok: bool = False,
     shutil.rmtree(filepath_wo_ext)
     os.chdir(cwd)
 
-def during_training(savepath: str, train: bool):
+def digest_find_and_plot_traj(sample_points: torch.tensor, sample_labels: torch.tensor, # pylint: disable=unused-argument
+                              *all_hid_acts: typing.Tuple[torch.tensor],
+                              savepath: str = None, **kwargs):
+    """Digestor friendly way to find the pc trajectory and then plot it at the given
+    savepath for the given sample points, labels, and hidden activations"""
+
+    snapshots = []
+
+    for hid_acts in all_hid_acts:
+        pc_vals, pc_vecs = get_hidden_pcs(hid_acts, 2)
+        projected = project_to_pcs(hid_acts, pc_vecs, out=None)
+        snapshots.append(PCTrajectoryFFSnapshot(pc_vecs, pc_vals, projected, sample_labels))
+
+    traj = PCTrajectoryFF(snapshots)
+    plot_trajectory(traj, savepath, False, **kwargs)
+
+
+def during_training(savepath: str, train: bool, digestor: typing.Optional[npmp.NPDigestor] = None):
     """Fetches the on_step/on_epoch for things like OnEpochsCaller
     that saves into the given directory.
 
     Args:
         savepath (str): where to save
         train (bool): true to use training data, false to use validation data
+        digestor (NPDigestor, optional): if specified, used for multiprocessing
     """
     if not isinstance(savepath, str):
         raise ValueError(f'expected savepath is str, got {savepath} (type={type(savepath)})')
     if not isinstance(train, bool):
         raise ValueError(f'expected train is bool, got {train} (type={type(train)})')
+    if digestor is not None and not isinstance(digestor, npmp.NPDigestor):
+        raise ValueError(f'expected digestor is NPDigestor, got {digestor} (type={type(digestor)})')
 
     if os.path.exists(savepath):
         raise ValueError(f'{savepath} already exists')
@@ -302,6 +324,15 @@ def during_training(savepath: str, train: bool):
     def on_step(context: GenericTrainingContext, fname_hint: str):
         context.logger.info('[PCA_FF] Measuring PCA Through Layers (hint: %s)', fname_hint)
         pwl = context.train_pwl if train else context.test_pwl
+
+        if digestor is not None:
+            num_samples = min(200 * pwl.output_dim, pwl.epoch_size)
+            hacts = mutils.get_hidacts_ff(context.model, pwl, num_samples)
+            digestor(hacts.sample_points, hacts.sample_labels, *hacts.hid_acts, savepath=savepath,
+                     target_module='shared.measures.pca_ff',
+                     target_name='digest_find_and_plot_traj')
+            return
+
         traj = find_trajectory(context.model, pwl, 2)
         plot_trajectory(traj, os.path.join(savepath, f'pca_{fname_hint}'))
 

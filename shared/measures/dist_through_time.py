@@ -17,6 +17,8 @@ from shared.models.ff import FeedforwardNetwork, FFHiddenActivations
 from shared.pwl import PointWithLabelProducer
 from shared.filetools import zipdir, unzip
 from shared.trainer import GenericTrainingContext
+import shared.measures.utils as mutils
+import shared.npmp as npmp
 
 import scipy.spatial.distance as sdist
 
@@ -257,7 +259,9 @@ def measure_dtt_ff(model: FeedforwardNetwork, pwl_prod: PointWithLabelProducer,
     across_stds = torch.zeros(model.num_layers+1, dtype=torch.double)
     across_sems = torch.zeros(model.num_layers+1, dtype=torch.double)
 
+    pwl_prod.mark()
     pwl_prod.fill(sample_points, sample_labels)
+    pwl_prod.reset()
 
     def on_hidacts(acts_info: FFHiddenActivations):
         hidden_acts = acts_info.hidden_acts
@@ -286,19 +290,14 @@ def measure_dtt_ff(model: FeedforwardNetwork, pwl_prod: PointWithLabelProducer,
                  across_means, across_stds, across_sems,
                  within_dists, across_dists, outfile_wo_ext,
                  verbose, logger)
-
-    np.savez(os.path.join(outfile_wo_ext, 'sample.npz'),
-        sample_points=sample_points.numpy(),
-        sample_labels=sample_labels.numpy()
-        )
-    np.savez(os.path.join(outfile_wo_ext, 'hid_acts.npz'), *hid_acts)
-    np.savez(os.path.join(outfile_wo_ext, 'within.npz'), *within_dists)
-    np.savez(os.path.join(outfile_wo_ext, 'across.npz'), *across_dists)
+    _save_dtt_ff(sample_points, sample_labels, hid_acts,
+                 within_dists, across_dists, outfile_wo_ext)
 
     if os.path.exists(outfile):
         os.remove(outfile)
 
     zipdir(outfile_wo_ext)
+
 
 def replot_dtt_ff(infile: str, verbose: bool = True, logger: logging.Logger = None):
     """Recreates the dtt_ff plots for the given zip, replacing them inside the zip.
@@ -369,6 +368,16 @@ def replot_dtt_ff(infile: str, verbose: bool = True, logger: logging.Logger = No
         _dbg(verbose, logger, f'repacking {infile}')
         zipdir(infile_wo_ext)
 
+def _save_dtt_ff(sample_points, sample_labels, hid_acts,
+                 within_dists, across_dists, outfile_wo_ext):
+    np.savez(os.path.join(outfile_wo_ext, 'sample.npz'),
+        sample_points=sample_points.numpy(),
+        sample_labels=sample_labels.numpy()
+        )
+    np.savez(os.path.join(outfile_wo_ext, 'hid_acts.npz'), *hid_acts)
+    np.savez(os.path.join(outfile_wo_ext, 'within.npz'), *within_dists)
+    np.savez(os.path.join(outfile_wo_ext, 'across.npz'), *across_dists)
+
 def _plot_dtt_ff(layers, within_means, within_stds, within_sems,
                  across_means, across_stds, across_sems,
                  within_dists, across_dists, outfile_wo_ext,
@@ -425,7 +434,73 @@ def _plot_dtt_ff(layers, within_means, within_stds, within_sems,
     plt.close(fig_mean_with_sem)
     plt.close(fig_mean_with_scatter)
 
-def during_training_ff(savepath: str, train: bool, **kwargs):
+def digest_ff_activations(
+        sample_points: np.ndarray, sample_labels: np.ndarray,
+        *hid_acts: typing.List[np.ndarray], outfile: str, exist_ok: bool):
+    """This is a digest targettable version of the measure_dtt_ff, which accepts the
+    hidden activations in the layer and stores plots to the given outfile and exist_ok
+
+    Args:
+        sample_points (ndarray): the sample points that we used to get layer acts
+        sample_labels (ndarray): the sample labels that we used to get layer acts
+        hid_acts (list[ndarray]): the hidden activations across each layer
+        outfile (str): where to store the plots and data
+        exist_ok (bool): True to overwrite, False to error when file exists
+    """
+    sample_points = torch.from_numpy(sample_points).double()
+    sample_labels = torch.from_numpy(sample_labels)
+    hid_acts = [torch.from_numpy(hid_act).double() for hid_act in hid_acts]
+
+    outfile_wo_ext = os.path.splitext(outfile)[0]
+    if outfile == outfile_wo_ext:
+        outfile += '.zip'
+
+    if os.path.exists(outfile_wo_ext):
+        raise FileExistsError(f'for outfile={outfile}, need {outfile_wo_ext} as working space')
+    if not exist_ok and os.path.exists(outfile):
+        raise FileExistsError(f'outfile {outfile} already exists (use exist_ok=True) to overwrite')
+
+    num_samples = sample_points.shape[0]
+    output_dim = hid_acts[-1].shape[1]
+
+    within_dists = [] # each value corresponds to a torch tensor of within dists
+    within_means = torch.zeros(len(hid_acts), dtype=torch.double)
+    within_stds = torch.zeros(len(hid_acts), dtype=torch.double)
+    within_sems = torch.zeros(len(hid_acts), dtype=torch.double)
+    across_dists = [] # each value corresponds to a torch tensor of across dists
+    across_means = torch.zeros(len(hid_acts), dtype=torch.double)
+    across_stds = torch.zeros(len(hid_acts), dtype=torch.double)
+    across_sems = torch.zeros(len(hid_acts), dtype=torch.double)
+
+    for layer, layer_acts in enumerate(hid_acts):
+        within, across = measure_instant(layer_acts, sample_labels, output_dim)
+        within_dists.append(within)
+        across_dists.append(across)
+
+        within_means[layer] = within.mean()
+        within_stds[layer] = within.std()
+        within_sems[layer] = within_stds[layer] / np.sqrt(num_samples)
+
+        across_means[layer] = across.mean()
+        across_stds[layer] = across.std()
+        across_sems[layer] = across_stds[layer] / np.sqrt(num_samples)
+
+    layers = np.arange(len(hid_acts))
+
+    _plot_dtt_ff(layers, within_means, within_stds, within_sems,
+                 across_means, across_stds, across_sems,
+                 within_dists, across_dists, outfile_wo_ext,
+                 False, None)
+    _save_dtt_ff(sample_points, sample_labels, hid_acts,
+                 within_dists, across_dists, outfile_wo_ext)
+
+    if os.path.exists(outfile):
+        os.remove(outfile)
+
+    zipdir(outfile_wo_ext)
+
+def during_training_ff(savepath: str, train: bool,
+                       digestor: typing.Optional[npmp.NPDigestor] = None, **kwargs):
     """Fetches the on_step/on_epoch for things like OnEpochsCaller
     that saves into the given directory.
 
@@ -438,13 +513,28 @@ def during_training_ff(savepath: str, train: bool, **kwargs):
         raise ValueError(f'expected savepath is str, got {savepath} (type={type(savepath)})')
     if not isinstance(train, bool):
         raise ValueError(f'expected train is bool, got {train} (type={type(train)})')
+    if digestor is not None and not isinstance(digestor, npmp.NPDigestor):
+        raise ValueError(f'expected digestor is NPDigestor, got {digestor} (type={type(digestor)})')
 
     if os.path.exists(savepath):
         raise ValueError(f'{savepath} already exists')
 
+    exist_ok = kwargs['exist_ok'] if 'exist_ok' in kwargs else False
+
     def on_step(context: GenericTrainingContext, fname_hint: str):
         context.logger.info('[DTT] Measuring DTT Through Layers (hint: %s)', fname_hint)
         pwl = context.train_pwl if train else context.test_pwl
-        measure_dtt_ff(context.model, pwl, os.path.join(savepath, f'dtt_{fname_hint}', **kwargs))
+        outfile = os.path.join(savepath, f'dtt_{fname_hint}')
+
+        if digestor is not None:
+            hid_acts = mutils.get_hidacts_ff(context.model, pwl)
+
+            digestor(hid_acts.sample_points, hid_acts.sample_labels, *hid_acts.hid_acts,
+                     outfile=outfile, exist_ok=exist_ok,
+                     target_module='shared.measures.dist_through_time',
+                     target_name='digest_ff_activations')
+            return
+
+        measure_dtt_ff(context.model, pwl, outfile, **kwargs)
 
     return on_step

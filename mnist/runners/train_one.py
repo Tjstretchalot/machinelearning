@@ -11,6 +11,7 @@ import shared.measures.participation_ratio as pr
 import shared.measures.svm as svm
 import shared.filetools
 import shared.measures.pca_3d as pca_3d
+import shared.npmp as npmp
 import torch
 from mnist.pwl import MNISTData
 import os
@@ -40,7 +41,7 @@ def main():
         criterion=torch.nn.CrossEntropyLoss()
     )
 
-    dig3d = pca_3d.create_digestor('train_one', 4)
+    dig3d = npmp.NPDigestor('train_one', 4)
     pca_3d.plot_ff(pca_ff.find_trajectory(network, train_pwl, 3), os.path.join(SAVEDIR, 'pca_3d_start_train'), True, dig3d)
     pca_3d.plot_ff(pca_ff.find_trajectory(network, test_pwl, 3), os.path.join(SAVEDIR, 'pca_3d_start_test'), True, dig3d)
 

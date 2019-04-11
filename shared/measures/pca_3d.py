@@ -51,7 +51,8 @@ def _plot_npmp(projected_sample_labels: np.ndarray, *args, outfile: str = None, 
     traj = pca_ff.PCTrajectoryFF(snapshots)
     _plot_ff_real(traj, outfile, exist_ok)
 
-def _plot_ff_real(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool):
+def _plot_ff_real(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool,
+                  frame_time: float = 16.67):
     """Plots the given feed-forward pc trajectory
 
     Args:
@@ -79,8 +80,6 @@ def _plot_ff_real(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool):
 
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
-
-    frame_time = 16.67
 
     _visible_layer = None
     _scatter = None
@@ -178,7 +177,7 @@ def _plot_ff_real(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool):
     zipdir(outfile_wo_ext)
 
 def plot_ff(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool,
-            digestor: NPDigestor = None):
+            frame_time: float = 16.67, digestor: NPDigestor = None):
     """Plots the given trajectory to the given outfile if possible. If the
     digestor is given, then this effect takes place on a different thread
 
@@ -218,8 +217,6 @@ def plot_ff(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool,
         args.append(snapshot.principal_vectors.numpy())
         args.append(snapshot.principal_values.numpy())
         args.append(snapshot.projected_samples.numpy())
-    digestor(sample_labels, *args, outfile=outfile, exist_ok=exist_ok)
-
-def create_digestor(identifier: str, max_workers: int) -> NPDigestor:
-    """Creates the digestor for 3d pca plots"""
-    return NPDigestor(identifier, 'shared.measures.pca_3d', '_plot_npmp', max_workers)
+    digestor(sample_labels, *args, outfile=outfile, exist_ok=exist_ok,
+             frame_time=frame_time, target_module='shared.measures.pca_3d',
+             target_name='_plot_npmp')

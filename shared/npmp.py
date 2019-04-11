@@ -72,19 +72,21 @@ class NPDigestor:
         workers (list[Process]): the workers that were started but have not confirmed
             to have finished yet
         max_workers (int): the maximum number of workers out at one time
-        target_module (str): the module path (i.e., 'shared.pca') which will be invoked
-        target_name (str): the name of the function (i.e. 'plot_pc_trajectory') which
+        target_module (str, optional): the module path (i.e., 'shared.pca') which will be invoked
+        target_name (str, optional): the name of the function (i.e. 'plot_pc_trajectory') which
             is in the target module and will be invoked
 
         _prepared (bool): if we have prepare() d
     """
 
-    def __init__(self, identifier: str, target_module: str, target_name: str, max_workers: int):
+    def __init__(self, identifier: str, max_workers: int,
+                 target_module: typing.Optional[str] = None,
+                 target_name: typing.Optional[str] = None):
         if not isinstance(identifier, str):
             raise ValueError(f'expected identifier is str, got {identifier} (type={type(identifier)})')
-        if not isinstance(target_module, str):
+        if target_module is not None and not isinstance(target_module, str):
             raise ValueError(f'expected target_module is str, got {target_module} (type={type(target_module)})')
-        if not isinstance(target_name, str):
+        if target_name is not None and not isinstance(target_name, str):
             raise ValueError(f'expected target_name is str, got {target_name} (type={type(target_name)})')
         if not isinstance(max_workers, int):
             raise ValueError(f'expected max_workers is int, got {max_workers} (type={type(max_workers)})')
@@ -141,11 +143,27 @@ class NPDigestor:
             else:
                 raise ValueError(f'unknown type {cur}')
 
-    def separate(self, *args, **kwargs) -> typing.Tuple[dict, dict]:
+    def separate(self, *args, **kwargs) -> typing.Tuple[str, str, dict, dict]:
         """Prepares the specified arguments to be passed to a different thread
         by separating them into two dictionaries; one of which has values which
-        are numpy arrays and the other which is json serializable
+        are numpy arrays and the other which is json serializable. May pass two
+        special keywords: target_module and target_name. If these are provided
+        then they are used instead of the digestors defaults.
         """
+        target_module = self.target_module
+        target_name = self.target_name
+
+        if 'target_module' in kwargs:
+            target_module = kwargs['target_module']
+            if not isinstance(target_module, str):
+                raise ValueError(f'expected target_module is str, got {target_module}')
+            del kwargs['target_module']
+        if 'target_name' in kwargs:
+            target_name = kwargs['target_name']
+            if not isinstance(target_name, str):
+                raise ValueError(f'expected target_name is str, got {target_name}')
+            del kwargs['target_name']
+
         numpy_ready = dict()
         json_ready = dict()
 
@@ -181,7 +199,7 @@ class NPDigestor:
                 json_ready[argn] = arg
 
         json_ready['num_args'] = len(args)
-        return numpy_ready, json_ready
+        return target_module, target_name, numpy_ready, json_ready
 
     def _setup_worker_files(self, worker_id: int, numpy_ready: dict, json_ready: dict):
         worker_folder = os.path.join(_get_working_dir(self.identifier), str(worker_id))
@@ -194,10 +212,14 @@ class NPDigestor:
         with open(json_file, 'w') as outfile:
             json.dump(json_ready, outfile)
 
-    def _spawn(self, worker_id: int) -> Process:
+    def _spawn(self, worker_id: int, target_module: str, target_name: str) -> Process:
+        if not isinstance(target_module, str):
+            raise ValueError(f'expected target_module is str, got {target_module}')
+        if not isinstance(target_name, str):
+            raise ValueError(f'expected target_name is str, got {target_name}')
+
         proc = Process(target=_worker_target,
-                       args=(self.identifier, worker_id,
-                             self.target_module, self.target_name))
+                       args=(self.identifier, worker_id, target_module, target_name))
         proc.daemon = True
         proc.start()
         return proc
@@ -207,6 +229,14 @@ class NPDigestor:
             if not self.workers[i].is_alive():
                 del self.workers[i]
 
+    def _invoke_blocking(self, worker_id: int, target_module: str, target_name: str):
+        self._prune()
+        while len(self.workers) >= self.max_workers:
+            time.sleep(0.01)
+            self._prune()
+
+        self.workers.append(self._spawn(worker_id, target_module, target_name))
+
     def __call__(self, *args, **kwargs):
         if not self._prepared:
             self.prepare()
@@ -214,15 +244,48 @@ class NPDigestor:
         worker_id = self.workers_spawned
         self.workers_spawned += 1
 
-        numpy_ready, json_ready = self.separate(*args, **kwargs)
+        target_module, target_name, numpy_ready, json_ready = self.separate(*args, **kwargs)
         self._setup_worker_files(worker_id, numpy_ready, json_ready)
 
-        self._prune()
-        while len(self.workers) >= self.max_workers:
-            time.sleep(0.01)
-            self._prune()
+        self._invoke_blocking(worker_id, target_module, target_name)
 
-        self.workers.append(self._spawn(worker_id))
+    def repeat_raw(self, inpath: str, target_module: typing.Optional[str] = None,
+                   target_name: typing.Optional[str] = None):
+        """Takes a path to a folder that was archived and reruns it
+
+        Args:
+            inpath (str): the path to the input folder
+            target_module (str, optional): Defaults to None. If specified, the callable to invoke,
+                otherwise self.target_module is used
+            target_name (str, optional): Defaults to None. If specified, the callable to invoke,
+                otherwise self.target_name is used
+        """
+        if target_module is None:
+            target_module = self.target_module
+        if target_name is None:
+            target_name = self.target_name
+
+        if not isinstance(inpath, str):
+            raise ValueError(f'expected inpath is str, got {inpath}')
+        if not isinstance(target_module, str):
+            raise ValueError(f'expected target_module is str, got {target_module}')
+        if not isinstance(target_name, str):
+            raise ValueError(f'expected target_name is str, got {target_name}')
+
+        if not os.path.exists(inpath):
+            raise FileNotFoundError(f'cannot repeat {inpath} (file does not exist)')
+        if not os.path.isdir(inpath):
+            raise ValueError(f'cannot repeat {inpath} (dir expected but is not dir)')
+
+        worker_id = self.workers_spawned
+        self.workers_spawned += 1
+
+        worker_folder = os.path.join(_get_working_dir(self.identifier), str(worker_id))
+        cwd = os.getcwd()
+        shutil.copytree(inpath, worker_folder)
+        os.chdir(cwd)
+
+        self._invoke_blocking(worker_id, target_module, target_name)
 
     def join(self):
         """Waits until all workers finish"""

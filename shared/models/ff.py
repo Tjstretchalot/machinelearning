@@ -9,6 +9,8 @@ import shared.weight_inits as wi
 
 import typing
 import math
+from functools import reduce
+import operator
 
 class FFHiddenActivations(typing.NamedTuple):
     """Describes the feedforward activations within the network
@@ -270,6 +272,98 @@ class FeedforwardLarge(FeedforwardNetwork):
                 activations_callback(FFHiddenActivations(layer=layer_ind + 1, hidden_acts=activations))
 
         return activations
+
+class ComplexLayer(typing.NamedTuple):
+    """Describes a layer in the FeedforwardComplex network with some additional
+    attributes for plotting purposes. We assume that if the layer is not a module
+    then in_features is arbitrary and out_features matches in_features
+
+    Attributes:
+        style (str): one of 'layer', 'nonlinearity', 'other'
+        is_module (bool): True to store under modules, False not to
+        invokes_callback (bool): True if the network state should be
+            visualized after the action is invoked, False if this is
+            an intermediary layer. For example, a Linear module
+            + tanh nonlinearity should only invoke the callback after
+            the nonlinearity
+        action (callable): the thing which will be called with the
+            hidden activations and will return the new activations
+    """
+
+    style: str
+    is_module: bool
+    invokes_callback: bool
+    action: typing.Callable
+
+class FeedforwardComplex(FeedforwardNetwork):
+    """Describes a network which might use different nonlinearities and nonlinear
+    layers (such as convolutional layers)
+
+    Attributes:
+        layers (list[ComplexLayer]): the layers that are in this network
+    """
+
+    def __init__(self, input_dim: int, output_dim: int, layers: typing.List[ComplexLayer]):
+        if not isinstance(input_dim, int):
+            raise ValueError(f'expected input dim is int, got {input_dim} (type={type(input_dim)})')
+        if not isinstance(output_dim, int):
+            raise ValueError(f'expected output_dim is int, got {output_dim} (type={type(output_dim)})')
+        if not isinstance(layers, (list, tuple)):
+            raise ValueError(f'expected layers is list-like, got {layers} (type={type(layers)})')
+
+        num_layers = 0
+        for lyr in layers:
+            if lyr.invokes_callback:
+                num_layers += 1
+
+        super().__init__(input_dim, output_dim, num_layers)
+        self.layers = layers
+
+        for idx, lyr in enumerate(layers):
+            if lyr.is_module:
+                self.add_module(str(idx), lyr.action)
+
+    def forward(self, *args):
+        if not args:
+            raise ValueError('forward(inp[, acts_cb]) expected at least one argument, got 0')
+
+        inp = args[0]
+        inp = inp.float() # todo
+        if not torch.is_tensor(inp):
+            raise ValueError(f'forward(inp[, acts_cb]) expected inp is torch.tensor, got {inp} (type={type(inp)})')
+
+        if len(inp.shape) != 2:
+            raise ValueError(f'forward(inp[, acts_cb]) expected inp has shape [batch_size, input_dim], got {inp.shape}')
+
+        if inp.shape[1] != self.input_dim:
+            raise ValueError(f'forward(inp[, acts_cb]) expected inp has shape [batch_size, input_dim], got {inp.shape} (input_dim={self.input_dim})')
+
+        activations_callback = None if len(args) == 1 else args[1]
+        if activations_callback is not None:
+            if not callable(activations_callback):
+                raise ValueError(f'forward(inp, acts_cb) expected acts_cb is callable, got {activations_callback}')
+
+        activations = inp
+        #print(f'input: shape={inp.shape}, dtype={inp.dtype}')
+        if activations_callback:
+            activations_callback(FFHiddenActivations(layer=0, hidden_acts=inp.double()))
+
+        layer_ind = 1
+        for lyr in self.layers:
+            activations = lyr.action(activations)
+            #print(f'after layer {idx} (style={lyr.style}), shape={activations.shape}, dtype={activations.dtype}')
+            if lyr.invokes_callback and activations_callback:
+                cb_activations = activations.double()
+                if len(activations.shape) != 2:
+                    cb_activations = activations.reshape(
+                        activations.shape[0],
+                        reduce(operator.mul, activations.shape[1:]))
+                    #print(f'after reshaping for callback: {cb_activations.shape}')
+                activations_callback(FFHiddenActivations(layer=layer_ind, hidden_acts=cb_activations))
+                layer_ind += 1
+
+        return activations
+
 
 class FFTeacher(NetworkTeacher):
     """A simple network teacher

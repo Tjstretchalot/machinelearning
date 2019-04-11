@@ -12,6 +12,8 @@ from shared.models.ff import FeedforwardNetwork, FFHiddenActivations
 from shared.pwl import PointWithLabelProducer
 from shared.filetools import zipdir
 from shared.trainer import GenericTrainingContext
+import shared.npmp as npmp
+import shared.measures.utils as mutils
 
 def measure_pr(hidden_acts: torch.tensor) -> float:
     """Measures the participation ratio of the specified hidden acts, plotting
@@ -183,19 +185,45 @@ def plot_pr_trajectory(traj: PRTrajectory, savepath: str, exist_ok: bool = False
 
     zipdir(savepath_wo_ext)
 
-def during_training_ff(savepath: str, train: bool, **kwargs):
+def digest_measure_and_plot_pr_ff(sample_points: torch.tensor, sample_labels: torch.tensor,
+                        *all_hid_acts: typing.Tuple[torch.tensor],
+                        savepath: str = None):
+    """An npmp digestable callable for measuring and plotting the participation ratio for
+    a feedforward network"""
+
+    num_lyrs = len(all_hid_acts)
+    output_dim = all_hid_acts[-1].shape[1]
+
+    pr_overall = torch.zeros(num_lyrs, dtype=torch.double)
+    pr_by_label = torch.zeros((output_dim, num_lyrs), dtype=torch.double)
+
+    masks_by_lbl = [sample_labels == lbl for lbl in range(output_dim)]
+
+    for layer, hid_acts in enumerate(all_hid_acts):
+        pr_overall[layer] = measure_pr(hid_acts)
+        for lbl in range(output_dim):
+            pr_by_label[lbl, layer] = measure_pr(hid_acts[masks_by_lbl[lbl]])
+
+    traj = PRTrajectory(overall=pr_overall, by_label=pr_by_label, layers=True)
+    plot_pr_trajectory(traj, savepath, False)
+
+def during_training_ff(savepath: str, train: bool,
+                       digestor: typing.Optional[npmp.NPDigestor] = None, **kwargs):
     """Fetches the on_step/on_epoch for things like OnEpochsCaller
     that saves into the given directory.
 
     Args:
         savepath (str): where to save
         train (bool): true to use training data, false to use validation data
+        digestor (NPDigestor, optional): if specified, used to parallelizing
         kwargs (dict): passed to plot_pr_trajectory
     """
     if not isinstance(savepath, str):
         raise ValueError(f'expected savepath is str, got {savepath} (type={type(savepath)})')
     if not isinstance(train, bool):
         raise ValueError(f'expected train is bool, got {train} (type={type(train)})')
+    if digestor is not None and not isinstance(digestor, npmp.NPDigestor):
+        raise ValueError(f'expected digestor is optional[NPDigestor], got {digestor} (type={type(digestor)})')
 
     if os.path.exists(savepath):
         raise ValueError(f'{savepath} already exists')
@@ -203,6 +231,16 @@ def during_training_ff(savepath: str, train: bool, **kwargs):
     def on_step(context: GenericTrainingContext, fname_hint: str):
         context.logger.info('[PR] Measuring PR Through Layers (hint: %s)', fname_hint)
         pwl = context.train_pwl if train else context.test_pwl
+
+        if digestor is not None:
+            hacts = mutils.get_hidacts_ff(context.model, pwl)
+            digestor(hacts.sample_points, hacts.sample_labels, *hacts.hid_acts,
+                     savepath=savepath,
+                     target_module='shared.measures.participation_ratio',
+                     target_name='digest_measure_and_plot_pr',
+                     **kwargs)
+            return
+
         traj = measure_pr_ff(context.model, pwl)
         plot_pr_trajectory(traj, os.path.join(savepath, f'pr_{fname_hint}'), **kwargs)
 

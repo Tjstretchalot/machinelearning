@@ -12,6 +12,8 @@ from shared.models.ff import FeedforwardNetwork, FFHiddenActivations
 from shared.pwl import PointWithLabelProducer
 from shared.filetools import zipdir
 from shared.trainer import GenericTrainingContext
+import shared.npmp as npmp
+import shared.measures.utils as mutils
 
 import os
 
@@ -29,6 +31,64 @@ class SVMTrajectory(typing.NamedTuple):
     """
     overall: torch.tensor
     by_label_vs_all: typing.Optional[torch.tensor]
+
+def train_svms_with(sample_points: torch.tensor, sample_labels: torch.tensor,
+                    *hidden_states: typing.Tuple[torch.tensor]) -> SVMTrajectory:
+    """Produces as svm trajectory from the given sample points, labels, and
+    hidden activations
+
+    Args:
+        sample_points (torch.tensor): The points that were sent through the network
+        sample_labels (torch.tensor): The labels that were sent through the network
+        hid_acts (tuple[torch.tensor]): the hidden activations that arose out of the points
+    """
+
+    num_points = sample_points.shape[0]
+    train_points = int(num_points * (13.0/15.0))
+    output_dim = hidden_states[-1].shape[1]
+
+    overall = []
+
+    if output_dim > 2:
+        masks = [sample_labels == lbl for lbl in range(output_dim)]
+        by_label_vs_all = []
+
+    for state in hidden_states(sample_points):
+        if not torch.is_tensor(state):
+            raise ValueError(f'expected hidden state is tensor, got {state} (type={type(state)})')
+        if len(state.shape) != 2:
+            raise ValueError(f'expected state has shape [batch_size, layer_size] but has shape {state.shape}')
+        if state.shape[0] != num_points:
+            raise ValueError(f'expected state has shape [batch_size={num_points}, layer_size] but has shape {state.shape}')
+        if state.dtype == torch.float:
+            state = state.double()
+        elif state.dtype != torch.double:
+            raise ValueError(f'expected state has dtype float-like, but has {state.dtype}')
+
+        classifier = svm.LinearSVC(max_iter=5000)
+        classifier.fit(state[:train_points], sample_labels[:train_points])
+        mean_acc = classifier.score(state[train_points:], sample_labels[train_points:])
+
+        if not isinstance(mean_acc, float):
+            raise ValueError(f'expected mean_acc is float, got {mean_acc} (type={type(mean_acc)})')
+
+        overall.append(mean_acc)
+
+        if output_dim > 2:
+            layer_accs = []
+            for lbl in range(output_dim):
+                classifier = svm.LinearSVC(5000)
+                classifier.fit(state[:train_points], masks[lbl][:train_points])
+                mean_acc = classifier.score(state[train_points:], masks[lbl][train_points:])
+                layer_accs.append(mean_acc)
+            by_label_vs_all.append(layer_accs)
+
+    if output_dim <= 2:
+        return SVMTrajectory(overall=torch.tensor(overall, dtype=torch.double), by_label_vs_all=None)
+    else:
+        return SVMTrajectory(overall=torch.tensor(overall, dtype=torch.double),
+                             by_label_vs_all=torch.tensor(by_label_vs_all, dtype=torch.double))
+
 
 def train_svms(pwl_prod: PointWithLabelProducer,
                hidden_states: typing.Callable) -> SVMTrajectory:
@@ -49,54 +109,14 @@ def train_svms(pwl_prod: PointWithLabelProducer,
     """
 
     num_points = min(pwl_prod.output_dim * 150, pwl_prod.epoch_size)
-    train_points = int(num_points * (13.0/15.0))
 
     sample_points = torch.zeros((num_points, pwl_prod.input_dim), dtype=torch.double)
     sample_labels = torch.zeros(num_points, dtype=torch.long)
 
     pwl_prod.fill(sample_points, sample_labels)
 
-    overall = []
-
-    if pwl_prod.output_dim > 2:
-        masks = [sample_labels == lbl for lbl in range(pwl_prod.output_dim)]
-        by_label_vs_all = []
-
-    for state in hidden_states(sample_points):
-        if not torch.is_tensor(state):
-            raise ValueError(f'expected hidden state is tensor, got {state} (type={type(state)})')
-        if len(state.shape) != 2:
-            raise ValueError(f'expected state has shape [batch_size, layer_size] but has shape {state.shape}')
-        if state.shape[0] != num_points:
-            raise ValueError(f'expected state has shape [batch_size={num_points}, layer_size] but has shape {state.shape}')
-        if state.dtype == torch.float:
-            state = state.double()
-        elif state.dtype != torch.double:
-            raise ValueError(f'expected state has dtype float-like, but has {state.dtype}')
-
-        classifier = svm.LinearSVC()
-        classifier.fit(state[:train_points], sample_labels[:train_points])
-        mean_acc = classifier.score(state[train_points:], sample_labels[train_points:])
-
-        if not isinstance(mean_acc, float):
-            raise ValueError(f'expected mean_acc is float, got {mean_acc} (type={type(mean_acc)})')
-
-        overall.append(mean_acc)
-
-        if pwl_prod.output_dim > 2:
-            layer_accs = []
-            for lbl in range(pwl_prod.output_dim):
-                classifier = svm.LinearSVC()
-                classifier.fit(state[:train_points], masks[lbl][:train_points])
-                mean_acc = classifier.score(state[train_points:], masks[lbl][train_points:])
-                layer_accs.append(mean_acc)
-            by_label_vs_all.append(layer_accs)
-
-    if pwl_prod.output_dim <= 2:
-        return SVMTrajectory(overall=torch.tensor(overall, dtype=torch.double), by_label_vs_all=None)
-    else:
-        return SVMTrajectory(overall=torch.tensor(overall, dtype=torch.double),
-                             by_label_vs_all=torch.tensor(by_label_vs_all, dtype=torch.double))
+    hid_acts = tuple(state for state in hidden_states(sample_points))
+    return train_svms_with(sample_points, sample_labels, *hid_acts)
 
 def train_svms_ff(network: FeedforwardNetwork,
                   pwl_prod: PointWithLabelProducer) -> SVMTrajectory:
@@ -228,8 +248,19 @@ def plot_traj_ff(traj: SVMTrajectory, outfile: str, exist_ok: bool = False):
         os.remove(outfile)
     zipdir(outfile_wo_ext)
 
+def digest_train_and_plot_ff(sample_points: torch.tensor, sample_labels: torch.tensor,
+                              *all_hid_acts: typing.Tuple[torch.tensor],
+                              savepath: str = None):
+    """Digestor friendly way to find the svmtrajectory and then plot it at the given
+    savepath for the given sample points, labels, and hidden activations"""
+    if savepath is None:
+        raise ValueError(f'expected savepath is str, got {savepath} (type={type(savepath)})')
 
-def during_training_ff(savepath: str, train: bool):
+    traj = train_svms_with(sample_points, sample_labels, *all_hid_acts)
+    plot_traj_ff(traj, savepath)
+
+def during_training_ff(savepath: str, train: bool,
+                       digestor: typing.Optional[npmp.NPDigestor] = None):
     """Returns a callable that is good for OnEpochCaller or similar intermediaries
     that saves the svm information to the given directory. The filenames will be
     svm_{hint}.zip. This expects that savepath will not exist.
@@ -237,6 +268,7 @@ def during_training_ff(savepath: str, train: bool):
     Args:
         savepath (str): the folder to save to
         train (bool): true for training data, false for test data
+        digestor (NPDigestor, optional): if specified, used for parallelization
 
     Returns:
         a callable that accepts a GenericTrainingContext
@@ -244,10 +276,21 @@ def during_training_ff(savepath: str, train: bool):
 
     if os.path.exists(savepath):
         raise ValueError(f'{savepath} already exists')
+    if digestor is not None and not isinstance(digestor, npmp.NPDigestor):
+        raise ValueError(f'expected digestor is NPDigestor, got {digestor} (type={type(digestor)})')
 
     def on_step(context: GenericTrainingContext, fname_hint: str):
         context.logger.info('[SVM] Measuring SVM Through Layers (hint: %s)', fname_hint)
         pwl = context.train_pwl if train else context.test_pwl
+
+        if digestor is not None:
+            num_points = min(150*pwl.output_dim, pwl.epoch_size)
+            hacts = mutils.get_hidacts_ff(context.model, pwl, num_points)
+            digestor(hacts.sample_points, hacts.sample_labels, *hacts.hid_acts,
+                     target_module='shared.measures.svm',
+                     target_name='digest_train_and_plot_ff',
+                     savepath=savepath)
+            return
         traj = train_svms_ff(context.model, pwl)
         plot_traj_ff(traj, os.path.join(savepath, f'svm_{fname_hint}'), False)
 
