@@ -67,6 +67,24 @@ class NetworkHiddenActivations:
         self.sample_labels = sample_labels
         self.hid_acts = hid_acts
 
+    def numpy(self):
+        """Changes this to numpy style from torch style. Always constructed torch-style
+        """
+        self.sample_points = self.sample_points.numpy()
+        self.sample_labels = self.sample_labels.numpy()
+        for i in range(len(self.hid_acts)):
+            self.hid_acts[i] = self.hid_acts[i].numpy()
+        return self
+
+    def torch(self):
+        """Changes this to torch style from numpy style. Always constructed torch-style
+        """
+        self.sample_points = torch.from_numpy(self.sample_points)
+        self.sample_labels = torch.from_numpy(self.sample_labels)
+        for i in range(len(self.hid_acts)):
+            self.hid_acts[i] = torch.from_numpy(self.hid_acts[i])
+        return self
+
     @property
     def num_pts(self):
         """Gets the number of points run through the network"""

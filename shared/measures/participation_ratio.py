@@ -185,11 +185,18 @@ def plot_pr_trajectory(traj: PRTrajectory, savepath: str, exist_ok: bool = False
 
     zipdir(savepath_wo_ext)
 
-def digest_measure_and_plot_pr_ff(sample_points: torch.tensor, sample_labels: torch.tensor,
-                        *all_hid_acts: typing.Tuple[torch.tensor],
+def digest_measure_and_plot_pr_ff(sample_points: np.ndarray, sample_labels: np.ndarray,
+                        *all_hid_acts: typing.Tuple[np.ndarray],
                         savepath: str = None):
     """An npmp digestable callable for measuring and plotting the participation ratio for
     a feedforward network"""
+
+    sample_points = torch.from_numpy(sample_points)
+    sample_labels = torch.from_numpy(sample_labels)
+    hacts_cp = []
+    for hact in all_hid_acts:
+        hacts_cp.append(torch.from_numpy(hact))
+    all_hid_acts = hacts_cp
 
     num_lyrs = len(all_hid_acts)
     output_dim = all_hid_acts[-1].shape[1]
@@ -233,7 +240,7 @@ def during_training_ff(savepath: str, train: bool,
         pwl = context.train_pwl if train else context.test_pwl
 
         if digestor is not None:
-            hacts = mutils.get_hidacts_ff(context.model, pwl)
+            hacts = mutils.get_hidacts_ff(context.model, pwl).numpy()
             digestor(hacts.sample_points, hacts.sample_labels, *hacts.hid_acts,
                      savepath=savepath,
                      target_module='shared.measures.participation_ratio',

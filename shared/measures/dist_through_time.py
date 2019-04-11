@@ -527,7 +527,7 @@ def during_training_ff(savepath: str, train: bool,
         outfile = os.path.join(savepath, f'dtt_{fname_hint}')
 
         if digestor is not None:
-            hid_acts = mutils.get_hidacts_ff(context.model, pwl)
+            hid_acts = mutils.get_hidacts_ff(context.model, pwl).numpy()
 
             digestor(hid_acts.sample_points, hid_acts.sample_labels, *hid_acts.hid_acts,
                      outfile=outfile, exist_ok=exist_ok,

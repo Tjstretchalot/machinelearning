@@ -248,13 +248,20 @@ def plot_traj_ff(traj: SVMTrajectory, outfile: str, exist_ok: bool = False):
         os.remove(outfile)
     zipdir(outfile_wo_ext)
 
-def digest_train_and_plot_ff(sample_points: torch.tensor, sample_labels: torch.tensor,
-                              *all_hid_acts: typing.Tuple[torch.tensor],
+def digest_train_and_plot_ff(sample_points: np.ndarray, sample_labels: np.ndarray,
+                              *all_hid_acts: typing.Tuple[np.ndarray],
                               savepath: str = None):
     """Digestor friendly way to find the svmtrajectory and then plot it at the given
     savepath for the given sample points, labels, and hidden activations"""
     if savepath is None:
         raise ValueError(f'expected savepath is str, got {savepath} (type={type(savepath)})')
+
+    sample_points = torch.from_numpy(sample_points)
+    sample_labels = torch.from_numpy(sample_labels)
+    hacts_cp = []
+    for hact in all_hid_acts:
+        hacts_cp.append(torch.from_numpy(hact))
+    all_hid_acts = hacts_cp
 
     traj = train_svms_with(sample_points, sample_labels, *all_hid_acts)
     plot_traj_ff(traj, savepath)
@@ -285,7 +292,7 @@ def during_training_ff(savepath: str, train: bool,
 
         if digestor is not None:
             num_points = min(150*pwl.output_dim, pwl.epoch_size)
-            hacts = mutils.get_hidacts_ff(context.model, pwl, num_points)
+            hacts = mutils.get_hidacts_ff(context.model, pwl, num_points).numpy()
             digestor(hacts.sample_points, hacts.sample_labels, *hacts.hid_acts,
                      target_module='shared.measures.svm',
                      target_name='digest_train_and_plot_ff',

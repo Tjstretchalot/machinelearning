@@ -285,11 +285,18 @@ def plot_trajectory(traj: PCTrajectoryFF, filepath: str, exist_ok: bool = False,
     shutil.rmtree(filepath_wo_ext)
     os.chdir(cwd)
 
-def digest_find_and_plot_traj(sample_points: torch.tensor, sample_labels: torch.tensor, # pylint: disable=unused-argument
-                              *all_hid_acts: typing.Tuple[torch.tensor],
+def digest_find_and_plot_traj(sample_points: np.ndarray, sample_labels: np.ndarray, # pylint: disable=unused-argument
+                              *all_hid_acts: typing.Tuple[np.ndarray],
                               savepath: str = None, **kwargs):
     """Digestor friendly way to find the pc trajectory and then plot it at the given
     savepath for the given sample points, labels, and hidden activations"""
+
+    sample_points = torch.from_numpy(sample_points)
+    sample_labels = torch.from_numpy(sample_labels)
+    hacts_cp = []
+    for hact in all_hid_acts:
+        hacts_cp.append(torch.from_numpy(hact))
+    all_hid_acts = hacts_cp
 
     snapshots = []
 
@@ -327,7 +334,7 @@ def during_training(savepath: str, train: bool, digestor: typing.Optional[npmp.N
 
         if digestor is not None:
             num_samples = min(200 * pwl.output_dim, pwl.epoch_size)
-            hacts = mutils.get_hidacts_ff(context.model, pwl, num_samples)
+            hacts = mutils.get_hidacts_ff(context.model, pwl, num_samples).numpy()
             digestor(hacts.sample_points, hacts.sample_labels, *hacts.hid_acts, savepath=savepath,
                      target_module='shared.measures.pca_ff',
                      target_name='digest_find_and_plot_traj')

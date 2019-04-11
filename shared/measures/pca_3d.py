@@ -14,7 +14,8 @@ import pytweening
 from shared.filetools import zipdir
 from shared.npmp import NPDigestor
 
-def _plot_npmp(projected_sample_labels: np.ndarray, *args, outfile: str = None, exist_ok=False):
+def _plot_npmp(projected_sample_labels: np.ndarray, *args, outfile: str = None, exist_ok=False,
+               frame_time: float = 16.67):
     """Structured to be npmp friendly, however not very friendly to use compared
     to the public variants. Simply delegates to _plot_ff_real
 
@@ -49,7 +50,7 @@ def _plot_npmp(projected_sample_labels: np.ndarray, *args, outfile: str = None, 
         ))
 
     traj = pca_ff.PCTrajectoryFF(snapshots)
-    _plot_ff_real(traj, outfile, exist_ok)
+    _plot_ff_real(traj, outfile, exist_ok, frame_time=frame_time)
 
 def _plot_ff_real(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool,
                   frame_time: float = 16.67):
