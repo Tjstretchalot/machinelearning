@@ -53,7 +53,7 @@ def train_svms_with(sample_points: torch.tensor, sample_labels: torch.tensor,
         masks = [sample_labels == lbl for lbl in range(output_dim)]
         by_label_vs_all = []
 
-    for state in hidden_states(sample_points):
+    for state in hidden_states:
         if not torch.is_tensor(state):
             raise ValueError(f'expected hidden state is tensor, got {state} (type={type(state)})')
         if len(state.shape) != 2:
