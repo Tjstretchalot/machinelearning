@@ -284,6 +284,11 @@ class OnEpochCaller:
         """Saves final_epoch"""
         self.on_epoch(context, 'epoch_finished')
 
+class OnFinishCaller:
+    """Calls a particular function when finished"""
+    def __init__(self, on_finished):
+        self.finished = on_finished
+
 class DecayOnPlateau:
     """Decays the loss if there has been no improvement in a certain number of epochs.
     Requires an EpochsTracker
