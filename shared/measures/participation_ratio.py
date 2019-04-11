@@ -244,7 +244,7 @@ def during_training_ff(savepath: str, train: bool,
             digestor(hacts.sample_points, hacts.sample_labels, *hacts.hid_acts,
                      savepath=savepath,
                      target_module='shared.measures.participation_ratio',
-                     target_name='digest_measure_and_plot_pr',
+                     target_name='digest_measure_and_plot_pr_ff',
                      **kwargs)
             return
 
