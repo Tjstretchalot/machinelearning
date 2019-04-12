@@ -20,8 +20,16 @@ import os
 SAVEDIR = shared.filetools.savepath()
 
 def _meansqerr_criterion(output: torch.tensor, labels: torch.tensor):
+    # output is [batch_size x output_dim]
+    # labels is [batch_size]
+
+    # for each pt in range(batch_size):
+    #   output[pt, labels[pt]] -= 1
+
+    bats = output.shape[0]
+
     adj_output = output.clone()
-    adj_output[labels] -= 1
+    adj_output[torch.arange(bats), labels] -= 1
     return torch.sum(adj_output ** 2)
 
 def main():
