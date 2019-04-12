@@ -29,9 +29,9 @@ def zipdir(dirpath: str):
     if not isinstance(dirpath, str):
         raise ValueError(f'expected dirpath is str, got {dirpath}')
     if not os.path.exists(dirpath):
-        raise ValueError(f'cannot zip {dirpath} (doesnt exist)')
+        raise FileNotFoundError(f'cannot zip {dirpath} (doesnt exist)')
     if os.path.exists(dirpath + '.zip'):
-        raise ValueError(f'cannot zip {dirpath} (zip already exists)')
+        raise FileExistsError(f'cannot zip {dirpath} (zip already exists)')
 
     cwd = os.getcwd()
     shutil.make_archive(dirpath, 'zip', dirpath)

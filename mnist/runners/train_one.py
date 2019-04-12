@@ -9,6 +9,7 @@ import shared.measures.dist_through_time as dtt
 import shared.measures.pca_ff as pca_ff
 import shared.measures.participation_ratio as pr
 import shared.measures.svm as svm
+import shared.measures.saturation as satur
 import shared.filetools
 import shared.measures.pca_3d as pca_3d
 import shared.npmp as npmp
@@ -48,6 +49,7 @@ def main():
     pca3d_training_dir = os.path.join(SAVEDIR, 'pca3d')
     pr_training_dir = os.path.join(SAVEDIR, 'pr')
     svm_training_dir = os.path.join(SAVEDIR, 'svm')
+    satur_training_dir = os.path.join(SAVEDIR, 'saturation')
     (trainer
      .reg(tnr.EpochsTracker())
      .reg(tnr.EpochsStopper(150))
@@ -61,11 +63,14 @@ def main():
      .reg(tnr.OnEpochCaller.create_every(pca_ff.during_training(pca_training_dir, True, dig), skip=100))
      .reg(tnr.OnEpochCaller.create_every(pr.during_training_ff(pr_training_dir, True, dig), skip=100))
      .reg(tnr.OnEpochCaller.create_every(svm.during_training_ff(svm_training_dir, True, dig), skip=100))
+     .reg(tnr.OnEpochCaller.create_every(satur.during_training(satur_training_dir, True, dig), skip=1000))
      .reg(tnr.OnFinishCaller(lambda *args, **kwargs: dig.join()))
      .reg(tnr.ZipDirOnFinish(dtt_training_dir))
      .reg(tnr.ZipDirOnFinish(pca_training_dir))
+     .reg(tnr.ZipDirOnFinish(pca3d_training_dir))
      .reg(tnr.ZipDirOnFinish(pr_training_dir))
      .reg(tnr.ZipDirOnFinish(svm_training_dir))
+     .reg(tnr.ZipDirOnFinish(satur_training_dir))
     )
 
     trainer.train(network)

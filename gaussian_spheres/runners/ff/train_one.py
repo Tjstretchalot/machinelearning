@@ -10,6 +10,7 @@ import shared.measures.pca_ff as pca_ff
 import shared.measures.pca_3d as pca_3d
 import shared.measures.participation_ratio as pr
 import shared.measures.svm as svm
+import shared.measures.saturation as satur
 import shared.filetools
 import shared.npmp as npmp
 import torch
@@ -47,21 +48,23 @@ def main():
         criterion=torch.nn.CrossEntropyLoss()
     )
 
-    dig = npmp.NPDigestor('train_one', 35)
+    dig = npmp.NPDigestor('train_one', 2)
     pca_3d.plot_ff(pca_ff.find_trajectory(network, pwl, 3), os.path.join(SAVEDIR, 'pca_3d_start'), True,
                    digestor=dig, frame_time=FRAME_TIME)
     dtt_training_dir = os.path.join(SAVEDIR, 'dtt')
     pca_training_dir = os.path.join(SAVEDIR, 'pca')
     pr_training_dir = os.path.join(SAVEDIR, 'pr')
     svm_training_dir = os.path.join(SAVEDIR, 'svm')
+    satur_training_dir = os.path.join(SAVEDIR, 'saturation')
     (trainer
      .reg(tnr.EpochsTracker())
-     .reg(tnr.EpochsStopper(150))
+     .reg(tnr.EpochsStopper(3))
      .reg(tnr.DecayTracker())
      .reg(tnr.DecayStopper(8))
      .reg(tnr.LRMultiplicativeDecayer())
      .reg(tnr.DecayOnPlateau())
      .reg(tnr.AccuracyTracker(5, 1000, True))
+     .reg(tnr.OnEpochCaller.create_every(satur.during_training(satur_training_dir, True, dig), skip=1000))
      .reg(tnr.OnEpochCaller.create_every(dtt.during_training_ff(dtt_training_dir, True, dig), skip=1000))
      .reg(tnr.OnEpochCaller.create_every(pca_ff.during_training(pca_training_dir, True, dig), skip=1000))
      .reg(tnr.OnEpochCaller.create_every(pr.during_training_ff(pr_training_dir, True, dig), skip=1000))
@@ -71,6 +74,7 @@ def main():
      .reg(tnr.ZipDirOnFinish(pca_training_dir))
      .reg(tnr.ZipDirOnFinish(pr_training_dir))
      .reg(tnr.ZipDirOnFinish(svm_training_dir))
+     .reg(tnr.ZipDirOnFinish(satur_training_dir))
     )
     trainer.train(network)
     pca_3d.plot_ff(pca_ff.find_trajectory(network, pwl, 3), os.path.join(SAVEDIR, 'pca_3d_end'), True,
