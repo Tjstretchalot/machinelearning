@@ -38,10 +38,11 @@ def main():
     test_pwl = MNISTData.load_test().to_pwl().restrict_to(set(range(10))).rescale()
 
     network = FeedforwardLarge.create(
-        input_dim=train_pwl.input_dim, output_dim=train_pwl.output_dim, nonlinearity='tanh',
-        weights=wi.OrthogonalWeightInitializer(gain=1, normalize_dim=1),
+        input_dim=train_pwl.input_dim, output_dim=train_pwl.output_dim,
+        weights=wi.GaussianWeightInitializer(mean=0, vari=0.3, normalize_dim=0),
         biases=wi.ZerosWeightInitializer(),
-        layer_sizes=[90, 90, 90, 90, 90, 25]
+        layer_sizes=[90, 90, 90, 90, 90, 25],
+        nonlinearity=('none', 'none', 'tanh', 'none', 'cube', 'none', 'none')
         #layer_sizes=[500, 200]
     )
 
@@ -52,7 +53,7 @@ def main():
         batch_size=30,
         learning_rate=0.001,
         optimizer=torch.optim.Adam([p for p in network.parameters() if p.requires_grad], lr=0.003),
-        criterion=_meansqerr_criterion#torch.nn.CrossEntropyLoss()
+        criterion=torch.nn.CrossEntropyLoss()#_meansqerr_criterion
     )
 
     dig = npmp.NPDigestor('train_one', 35)

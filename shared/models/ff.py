@@ -6,6 +6,7 @@ import torch.nn
 from shared.models.generic import Network
 from shared.teachers import NetworkTeacher
 import shared.weight_inits as wi
+import shared.nonlinearities as nonlins
 
 import typing
 import math
@@ -179,20 +180,25 @@ class FeedforwardLarge(FeedforwardNetwork):
     Attributes:
         layers (list[torch.nn.Module]): the underlying layers. After each layer we
             apply the nonlinearity before continuing
-        nonlinearity (callable): the nonlinearity for the activations
+        nonlinearities (list[callable]): the nonlinearities between layers.
     """
 
     def __init__(self, layers: typing.List[torch.nn.Module],
-                 nonlinearity: typing.Callable):
+                 nonlinearities: typing.List[typing.Callable]):
         super().__init__(layers[0].in_features, layers[-1].out_features, len(layers))
 
+        if not isinstance(nonlinearities, (tuple, list)):
+            raise ValueError(f'expected nonlinearities is list, got {nonlinearities} (type={type(nonlinearities)})')
+        for idx, nonlin in enumerate(nonlinearities):
+            if not callable(nonlin):
+                raise ValueError(f'expected nonlinearities[{idx}] is callable, got {nonlin} (type={type(nonlin)})')
         self.layers = layers
         for idx, layer in enumerate(self.layers):
             self.add_module(str(idx), layer)
-        self.nonlinearity = nonlinearity
+        self.nonlinearities = nonlinearities
 
     @classmethod
-    def create(cls, input_dim: int, output_dim: int, nonlinearity: str,
+    def create(cls, input_dim: int, output_dim: int, nonlinearity: typing.Union[typing.List[str], str],
                weights: wi.WeightInitializer, biases: wi.WeightInitializer,
                layer_sizes: typing.Iterable[int]):
         """Creates a feedforward network of linear layers with the particular layer
@@ -201,7 +207,8 @@ class FeedforwardLarge(FeedforwardNetwork):
         Args:
             input_dim (int): the input dimensionality
             output_dim (int): the output dimensionality
-            nonlinearity (str): one of 'relu', 'tanh', 'none'
+            nonlinearity (str or list[str]): one of 'relu', 'tanh', 'none'. may instead be a list
+                of equivalent length to layer_sizes
             weights (wi.WeightInitializer): the initializer for the weights between layesr
             biases (wi.WeightInitializer): the initializer for the biases of each layer
             layer_sizes (typing.Iterable[int]): one int for the number of nodes in each layer.
@@ -213,8 +220,15 @@ class FeedforwardLarge(FeedforwardNetwork):
             raise ValueError(f'expected input_dim is int, got {input_dim} (type={type(input_dim)})')
         if not isinstance(output_dim, int):
             raise ValueError(f'expected output_dim is int, got {output_dim} (type={type(output_dim)})')
-        if nonlinearity not in ('relu', 'tanh', 'none'):
-            raise ValueError(f'expected nonlinearity is \'relu\' or \'tanh\', got {nonlinearity}')
+        if isinstance(nonlinearity, str):
+            if nonlinearity not in nonlins.LOOKUP:
+                raise ValueError(f'expected nonlinearity is in {set(nonlins.LOOKUP)}, got {nonlinearity}')
+        elif isinstance(nonlinearity, (tuple, list)):
+            for idx, val in enumerate(nonlinearity):
+                if val not in nonlins.LOOKUP:
+                    raise ValueError(f'expected nonlinearity[{idx}] is in {set(nonlins.LOOKUP)}, got {val} (type={type(val)})')
+        else:
+            raise ValueError(f'expected nonlinearity is str or list[str], got {nonlinearity} (type={type(nonlinearity)}')
 
         layers = []
         last_dim = input_dim
@@ -233,15 +247,16 @@ class FeedforwardLarge(FeedforwardNetwork):
         wi.deser_or_noop(biases).initialize(layer.bias.data)
         layers.append(layer)
 
-        _nonlinearity = {
-            'tanh': torch.tanh,
-            'relu': torch.relu,
-            'none': lambda x: x
-        }[nonlinearity]
+        _lookup = nonlins.LOOKUP
 
-        print(f'nonlinearity: {nonlinearity}')
+        if isinstance(nonlinearity, str):
+            _nonlins = [_lookup[nonlinearity] for i in range(len(layers))]
+        else:
+            _nonlins = [_lookup[nonlin] for nonlin in nonlinearity]
+            if len(_nonlins) != len(layers):
+                raise ValueError(f'expected len(nonlinearity) = len(layers) but got {len(_nonlins)} nonlinearties and {len(layers)} layers')
 
-        return cls(layers, _nonlinearity)
+        return cls(layers, _nonlins)
 
     def forward(self, *args):
         if not args:
@@ -267,7 +282,7 @@ class FeedforwardLarge(FeedforwardNetwork):
 
         activations = inp
         for layer_ind, layer in enumerate(self.layers):
-            activations = self.nonlinearity(layer(activations))
+            activations = self.nonlinearities[layer_ind](layer(activations))
             if activations_callback:
                 activations_callback(FFHiddenActivations(layer=layer_ind + 1, hidden_acts=activations))
 

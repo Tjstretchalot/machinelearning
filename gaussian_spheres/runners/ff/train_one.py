@@ -32,10 +32,11 @@ def main():
     )
 
     network = FeedforwardLarge.create(
-        input_dim=INPUT_DIM, output_dim=OUTPUT_DIM, nonlinearity='tanh',
+        input_dim=INPUT_DIM, output_dim=OUTPUT_DIM,
         weights=wi.GaussianWeightInitializer(mean=0, vari=0.3, normalize_dim=1),
         biases=wi.ZerosWeightInitializer(),
-        layer_sizes=[200, 100, 100, 100, 100, 50, 50]
+        layer_sizes=[90, 90, 90, 90, 90, 25],
+        nonlinearity=('none', 'none', 'tanh', 'none', 'cube', 'none', 'none')
     )
 
     trainer = tnr.GenericTrainer(
@@ -58,7 +59,7 @@ def main():
     satur_training_dir = os.path.join(SAVEDIR, 'saturation')
     (trainer
      .reg(tnr.EpochsTracker())
-     .reg(tnr.EpochsStopper(3))
+     .reg(tnr.EpochsStopper(15))
      .reg(tnr.DecayTracker())
      .reg(tnr.DecayStopper(8))
      .reg(tnr.LRMultiplicativeDecayer())
