@@ -22,7 +22,7 @@ SAVEDIR = shared.filetools.savepath()
 def _meansqerr_criterion(output: torch.tensor, labels: torch.tensor):
     adj_output = output.clone()
     adj_output[labels] -= 1
-    return torch.mean(adj_output ** 2)
+    return torch.sum(adj_output ** 2)
 
 def main():
     """Entry point"""
