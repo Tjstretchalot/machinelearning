@@ -28,10 +28,12 @@ class SaturationTrajectory:
 
         self.flattened = flattened
 
+# all except sqrt seem to die horribly when the data is badly grouped
+# (ie. 100000 ones)
 BUCKETING_TECHNIQUES = {
     #'auto': 'max(Freedman Diaconis Estimator, sturges)',
     #'fd': 'Freedman Diaconis Estimator',
-    'sturges': 'Sturges',
+    #'sturges': 'Sturges',
     #'rice': 'Rice',
     #'sqrt': 'Sqrt'
 }
@@ -78,7 +80,6 @@ def _plot_hist(traj: SaturationTrajectory, outfile: str, xlabel: str, technique:
         ax.set_ylabel('Probability Density')
         ax.set_xlabel('Absolute Hidden Activations')
         ax.set_title(f'{xlabel} {idx}')
-
 
     fig.savefig(outfile)
     plt.close(fig)
