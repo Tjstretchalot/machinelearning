@@ -19,6 +19,11 @@ import os
 
 SAVEDIR = shared.filetools.savepath()
 
+def _meansqerr_criterion(output: torch.tensor, labels: torch.tensor):
+    adj_output = output.clone()
+    adj_output[labels] -= 1
+    return torch.mean(adj_output ** 2)
+
 def main():
     """Entry point"""
     train_pwl = MNISTData.load_train().to_pwl().restrict_to(set(range(10))).rescale()
@@ -39,7 +44,7 @@ def main():
         batch_size=30,
         learning_rate=0.001,
         optimizer=torch.optim.Adam([p for p in network.parameters() if p.requires_grad], lr=0.003),
-        criterion=torch.nn.CrossEntropyLoss()
+        criterion=_meansqerr_criterion#torch.nn.CrossEntropyLoss()
     )
 
     dig = npmp.NPDigestor('train_one', 35)

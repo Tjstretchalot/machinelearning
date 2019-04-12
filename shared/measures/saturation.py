@@ -29,12 +29,14 @@ class SaturationTrajectory:
         self.flattened = flattened
 
 BUCKETING_TECHNIQUES = {
-    'auto': 'max(Freedman Diaconis Estimator, sturges)',
-    'fd': 'Freedman Diaconis Estimator',
+    #'auto': 'max(Freedman Diaconis Estimator, sturges)',
+    #'fd': 'Freedman Diaconis Estimator',
     'sturges': 'Sturges',
-    'rice': 'Rice',
-    'sqrt': 'Sqrt'
+    #'rice': 'Rice',
+    #'sqrt': 'Sqrt'
 }
+
+BUCKETING_SIZES = [3, 5, 10, 15, 20]
 
 def measure(hacts: mutils.NetworkHiddenActivations) -> SaturationTrajectory:
     """Measures the saturation trajectory for the given hidden activations
@@ -60,7 +62,7 @@ def measure(hacts: mutils.NetworkHiddenActivations) -> SaturationTrajectory:
 def _plot_boxplot(traj: SaturationTrajectory, outfile: str, xlabel: str):
     fig, ax = plt.subplots()
     ax.set_title(f'Absolute Hidden Activations through {xlabel}')
-    ax.boxplot(traj.flattened)
+    ax.boxplot(traj.flattened, flierprops={'alpha': 0.002, 'markersize': 2, 'marker': '.'})
     ax.set_xlabel(xlabel)
     ax.set_ylabel('Absolute Hidden Activation')
     fig.savefig(outfile)
@@ -71,10 +73,12 @@ def _plot_hist(traj: SaturationTrajectory, outfile: str, xlabel: str, technique:
 
     for idx, hid_acts in enumerate(traj.flattened):
         ax = axs[idx]
-        ax.hist(hid_acts, bins=technique, density=1)
+        rng = (min(hid_acts[0], 0), max(hid_acts[-1], 1))
+        ax.hist(hid_acts, bins=technique, density=1, range=rng)
         ax.set_ylabel('Probability Density')
         ax.set_xlabel('Absolute Hidden Activations')
         ax.set_title(f'{xlabel} {idx}')
+
 
     fig.savefig(outfile)
     plt.close(fig)
@@ -98,6 +102,8 @@ def plot(traj: SaturationTrajectory, outfile: str, exist_ok: bool = False,
     _plot_boxplot(traj, os.path.join(outfile_wo_ext, 'boxplot.png'), xlabel)
     for identifier in BUCKETING_TECHNIQUES:
         _plot_hist(traj, os.path.join(outfile_wo_ext, f'hist_{identifier}.png'), xlabel, identifier)
+    for num_bins in BUCKETING_SIZES:
+        _plot_hist(traj, os.path.join(outfile_wo_ext, f'hist_fixed_nbins_{num_bins}.png'), xlabel, num_bins)
 
     if exist_ok and os.path.exists(outfile):
         os.remove(outfile)

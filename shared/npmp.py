@@ -331,5 +331,16 @@ class NPDigestor:
         working_path = _get_working_dir(self.identifier)
         zipdir(working_path)
         os.rename(working_path + '.zip', archive_path)
+        self.workers_spawned = 0
         self._prepared = False
 
+    def delete_raw_inputs(self):
+        """Simply deletes the raw inputs instead of archiving them. Intended for
+        when you are repeating the same command over and over."""
+
+        cwd = os.getcwd()
+        shutil.rmtree(_get_working_dir(self.identifier))
+        os.chdir(cwd)
+
+        self.workers_spawned = 0
+        self._prepared = False
