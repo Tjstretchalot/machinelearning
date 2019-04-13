@@ -38,13 +38,21 @@ def main():
     test_pwl = MNISTData.load_test().to_pwl().restrict_to(set(range(10))).rescale()
 
     layers_and_nonlins = (
+        (784, 'relu'),
+        (3920, 'relu'),
+        (1960, 'relu'),
+        (490, 'relu'),
+        (200, 'relu'),
         (90, 'tanh'),
         (90, 'tanh'),
         (90, 'tanh'),
-        (90, 'tanh_recip'),
-        (90, 'tanh'),
-        (90, 'tanh'),
-        (25, 'linear')
+        (90, 'linear'),
+        (50, 'tanh'),
+        (50, 'tanh'),
+        (50, 'linear'),
+        (25, 'tanh'),
+        (25, 'tanh'),
+        (25, 'linear'),
     )
 
     layers = [lyr[0] for lyr in layers_and_nonlins]
@@ -81,20 +89,22 @@ def main():
     pr_training_dir = os.path.join(SAVEDIR, 'pr')
     svm_training_dir = os.path.join(SAVEDIR, 'svm')
     satur_training_dir = os.path.join(SAVEDIR, 'saturation')
+    trained_net_dir = os.path.join(SAVEDIR, 'trained_model')
     (trainer
      .reg(tnr.EpochsTracker())
-     .reg(tnr.EpochsStopper(150))
+     .reg(tnr.EpochsStopper(300))
      .reg(tnr.DecayTracker())
      .reg(tnr.DecayStopper(8))
      .reg(tnr.LRMultiplicativeDecayer())
      .reg(tnr.DecayOnPlateau())
      .reg(tnr.AccuracyTracker(5, 1000, True))
-     .reg(tnr.OnEpochCaller.create_every(dtt.during_training_ff(dtt_training_dir, True, dig), skip=1000))
-     .reg(tnr.OnEpochCaller.create_every(pca_3d.during_training(pca3d_training_dir, True, dig, plot_kwargs={'layer_names': layer_names}), skip=1000))
-     .reg(tnr.OnEpochCaller.create_every(pca_ff.during_training(pca_training_dir, True, dig), skip=1000))
-     .reg(tnr.OnEpochCaller.create_every(pr.during_training_ff(pr_training_dir, True, dig), skip=1000))
-     .reg(tnr.OnEpochCaller.create_every(svm.during_training_ff(svm_training_dir, True, dig), skip=1000))
-     .reg(tnr.OnEpochCaller.create_every(satur.during_training(satur_training_dir, True, dig), skip=1000))
+     .reg(tnr.OnEpochCaller.create_every(dtt.during_training_ff(dtt_training_dir, True, dig), skip=100))
+     .reg(tnr.OnEpochCaller.create_every(pca_3d.during_training(pca3d_training_dir, True, dig, plot_kwargs={'layer_names': layer_names}), skip=100))
+     .reg(tnr.OnEpochCaller.create_every(pca_ff.during_training(pca_training_dir, True, dig), skip=100))
+     .reg(tnr.OnEpochCaller.create_every(pr.during_training_ff(pr_training_dir, True, dig), skip=100))
+     .reg(tnr.OnEpochCaller.create_every(svm.during_training_ff(svm_training_dir, True, dig), skip=100))
+     .reg(tnr.OnEpochCaller.create_every(satur.during_training(satur_training_dir, True, dig), skip=100))
+     .reg(tnr.OnEpochCaller.create_every(tnr.save_model(trained_net_dir), skip=100))
      .reg(tnr.OnFinishCaller(lambda *args, **kwargs: dig.join()))
      .reg(tnr.ZipDirOnFinish(dtt_training_dir))
      .reg(tnr.ZipDirOnFinish(pca_training_dir))
@@ -102,6 +112,7 @@ def main():
      .reg(tnr.ZipDirOnFinish(pr_training_dir))
      .reg(tnr.ZipDirOnFinish(svm_training_dir))
      .reg(tnr.ZipDirOnFinish(satur_training_dir))
+     .reg(tnr.ZipDirOnFinish(trained_net_dir))
     )
 
     trainer.train(network)

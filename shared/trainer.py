@@ -14,6 +14,7 @@ from shared.events import Event
 from shared.pwl import PointWithLabelProducer
 from shared.teachers import NetworkTeacher
 from shared.filetools import zipdir
+from shared.npmp import NPDigestor
 
 class GenericTrainingContext(typing.NamedTuple):
     """Describes the training context. Acts a store for the common variables we need in
@@ -479,3 +480,12 @@ class ZipDirOnFinish:
         if os.path.exists(self.dirpath + '.zip'):
             os.remove(self.dirpath + '.zip')
         zipdir(self.dirpath)
+
+def save_model(outpath: str):
+    """A callable for EpochCaller and similar that saves the model to the given
+    folder"""
+
+    def on_step(context: GenericTrainingContext, fname_hint: str):
+        torch.save(context.model, os.path.join(outpath, fname_hint + '.pt'))
+
+    return on_step
