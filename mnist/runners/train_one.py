@@ -38,11 +38,8 @@ def main():
     test_pwl = MNISTData.load_test().to_pwl().restrict_to(set(range(10))).rescale()
 
     layers_and_nonlins = (
-        (784, 'relu'),
-        (3920, 'relu'),
-        (1960, 'relu'),
-        (490, 'relu'),
         (200, 'relu'),
+        (150, 'relu'),
         (90, 'tanh'),
         (90, 'tanh'),
         (90, 'tanh'),
