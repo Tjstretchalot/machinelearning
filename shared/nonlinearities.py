@@ -11,9 +11,16 @@ def cube(acts: torch.tensor):
     if it has a linear layer preceeding it."""
     return acts ** 3
 
+def tanh_recip(acts: torch.tensor):
+    """Takes the hyperbolic tangent of the reciprical
+    """
+    return torch.tanh(torch.reciprocal(acts))
+
+
 LOOKUP = {
     'relu': torch.relu,
     'tanh': torch.tanh,
+    'tanh_recip': tanh_recip,
     'none': linear,
     'linear': linear,
     'cube': cube
