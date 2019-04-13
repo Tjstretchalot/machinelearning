@@ -127,22 +127,22 @@ class NPDigestor:
     def _check_container(self, cont):
         stack = []
         seen = set()
-        seen_dicts = [] # not hashable sadly
+        seen_unhashs = [] # some not hashable sadly
         stack.append(cont)
         while stack:
             cur = stack.pop()
-            if not isinstance(cur, dict):
+            if not isinstance(cur, (dict, list)):
                 seen.add(cur)
             else:
-                seen_dicts.append(cur)
+                seen_unhashs.append(cur)
 
             if isinstance(cur, (list, tuple, dict)):
                 iterable = cur.values() if isinstance(cur, dict) else cur
                 for val in iterable:
                     if isinstance(val, _PRIMS):
                         continue
-                    if isinstance(val, dict):
-                        if val in seen_dicts:
+                    if isinstance(val, (dict, list)):
+                        if val in seen_unhashs:
                             raise ValueError(f'found recursive reference {val}')
                     elif val in seen:
                         raise ValueError(f'found recursive reference {val}')
