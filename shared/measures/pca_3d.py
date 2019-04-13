@@ -150,8 +150,8 @@ def _plot_ff_real(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool,
         return True, target(easing(progress))
 
     actions = [
-        (5000, (pytweening.linear, movetime)),
-        (5000, (lambda x: 1-x, movetime)),
+        (2000 * traj.num_layers, (pytweening.linear, movetime)),
+        (2000 * traj.num_layers, (lambda x: 1-x, movetime)),
         (5000, (pytweening.easeInOutSine, rotate_xz))
     ]
 
