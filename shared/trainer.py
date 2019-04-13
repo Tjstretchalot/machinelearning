@@ -485,7 +485,11 @@ def save_model(outpath: str):
     """A callable for EpochCaller and similar that saves the model to the given
     folder"""
 
+    os.makedirs(outpath)
+
     def on_step(context: GenericTrainingContext, fname_hint: str):
-        torch.save(context.model, os.path.join(outpath, fname_hint + '.pt'))
+        outfile = os.path.join(outpath, fname_hint + '.pt')
+        context.logger.info('[SAVE] Saving model to %s', outfile)
+        torch.save(context.model, outfile)
 
     return on_step
