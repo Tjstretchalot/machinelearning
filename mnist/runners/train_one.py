@@ -37,12 +37,30 @@ def main():
     train_pwl = MNISTData.load_train().to_pwl().restrict_to(set(range(10))).rescale()
     test_pwl = MNISTData.load_test().to_pwl().restrict_to(set(range(10))).rescale()
 
+    layers_and_nonlins = (
+        (90, 'linear'),
+        (90, 'tanh'),
+        (90, 'tanh'),
+        (90, 'cube'),
+        (90, 'tanh'),
+        (90, 'cube'),
+        (90, 'tanh'),
+        (25, 'linear')
+    )
+
+    layers = [lyr[0] for lyr in layers_and_nonlins]
+    nonlins = [lyr[1] for lyr in layers_and_nonlins]
+    nonlins.append('linear') # output
+    layer_names = [f'{lyr[1]} ({idx})' for idx, lyr in enumerate(layers_and_nonlins)]
+    layer_names.insert(0, 'input')
+    layer_names.append('output')
+
     network = FeedforwardLarge.create(
         input_dim=train_pwl.input_dim, output_dim=train_pwl.output_dim,
         weights=wi.GaussianWeightInitializer(mean=0, vari=0.3, normalize_dim=0),
         biases=wi.ZerosWeightInitializer(),
-        layer_sizes=[90, 90, 90, 90, 90, 25],
-        nonlinearity=('none', 'none', 'tanh', 'none', 'cube', 'none', 'none')
+        layer_sizes=layers,
+        nonlinearity=nonlins
         #layer_sizes=[500, 200]
     )
 
@@ -73,7 +91,7 @@ def main():
      .reg(tnr.DecayOnPlateau())
      .reg(tnr.AccuracyTracker(5, 1000, True))
      .reg(tnr.OnEpochCaller.create_every(dtt.during_training_ff(dtt_training_dir, True, dig), skip=1000))
-     .reg(tnr.OnEpochCaller.create_every(pca_3d.during_training(pca3d_training_dir, True, dig), skip=1000))
+     .reg(tnr.OnEpochCaller.create_every(pca_3d.during_training(pca3d_training_dir, True, dig, plot_kwargs={'layer_names': layer_names}), skip=1000))
      .reg(tnr.OnEpochCaller.create_every(pca_ff.during_training(pca_training_dir, True, dig), skip=1000))
      .reg(tnr.OnEpochCaller.create_every(pr.during_training_ff(pr_training_dir, True, dig), skip=1000))
      .reg(tnr.OnEpochCaller.create_every(svm.during_training_ff(svm_training_dir, True, dig), skip=1000))
