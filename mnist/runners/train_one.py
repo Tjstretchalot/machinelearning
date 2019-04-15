@@ -40,7 +40,15 @@ def main():
     layers_and_nonlins = (
         (90, 'relu'),
         (90, 'tanh'),
-        (25, 'tanh')
+        (90, 'tanh'),
+        (90, 'tanh'),
+        (90, 'relu'),
+        (50, 'tanh'),
+        (50, 'tanh'),
+        (50, 'relu'),
+        (25, 'tanh'),
+        (25, 'tanh'),
+        (25, 'relu'),
     )
 
     layers = [lyr[0] for lyr in layers_and_nonlins]
