@@ -42,13 +42,13 @@ def main():
         (90, 'tanh'),
         (90, 'tanh'),
         (90, 'tanh'),
-        (90, 'relu'),
+        (90, 'linear'),
         (50, 'tanh'),
         (50, 'tanh'),
-        (50, 'relu'),
+        (50, 'linear'),
         (25, 'tanh'),
         (25, 'tanh'),
-        (25, 'relu'),
+        (25, 'linear'),
     )
 
     layers = [lyr[0] for lyr in layers_and_nonlins]
