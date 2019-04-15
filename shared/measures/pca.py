@@ -163,7 +163,8 @@ def get_hidden_pcs(hidden_acts: torch.tensor, num_pcs: typing.Optional[int]):
     if num_pcs is not None and num_pcs < 1:
         raise ValueError(f'expected num_pcs is positive, got {num_pcs}')
 
-    hidden_acts_np = hidden_acts.numpy()
+    hidden_acts_np = hidden_acts.numpy().copy()
+    hidden_acts_np -= np.mean(hidden_acts_np, axis=0)
     cov = np.cov(hidden_acts_np.T)
     eig, eig_vecs = np.linalg.eig(cov)
     eig = np.real(eig)
