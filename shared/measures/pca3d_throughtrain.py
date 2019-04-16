@@ -78,7 +78,12 @@ class Worker:
         layer_names = data['layer_names']
         if layer_names[0] != 'input':
             raise ValueError(f'expected layer_names[0] is input, but is {layer_names[0]}')
+        if layer_names[-1] != 'output':
+            raise ValueError(f'expected layer_names[-1] is output, but is {layer_names[-1]}')
         layer_sizes = data['layer_sizes']
+        if len(layer_names) != len(layer_sizes) + 1:
+            raise ValueError(f'expected len(layer_names) = len(layer_sizes) + 1; got {len(layer_names)} layer names and {len(layer_sizes)} layer sizes')
+
         sample_labels_file = data['sample_labels_file']
         hid_acts_files = data['hid_acts_files']
 
@@ -92,7 +97,7 @@ class Worker:
                 layers.append(np.memmap(hid_acts_files[idx - 1], dtype='float64', mode='r', shape=(batch_size, size)))
 
 
-        fig_and_axes = [plt.subplots() for _ in range(num_layers)]
+        fig_and_axes = []
         for _ in range(num_layers):
             fig = plt.figure()
             ax = fig.add_subplot(111, projection='3d')
