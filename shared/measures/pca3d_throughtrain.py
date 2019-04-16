@@ -167,7 +167,7 @@ class Worker:
 
         for _ in range(FRAMES_PER_TRAIN):
             prog = figdata['time'] / MS_PER_ROTATION
-            rotation = float(45 + 360 * np.sin(ROTATION_EASING(prog) * np.pi * 2))
+            rotation = float(45 + 360 * ROTATION_EASING(prog))
             ax.view_init(30, rotation)
             anim.on_frame((ax, figdata['title'], figdata['scatter']))
 
@@ -184,7 +184,7 @@ class Worker:
         while time_so_far < ms_finish_time:
             cur_time = (start_time + time_so_far) % MS_PER_ROTATION
             prog = cur_time / MS_PER_ROTATION
-            rotation = float(45 + 360 * np.sin(ROTATION_EASING(prog) * np.pi * 2))
+            rotation = float(45 + 360 * ROTATION_EASING(prog))
             ax.view_init(30, rotation)
 
             if time_so_far == 0:
