@@ -93,6 +93,10 @@ class Worker:
 
 
         fig_and_axes = [plt.subplots() for _ in range(num_layers)]
+        for _ in range(num_layers):
+            fig = plt.figure()
+            ax = fig.add_subplot(111, projection='3d')
+            fig_and_axes.append((fig, ax))
         anims = [AsyncAnimation(figax[0]) for figax in fig_and_axes]
 
         for idx, anim in enumerate(anims):
