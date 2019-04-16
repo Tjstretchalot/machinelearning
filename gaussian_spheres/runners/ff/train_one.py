@@ -8,6 +8,7 @@ import shared.weight_inits as wi
 import shared.measures.dist_through_time as dtt
 import shared.measures.pca_ff as pca_ff
 import shared.measures.pca_3d as pca_3d
+import shared.measures.pca3d_throughtrain as pca3d_throughtrain
 import shared.measures.participation_ratio as pr
 import shared.measures.svm as svm
 import shared.measures.saturation as satur
@@ -31,12 +32,26 @@ def main():
         num_clusters=90, std_dev=0.04, mean=0, min_sep=0.1
     )
 
+    layers_and_nonlins = (
+        (90, 'relu'),
+        (90, 'tanh'),
+        (90, 'tanh'),
+        (90, 'linear'),
+        (25, 'linear'),
+    )
+    layers = [lyr[0] for lyr in layers_and_nonlins]
+    nonlins = [lyr[1] for lyr in layers_and_nonlins]
+    nonlins.append('linear') # output
+    layer_names = [f'{lyr[1]} ({idx})' for idx, lyr in enumerate(layers_and_nonlins)]
+    layer_names.insert(0, 'input')
+    layer_names.append('output')
+
     network = FeedforwardLarge.create(
         input_dim=INPUT_DIM, output_dim=OUTPUT_DIM,
         weights=wi.GaussianWeightInitializer(mean=0, vari=0.3, normalize_dim=1),
         biases=wi.ZerosWeightInitializer(),
-        layer_sizes=[90, 90, 90, 90, 90, 25],
-        nonlinearity=('none', 'none', 'tanh', 'none', 'cube', 'none', 'none')
+        layer_sizes=layers,
+        nonlinearity=nonlins
     )
 
     trainer = tnr.GenericTrainer(
@@ -51,15 +66,16 @@ def main():
 
     dig = npmp.NPDigestor('train_one', 2)
     pca_3d.plot_ff(pca_ff.find_trajectory(network, pwl, 3), os.path.join(SAVEDIR, 'pca_3d_start'), True,
-                   digestor=dig, frame_time=FRAME_TIME)
+                   digestor=dig, frame_time=FRAME_TIME, layer_names=layer_names)
     dtt_training_dir = os.path.join(SAVEDIR, 'dtt')
     pca_training_dir = os.path.join(SAVEDIR, 'pca')
     pr_training_dir = os.path.join(SAVEDIR, 'pr')
     svm_training_dir = os.path.join(SAVEDIR, 'svm')
     satur_training_dir = os.path.join(SAVEDIR, 'saturation')
+    pca_throughtrain_dir = os.path.join(SAVEDIR, 'pca_throughtrain')
     (trainer
      .reg(tnr.EpochsTracker())
-     .reg(tnr.EpochsStopper(15))
+     .reg(tnr.EpochsStopper(3))
      .reg(tnr.DecayTracker())
      .reg(tnr.DecayStopper(8))
      .reg(tnr.LRMultiplicativeDecayer())
@@ -70,6 +86,7 @@ def main():
      .reg(tnr.OnEpochCaller.create_every(pca_ff.during_training(pca_training_dir, True, dig), skip=1000))
      .reg(tnr.OnEpochCaller.create_every(pr.during_training_ff(pr_training_dir, True, dig), skip=1000))
      .reg(tnr.OnEpochCaller.create_every(svm.during_training_ff(svm_training_dir, True, dig), skip=1000))
+     .reg(pca3d_throughtrain.PCAThroughTrain(pca_throughtrain_dir, layer_names, True))
      .reg(tnr.OnFinishCaller(lambda *args, **kwargs: dig.join()))
      .reg(tnr.ZipDirOnFinish(dtt_training_dir))
      .reg(tnr.ZipDirOnFinish(pca_training_dir))
@@ -79,7 +96,7 @@ def main():
     )
     trainer.train(network)
     pca_3d.plot_ff(pca_ff.find_trajectory(network, pwl, 3), os.path.join(SAVEDIR, 'pca_3d_end'), True,
-                   digestor=dig, frame_time=FRAME_TIME)
+                   digestor=dig, frame_time=FRAME_TIME, layer_names=layer_names)
     dig.archive_raw_inputs(os.path.join(SAVEDIR, 'raw_digestor.zip'))
 
 if __name__ == '__main__':

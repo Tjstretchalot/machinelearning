@@ -3,6 +3,7 @@
 import typing
 import torch
 import numpy as np
+from shared.models.generic import Network
 from shared.models.ff import FeedforwardNetwork, FFHiddenActivations
 from shared.models.rnn import NaturalRNN, RNNHiddenActivations
 from shared.pwl import PointWithLabelProducer
@@ -240,7 +241,7 @@ def get_hidacts_rnn_with_sample(network: NaturalRNN, sample_points: torch.tensor
     def on_hidacts(acts_info: RNNHiddenActivations):
         hid_acts.append(acts_info.hidden_acts.detach())
 
-    network(sample_points, sample_labels)
+    network(sample_points, sample_labels, on_hidacts)
     return NetworkHiddenActivations('recurrent', sample_points, sample_labels, hid_acts)
 
 def get_hidacts_rnn(network: NaturalRNN, pwl: PointWithLabelProducer,
@@ -274,6 +275,23 @@ def get_hidacts_rnn(network: NaturalRNN, pwl: PointWithLabelProducer,
     pwl.fill(sample_points, sample_labels)
     pwl.reset()
     return get_hidacts_rnn_with_sample(network, sample_points, sample_labels)
+
+def get_hidacts_with_sample(network: Network, sample_points: torch.tensor,
+                            sample_labels: torch.tensor) -> NetworkHiddenActivations:
+    """Runs the given tensors through the network and returns the networks hidden activations.
+
+    Args:
+        network (Network): the network
+        sample_points (torch.tensor): the points to run through the network
+        sample_labels (torch.tensor): the labels for the points
+    """
+
+    if isinstance(network, FeedforwardNetwork):
+        return get_hidacts_ff_with_sample(network, sample_points, sample_labels)
+    if isinstance(network, NaturalRNN):
+        return get_hidacts_rnn_with_sample(network, sample_points, sample_labels)
+
+    raise ValueError(f'unknown network type {network} (type={type(network)})')
 
 
 def process_outfile(outfile: str, exist_ok: bool) -> typing.Tuple[str, str]:
@@ -435,8 +453,8 @@ def during_training_std(identifier: str, measure: typing.Callable, plot: typing.
     return during_training
 
 def verify_ndarray(arr: np.ndarray, arr_name: str,
-                  shape: typing.Optional[typing.Tuple[typing.Optional[int]]],
-                  dtype: typing.Optional[str]):
+                   shape: typing.Optional[typing.Tuple[typing.Optional[int]]],
+                   dtype: typing.Optional[str]):
     """Verifies that the given array is in fact an ndarray with the given
     shape and dtype.
 

@@ -162,6 +162,43 @@ class PCTrajectoryFF:
     def __getitem__(self, i):
         return self.snapshots[i]
 
+def to_trajectory(sample_labels: torch.tensor, all_hid_acts: typing.List[torch.tensor],
+                  num_pcs: int) -> PCTrajectoryFF:
+    """Converts the specified hidden activations to a feedforward trajectory
+
+    Args:
+        sample_labels (torch.tensor): the labels for the points sent through the model
+        all_hid_acts (typing.List[torch.tensor]): the hidden activations of the network
+        num_pcs (int): the number of hidden pcs to find
+
+    Returns:
+        PCTrajectoryFF: the projectory formed by the specified hidden activations
+    """
+
+    if not torch.is_tensor(sample_labels):
+        raise ValueError(f'expected sample_labels is tensor, got {sample_labels} (type={type(sample_labels)})')
+    if sample_labels.dtype not in (torch.uint8, torch.int, torch.long):
+        raise ValueError(f'expected sample_labels is int-like but has dtype {sample_labels.dtype}')
+    if len(sample_labels.shape) != 1:
+        raise ValueError(f'expected sample_labels has shape [batch_size] but is {sample_labels.shape}')
+    if not isinstance(all_hid_acts, (tuple, list)):
+        raise ValueError(f'expected all_hid_acts is tuple or list, got {all_hid_acts} (type={type(all_hid_acts)})')
+
+    snapshots = []
+    for idx, hid_acts in enumerate(all_hid_acts):
+        if not torch.is_tensor(hid_acts):
+            raise ValueError(f'expected all_hid_acts[{idx}] is tensor, got {hid_acts} (type={type(hid_acts)})')
+        if hid_acts.dtype not in (torch.float, torch.double):
+            raise ValueError(f'expected all_hid_acts[{idx}] is float-like but has dtype {hid_acts.dtype}')
+        if len(hid_acts.shape) != 2 or hid_acts.shape[0] != sample_labels.shape[0]:
+            raise ValueError(f'expected all_hid_acts[{idx}].shape = [batch_size={sample_labels.shape[0]}, layer_size] but got {hid_acts.shape}')
+
+        pc_vals, pc_vecs = get_hidden_pcs(hid_acts, num_pcs)
+        projected = project_to_pcs(hid_acts, pc_vecs, out=None)
+        snapshots.append(PCTrajectoryFFSnapshot(pc_vecs, pc_vals, projected, sample_labels))
+
+    return PCTrajectoryFF(snapshots)
+
 def find_trajectory(model: FeedforwardNetwork, pwl_prod: PointWithLabelProducer,
                     num_pcs: int) -> PCTrajectoryFF:
     """Finds the pc trajectory for the given feed-forward model. Gets only the top
