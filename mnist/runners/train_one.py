@@ -10,6 +10,7 @@ import shared.measures.pca_ff as pca_ff
 import shared.measures.participation_ratio as pr
 import shared.measures.svm as svm
 import shared.measures.saturation as satur
+import shared.measures.pca3d_throughtrain as pca3d_throughtrain
 import shared.filetools
 import shared.measures.pca_3d as pca_3d
 import shared.npmp as npmp
@@ -86,6 +87,7 @@ def main():
     svm_training_dir = os.path.join(SAVEDIR, 'svm')
     satur_training_dir = os.path.join(SAVEDIR, 'saturation')
     trained_net_dir = os.path.join(SAVEDIR, 'trained_model')
+    pca_throughtrain_dir = os.path.join(SAVEDIR, 'pca_throughtrain')
     (trainer
      .reg(tnr.EpochsTracker())
      .reg(tnr.EpochsStopper(300))
@@ -101,6 +103,7 @@ def main():
      .reg(tnr.OnEpochCaller.create_every(svm.during_training_ff(svm_training_dir, True, dig), skip=100))
      .reg(tnr.OnEpochCaller.create_every(satur.during_training(satur_training_dir, True, dig), skip=100))
      .reg(tnr.OnEpochCaller.create_every(tnr.save_model(trained_net_dir), skip=100))
+     .reg(pca3d_throughtrain.PCAThroughTrain(pca_throughtrain_dir, layer_names, True))
      .reg(tnr.OnFinishCaller(lambda *args, **kwargs: dig.join()))
      .reg(tnr.ZipDirOnFinish(dtt_training_dir))
      .reg(tnr.ZipDirOnFinish(pca_training_dir))
