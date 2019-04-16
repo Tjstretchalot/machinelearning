@@ -181,7 +181,7 @@ class Worker:
             prog = figdata['time'] / MS_PER_ROTATION
             rotation = float(45 + 360 * np.sin(ROTATION_EASING(prog) * np.pi * 2))
             ax.view_init(30, rotation)
-            anim.on_frame(ax, (figdata['title'], figdata['scatter']))
+            anim.on_frame((ax, figdata['title'], figdata['scatter']))
 
             figdata['time'] += FRAME_TIME
             if figdata['time'] > MS_PER_ROTATION:
@@ -200,9 +200,9 @@ class Worker:
             ax.view_init(30, rotation)
 
             if time_so_far == 0:
-                anim.on_frame(ax, (figdata['title'],))
+                anim.on_frame((ax, figdata['title'],))
             else:
-                anim.on_frame(ax, tuple())
+                anim.on_frame((ax,))
 
             time_so_far += FRAME_TIME
 
