@@ -175,7 +175,7 @@ class Worker:
         ax.set_xlim(float(snapsh.projected_samples[:, 0].min()), float(snapsh.projected_samples[:, 0].max()))
         ax.set_ylim(float(snapsh.projected_samples[:, 1].min()), float(snapsh.projected_samples[:, 1].max()))
         ax.set_zlim(float(snapsh.projected_samples[:, 2].min()), float(snapsh.projected_samples[:, 2].max()))
-        figdata['title'].set_title(figdata['layer_name'] + f': epoch {epoch}')
+        figdata['title'].set_text(figdata['layer_name'] + f': epoch {epoch}')
 
         for _ in range(FRAMES_PER_TRAIN):
             prog = figdata['time'] / MS_PER_ROTATION
