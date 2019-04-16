@@ -101,7 +101,7 @@ class Worker:
         ax = fig.add_subplot(111, projection='3d')
 
         anim = AsyncAnimation(fig)
-        anim.prepare_save(os.path.join(outpath, f'layer_{layer_idx}_{layer_names[layer_idx]}'), fps=60, dpi=100)
+        anim.prepare_save(os.path.join(outpath, f'layer_{layer_idx}_{layer_names[layer_idx]}.mp4'), fps=60, dpi=100)
 
         msg = self.receive_queue.get()
 
