@@ -81,8 +81,8 @@ class Worker:
         if layer_names[-1] != 'output':
             raise ValueError(f'expected layer_names[-1] is output, but is {layer_names[-1]}')
         layer_sizes = data['layer_sizes']
-        if len(layer_names) != len(layer_sizes) + 1:
-            raise ValueError(f'expected len(layer_names) = len(layer_sizes) + 1; got {len(layer_names)} layer names and {len(layer_sizes)} layer sizes')
+        if len(layer_names) != len(layer_sizes):
+            raise ValueError(f'expected len(layer_names) = len(layer_sizes); got {len(layer_names)} layer names and {len(layer_sizes)} layer sizes')
 
         sample_labels_file = data['sample_labels_file']
         hid_acts_files = data['hid_acts_files']
