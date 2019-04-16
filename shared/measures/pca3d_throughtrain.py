@@ -36,6 +36,8 @@ start:
     sample_labels_file (str): the file that we take sample_labels form
     hid_acts_files (tuple[str]): the files that contain the hidden activations, with
         the shape (batch_size, layer_size)
+
+    layer (int) which layer (where 0 is input) that this worker is responsible for
 hidacts:
     sent from the main thread to the worker thread to tell it that the hidden
     activations have been updated, sent from the worker thread to the main thread
@@ -54,8 +56,7 @@ ROTATION_EASING = mytweening.smoothstep
 FRAME_TIME = 1000 / 60.
 
 class Worker:
-    """Describes the worker instance - exactly one such worker exists and it manages
-    piping all the appropriate data to the ffmpeg instances
+    """Describes a worker instance. A worker manages rendering of a single layer.
 
     Attributes:
         receive_queue (Queue): the queue we receive messages from
@@ -87,59 +88,44 @@ class Worker:
         sample_labels_file = data['sample_labels_file']
         hid_acts_files = data['hid_acts_files']
 
-        num_layers = len(layer_names) - 1
+        layer_idx = data['layer']
 
         sample_labels = np.memmap(sample_labels_file, dtype='int32', mode='r', shape=(batch_size,))
         sample_labels_torch = torch.from_numpy(sample_labels)
-        layers = []
-        for idx, size in enumerate(layer_sizes):
-            if idx != 0:
-                layers.append(np.memmap(hid_acts_files[idx - 1], dtype='float64', mode='r', shape=(batch_size, size)))
+        layer_size = layer_sizes[layer_idx]
+        layer_data = np.memmap(hid_acts_files[layer_idx - 1], dtype='float64', mode='r', shape=(batch_size, layer_size))
+        layer_name = layer_names[layer_idx]
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
 
-
-        fig_and_axes = []
-        for _ in range(num_layers):
-            fig = plt.figure()
-            ax = fig.add_subplot(111, projection='3d')
-            fig_and_axes.append((fig, ax))
-        anims = [AsyncAnimation(figax[0]) for figax in fig_and_axes]
-
-        for idx, anim in enumerate(anims):
-            anim.prepare_save(os.path.join(outpath, f'layer_{layer_names[idx + 1]}'), fps=60, dpi=100)
+        anim = AsyncAnimation(fig)
+        anim.prepare_save(os.path.join(outpath, f'layer_{layer_idx}_{layer_names[layer_idx]}'), fps=60, dpi=100)
 
         msg = self.receive_queue.get()
 
-        figdata = []
-        for idx in range(num_layers):
-            figdata.append(self._init_frame(fig_and_axes[idx][0], fig_and_axes[idx][1],
-                                            layers[idx], layer_names[idx + 1],
-                                            sample_labels_torch))
+        figdata = self._init_frame(fig, ax, layer_data, layer_name, sample_labels_torch)
+
         self.send_queue.put(('hidacts',))
         msg = self.receive_queue.get()
         while msg[0] == 'hidacts':
-            for idx in range(num_layers):
-                self._do_frames(
-                    anims[idx], fig_and_axes[idx][0], fig_and_axes[idx][1], layers[idx],
-                    msg[1]['epoch'], figdata[idx])
+            self._do_frames(
+                anim, fig, ax, layer_data,
+                msg[1]['epoch'], figdata)
             self.send_queue.put(('hidacts',))
             msg = self.receive_queue.get()
 
         if msg[0] != 'hidacts_done':
             raise ValueError(f'expected msg[0] = \'hidacts_done\' but is {msg[0]}')
 
-        for idx in range(num_layers):
-            self._do_finish(anims[idx], fig_and_axes[idx][0], fig_and_axes[idx][1],figdata[idx])
-
-        for anim in enumerate(anims):
-            anim.on_finish()
+        self._do_finish(anim, fig, ax, figdata)
+        anim.on_finish()
 
         self.send_queue.put(('videos_done',))
         while not self.send_queue.empty():
             time.sleep(0.01)
 
         sample_labels._mmap.close() # pylint: disable=protected-access
-        for lyr in layers:
-            lyr._mmap.close() # pylint: disable=protected-access
+        layer_data._mmap.close() # pylint: disable=protected-access
 
     def _make_snapshot(self, hid_acts: np.ndarray, sample_labels_torch: torch.tensor):
         torch_hidacts = torch.from_numpy(hid_acts)
@@ -244,10 +230,13 @@ class WorkerConnection:
         self.send_queue.put(('hidacts', {'epoch': epoch}))
         self.expecting_hidacts_ack = True
 
-    def finish(self):
+    def start_finish(self):
         """Shuts down the worker gracefully after all hidacts have been sent"""
         self.check_ack()
         self.send_queue.put(('hidacts_done',))
+
+    def end_finish(self):
+        """Should be called after start_finish to wait until the worker shutdown"""
         msg = self.receive_queue.get()
         if msg[0] != 'videos_done':
             raise ValueError(f'expected videos_done acknowledge')
@@ -255,8 +244,8 @@ class WorkerConnection:
             time.sleep(0.01)
 
 class PCAThroughTrain:
-    """This is setup to be added to the GenericTrainer directly. This will spawn one
-    core which will manage piping the data to all the ffmpeg instances that are spawned.
+    """This is setup to be added to the GenericTrainer directly. This will spawn
+    workers which will manage piping the data to all the ffmpeg instances that are spawned.
 
     Attributes:
         output_folder (str): the folder that we are outputting data into. The folder will be
@@ -265,7 +254,7 @@ class PCAThroughTrain:
         layer_names (list[str]): the name of each layer starting with 'input' and ending with
             'output'
 
-        connection (WorkerConnection): the connection to the worker
+        connections (list[WorkerConnection]): the connections to the workers
 
         batch_size (int): the number of points we are plotting
         sample_labels [np.ndarray]: the memmap'd int32 array we share labels with
@@ -294,7 +283,7 @@ class PCAThroughTrain:
         _, self.output_folder = mutils.process_outfile(output_path, exist_ok)
         self.layer_names = layer_names
 
-        self.connection = None
+        self.connections = None
 
         self.batch_size = None
         self.sample_labels = None
@@ -336,26 +325,28 @@ class PCAThroughTrain:
             layer_sizes.append(int(lyr.shape[1]))
             self.layers.append(np.memmap(filepath, dtype='float64', mode='w+', shape=(self.batch_size, int(lyr.shape[1]))))
 
-        send_queue = Queue()
-        receive_queue = Queue()
-        proc = Process(target=_worker_target,
-                       args=(send_queue, receive_queue)) # they are purposely swapped
-        proc.daemon = True
-        proc.start()
+        self.connections = []
+        for lyr in range(len(self.layers)):
+            send_queue = Queue()
+            receive_queue = Queue()
+            proc = Process(target=_worker_target, args=(send_queue, receive_queue)) # swapped
+            proc.daemon = True
+            proc.start()
 
-        send_queue.put((
-            'start',
-            {
-                'outpath': self.output_folder,
-                'batch_size': self.batch_size,
-                'layer_names': self.layer_names,
-                'layer_sizes': layer_sizes,
-                'sample_labels_file': self.sample_labels_file,
-                'hid_acts_files': tuple(self.hid_acts_files)
-            }
-        ))
-
-        self.connection = WorkerConnection(proc, send_queue, receive_queue)
+            send_queue.put((
+                'start',
+                {
+                    'outpath': self.output_folder,
+                    'batch_size': self.batch_size,
+                    'layer_names': self.layer_names,
+                    'layer_sizes': layer_sizes,
+                    'sample_labels_file': self.sample_labels_file,
+                    'hid_acts_files': tuple(self.hid_acts_files),
+                    'layer': lyr
+                }
+            ))
+            connection = WorkerConnection(proc, send_queue, receive_queue)
+            self.connections.append(connection)
 
     def _send_hidacts(self, context: GenericTrainingContext):
         """Runs sample_points through the network and sends those activations to
@@ -366,7 +357,8 @@ class PCAThroughTrain:
             context.model, self.sample_points_torch, self.sample_labels_torch)
         for idx, lyr in enumerate(nhacts.hid_acts):
             self.layers[idx][:] = lyr
-        self.connection.send_hidacts(int(context.shared['epochs'].epochs))
+        for connection in self.connections:
+            connection.send_hidacts(int(context.shared['epochs'].epochs))
 
     def pre_loop(self, context: GenericTrainingContext):
         """Feeds hidden activations to the network"""
@@ -376,7 +368,12 @@ class PCAThroughTrain:
         """Finishes the worker, closes and deletes mmap'd files, zips directory"""
         context.logger.info('[PCA3D-ThroughTrain] Cleaning up and archiving')
         self._send_hidacts(context)
-        self.connection.finish()
+
+        for connection in self.connections:
+            connection.start_finish()
+        for connection in self.connections:
+            connection.end_finish()
+        self.connections = None
 
         self.sample_labels_torch = None
         self.sample_points_torch = None

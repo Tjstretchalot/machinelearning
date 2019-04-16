@@ -14,6 +14,8 @@ _log = logging.getLogger(__name__)
 class AsyncAnimation:
     """Describes an animation which needs to be explicitly told when a frame is ready.
     This does not support interactive mode. This does not support other animations.
+    Only one such animation can occur per process in a given instant. See MPAsyncAnimation
+    for a multi-processed wrapper of this class.
 
     Attributes:
         fig (matplotlib.figure.Figure): the figure object that is used to draw, resize,
