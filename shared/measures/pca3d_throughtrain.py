@@ -50,7 +50,7 @@ videos_done:
     sent from worker thread to main thread to confirm video finished
 """
 
-FRAMES_PER_TRAIN = 2
+FRAMES_PER_TRAIN = 6
 MS_PER_ROTATION = 3000
 ROTATION_EASING = mytweening.smoothstep
 FRAME_TIME = 1000 / 60.
@@ -366,7 +366,7 @@ class PCAThroughTrain:
         """Feeds hidden activations to the network"""
         self._send_hidacts(context)
 
-    def finish(self, context: GenericTrainingContext):
+    def finished(self, context: GenericTrainingContext, result: dict):
         """Finishes the worker, closes and deletes mmap'd files, zips directory"""
         context.logger.info('[PCA3D-ThroughTrain] Cleaning up and archiving')
         self._send_hidacts(context)
