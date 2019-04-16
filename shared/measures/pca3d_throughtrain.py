@@ -87,13 +87,15 @@ class Worker:
 
         sample_labels_file = data['sample_labels_file']
         hid_acts_files = data['hid_acts_files']
+        if len(hid_acts_files) != len(layer_names):
+            raise ValueError(f'expected len(layer_names) = len(hid_acts_files); got {len(layer_names)} layer names and {len(hid_acts_files)} hid act files')
 
         layer_idx = data['layer']
 
         sample_labels = np.memmap(sample_labels_file, dtype='int32', mode='r', shape=(batch_size,))
         sample_labels_torch = torch.from_numpy(sample_labels)
         layer_size = layer_sizes[layer_idx]
-        layer_data = np.memmap(hid_acts_files[layer_idx - 1], dtype='float64', mode='r', shape=(batch_size, layer_size))
+        layer_data = np.memmap(hid_acts_files[layer_idx], dtype='float64', mode='r', shape=(batch_size, layer_size))
         layer_name = layer_names[layer_idx]
         fig = plt.figure()
         ax = fig.add_subplot(111, projection='3d')
