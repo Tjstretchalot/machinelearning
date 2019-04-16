@@ -107,14 +107,14 @@ class Worker:
         for idx, anim in enumerate(anims):
             anim.prepare_save(os.path.join(outpath, f'layer_{layer_names[idx + 1]}'), fps=60, dpi=100)
 
-
         msg = self.receive_queue.get()
+
         figdata = []
         for idx in range(num_layers):
             figdata.append(self._init_frame(fig_and_axes[idx][0], fig_and_axes[idx][1],
                                             layers[idx], layer_names[idx + 1],
                                             sample_labels_torch))
-
+        self.send_queue.put(('hidacts',))
         msg = self.receive_queue.get()
         while msg[0] == 'hidacts':
             for idx in range(num_layers):
