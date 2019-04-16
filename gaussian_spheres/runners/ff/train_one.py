@@ -64,7 +64,7 @@ def main():
         criterion=torch.nn.CrossEntropyLoss()
     )
 
-    dig = npmp.NPDigestor('train_one', 2)
+    dig = npmp.NPDigestor('train_one', 35)
     pca_3d.plot_ff(pca_ff.find_trajectory(network, pwl, 3), os.path.join(SAVEDIR, 'pca_3d_start'), True,
                    digestor=dig, frame_time=FRAME_TIME, layer_names=layer_names)
     dtt_training_dir = os.path.join(SAVEDIR, 'dtt')

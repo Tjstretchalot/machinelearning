@@ -85,6 +85,7 @@ class Worker:
         num_layers = len(layer_names) - 1
 
         sample_labels = np.memmap(sample_labels_file, dtype='int32', mode='r', shape=(batch_size,))
+        sample_labels_torch = torch.from_numpy(sample_labels)
         layers = []
         for idx, size in enumerate(layer_sizes):
             if idx != 0:
@@ -103,7 +104,7 @@ class Worker:
         for idx in range(num_layers):
             figdata.append(self._init_frame(fig_and_axes[idx][0], fig_and_axes[idx][1],
                                             layers[idx], layer_names[idx + 1],
-                                            sample_labels))
+                                            sample_labels_torch))
 
         msg = self.receive_queue.get()
         while msg[0] == 'hidacts':
@@ -131,15 +132,15 @@ class Worker:
         for lyr in layers:
             lyr._mmap.close() # pylint: disable=protected-access
 
-    def _make_snapshot(self, hid_acts: np.ndarray, sample_labels: np.ndarray):
+    def _make_snapshot(self, hid_acts: np.ndarray, sample_labels_torch: torch.tensor):
         torch_hidacts = torch.from_numpy(hid_acts)
         pc_vals, pc_vecs = pca.get_hidden_pcs(torch_hidacts, 3)
         projected = pca.project_to_pcs(torch_hidacts, pc_vecs, out=None)
-        return pca_ff.PCTrajectoryFFSnapshot(pc_vecs, pc_vals, projected, sample_labels)
+        return pca_ff.PCTrajectoryFFSnapshot(pc_vecs, pc_vals, projected, sample_labels_torch)
 
     def _init_frame(self, fig: mpl.figure.Figure, ax: mpl.axes.Axes, hid_acts: np.ndarray,
-                    layer_name: str, sample_labels: np.ndarray) -> dict:
-        snapsh = self._make_snapshot(hid_acts, sample_labels)
+                    layer_name: str, sample_labels_torch: torch.tensor) -> dict:
+        snapsh = self._make_snapshot(hid_acts, sample_labels_torch)
         scatter = ax.scatter(snapsh.projected_samples[:, 0].numpy(),
                              snapsh.projected_samples[:, 1].numpy(),
                              snapsh.projected_samples[:, 2].numpy(),
@@ -151,13 +152,13 @@ class Worker:
             'scatter': scatter,
             'title': axtitle,
             'time': 0,
-            'sample_labels': sample_labels
+            'sample_labels_torch': sample_labels_torch
         }
 
     def _do_frames(self, anim: AsyncAnimation, fig: mpl.figure.Figure, ax: mpl.axes.Axes,
                    hid_acts: np.ndarray, epoch: int, figdata: dict) -> float:
 
-        snapsh = self._make_snapshot(hid_acts, figdata['sample_labels'])
+        snapsh = self._make_snapshot(hid_acts, figdata['sample_labels_torch'])
         figdata['scatter']._offsets3d = ( #pylint: disable=protected-access
             snapsh.projected_samples[:, 0].numpy(),
             snapsh.projected_samples[:, 1].numpy(),
