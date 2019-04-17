@@ -322,6 +322,91 @@ def plot_trajectory(traj: PCTrajectoryFF, filepath: str, exist_ok: bool = False,
     shutil.rmtree(filepath_wo_ext)
     os.chdir(cwd)
 
+def match_snapshots(match_snap: PCTrajectoryFFSnapshot, change_snap: PCTrajectoryFFSnapshot):
+    """Attempts to match the two snapshots up to reflections. The eigenvectors may be multiplied
+    by an arbitrary scalar and still be an eigenvector. For the purpose of plotting it is often
+    helpful to multiply by -1
+
+    Args:
+        match_snap (PCTrajectoryFFSnapshot): the snapshot we try to match
+        change_snap (PCTrajectoryFFSnapshot): the snapshot we will change
+
+    Returns:
+        reflected (tuple[bool]): True if we changed the snapshot via a reflection, False if
+            we did not. one for each pc
+    """
+    if not isinstance(match_snap, PCTrajectoryFFSnapshot):
+        raise ValueError(f'expected match_snap is trajectory snapshot, got {match_snap} (type={type(match_snap)})')
+    if not isinstance(change_snap, PCTrajectoryFFSnapshot):
+        raise ValueError(f'expected change_snap is trajectory snapshot, got {change_snap} (type={type(change_snap)})')
+
+    num_labels = match_snap.projected_sample_labels.max()
+    ver_num_labels = change_snap.projected_sample_labels.max()
+    if ver_num_labels != num_labels:
+        raise ValueError(f'expected same number of labels between snapshots, but match has {num_labels} and change has {ver_num_labels}')
+
+    if match_snap.num_pcs != change_snap.num_pcs:
+        raise ValueError(f'expected same number of pcs between snapshots, but match has {match_snap.num_pcs} and change has {change_snap.num_pcs}')
+    num_pcs = match_snap.num_pcs
+
+    means_by_label_match = torch.zeros((num_labels, num_pcs), dtype=match_snap.projected_samples.dtype)
+    for lbl in range(num_labels):
+        means_by_label_match[lbl] = match_snap.principal_vectors[match_snap.projected_sample_labels == lbl].mean(axis=1)
+
+    means_by_label_change = torch.zeros((num_labels, num_pcs), dtype=change_snap.projected_samples.dtype)
+    for lbl in range(num_labels):
+        means_by_label_change[lbl] = change_snap.principal_vectors[change_snap.projected_sample_labels == lbl].mean(axis=1)
+
+    result = []
+    for pc in range(match_snap.num_pcs): # pylint: disable=invalid-name
+        badness = 0
+        counter = 0
+        for lbl1 in range(num_labels):
+            for lbl2 in range(lbl1 + 1, num_labels):
+                used_to_be_lt = (
+                    means_by_label_match[lbl1, pc]
+                    < means_by_label_match[lbl2, pc]
+                )
+                curr_is_lt = (
+                    means_by_label_change[lbl1, pc]
+                    < means_by_label_change[lbl2, pc]
+                )
+                counter += 1
+                if used_to_be_lt != curr_is_lt:
+                    badness += 1
+
+        if badness >= (counter / 2):
+            change_snap.principal_vectors[pc, :] *= -1
+            change_snap.projected_samples[:, pc] *= -1
+            result.append(True)
+        else:
+            result.append(False)
+
+    return tuple(result)
+
+
+
+def match_trajectories(match_traj: PCTrajectoryFF, change_traj: PCTrajectoryFF):
+    """Attempts to have the two trajectories which are meant to reflect a similar system be as
+    close as possible within reflections and rotations.
+
+    Args:
+        match_traj (PCTrajectoryFF): the trajectory that we're trying to match
+        change_traj (PCTrajectoryFF): the trajectory that we are changing to match
+    """
+
+    if not isinstance(match_traj, PCTrajectoryFF):
+        raise ValueError(f'expected match_traj is PCTrajectoryFF, got {match_traj} (type={type(match_traj)})')
+    if not isinstance(change_traj, PCTrajectoryFF):
+        raise ValueError(f'expected change_traj is PCTrajectoryFF, got {change_traj} (type={type(change_traj)})')
+    if len(match_traj.snapshots) != len(change_traj.snapshots):
+        raise ValueError(f'expected match_traj and change_traj have same # of snapshots, but match_traj has {len(match_traj.snapshots)} and change_traj has {len(change_traj.snapshots)}')
+
+    # potential optimization is replicating the changes for the first set to all
+    for idx, match_snap in enumerate(match_traj.snapshots):
+        match_snapshots(match_snap, change_traj.snapshots[idx])
+
+
 def digest_find_and_plot_traj(sample_points: np.ndarray, sample_labels: np.ndarray, # pylint: disable=unused-argument
                               *all_hid_acts: typing.Tuple[np.ndarray],
                               savepath: str = None, **kwargs):

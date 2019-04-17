@@ -291,6 +291,7 @@ def find_trajectory(model: NaturalRNN, pwl_prod: PointWithLabelProducer,
                 proj_samples[recur_step, indices_by_label[lbl], :].mean(0)
             )
 
+    # we can flip any of our pcs
     for recur_step in range(1, duration+1):
         for pc in range(num_pcs): # pylint: disable=invalid-name
             badness = 0
