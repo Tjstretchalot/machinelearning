@@ -120,7 +120,7 @@ class FrameWorker:
 
     def __init__(self, receive_queue: Queue, img_queue: Queue, ack_queue: Queue, ack_mode: str,
                  hacts_file: str, labels_file: str, batch_size: int, layer_size: int,
-                 w_in: (float), h_in: (float), dpi: int):
+                 w_in: float, h_in: float, dpi: int):
         self.receive_queue = receive_queue
         self.img_queue = img_queue
         self.ack_queue = ack_queue
@@ -396,6 +396,11 @@ class LayerWorker:
         self.layer_size = msg[1]['layer_size']
         self.sample_labels_file = msg[1]['sample_labels_file']
         self.hid_acts_file = msg[1]['hid_acts_file']
+
+        if not isinstance(self.frame_size, tuple):
+            raise ValueError(f'expected frame_size is tuple, got {self.frame_size} (msg={msg})')
+        if len(self.frame_size) != 2:
+            raise ValueError(f'expected frame_size has len 2, got {len(self.frame_size)}')
 
     def _spawn_workers(self):
         """Initializes the animation and spawns the frame workers
