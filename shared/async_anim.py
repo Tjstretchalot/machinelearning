@@ -244,7 +244,7 @@ class MPAnimation:
 
         if bitrate > 0:
             args.extend(['-b', '%dk' % bitrate])
-        args.extend('-y', self.outfile)
+        args.extend(['-y', self.outfile])
 
 
         self.ffmpeg_proc = sp.Popen(
