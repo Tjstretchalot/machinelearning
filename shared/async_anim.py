@@ -202,12 +202,11 @@ class MPAnimation:
             raise FileExistsError(f'outfile {outfile} already exists')
 
         self.dpi = dpi
-        self.frame_size = frame_size
         self.fps = fps
         self.outfile = outfile
         self.logfile = logfile
 
-        self.frame_size: typing.Optional[typing.Tuple[int, int]] = None
+        self.frame_size: typing.Tuple[float, float] = frame_size
         self.ffmpeg_proc: typing.Optional[mp.Process] = None
         self.logfh: typing.Optional[typing.TextIO] = None
 
