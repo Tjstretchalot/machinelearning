@@ -239,10 +239,8 @@ class FrameWorker:
             self.state = 1
             return True
         if self.state == 1:
-            if no_wait:
-                msg = self.receive_queue.get_nowait()
-                if msg is None:
-                    return True
+            if no_wait and self.receive_queue.empty():
+                return True
             else:
                 msg = self.receive_queue.get()
             if msg[0] == 'end':
@@ -293,7 +291,7 @@ class FrameWorkerConnection:
 
     def check_ack(self):
         """Non-blocking equivalent of wait_ack"""
-        if self.awaiting_ack:
+        if self.awaiting_ack and not self.ack_queue.empty():
             ack = self.ack_queue.get_nowait()
             if ack is not None:
                 self.awaiting_ack = False
@@ -475,8 +473,9 @@ class LayerWorker:
         rot_time = 0
         frame_counter = 0
         while True:
-            msg = self.receive_queue.get_nowait()
-            if msg is None:
+            if not self.receive_queue.empty():
+                msg = self.receive_queue.get_nowait()
+            else:
                 self.anim.do_work()
                 time.sleep(0)
                 continue

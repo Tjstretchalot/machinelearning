@@ -306,8 +306,8 @@ class MPAnimation:
         """
 
         for queue in self.receive_queues:
-            msg = queue.get_nowait()
-            if msg is not None:
+            if not queue.empty():
+                msg = queue.get_nowait()
                 if not isinstance(msg, tuple):
                     raise ValueError(f'expected msg from receive_queue is tuple, got {msg} (type={type(msg)})')
                 if len(msg) != 2:
