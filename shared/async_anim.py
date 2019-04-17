@@ -191,7 +191,7 @@ class MPAnimation:
         wo_ext, ext = os.path.splitext(outfile)
         if ext == '':
             outfile = wo_ext + '.mp4'
-        elif ext != 'mp4':
+        elif ext != '.mp4':
             raise ValueError(f'expected outfile is mp4 file, got {outfile} (ext={ext})')
 
         wo_ext, ext = os.path.splitext(logfile)
