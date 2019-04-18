@@ -215,7 +215,7 @@ class PCTrajectoryFFSnapshotMatchInfo:
         """Creates the match information for the given snapshot"""
         num_pcs = snapshot.num_pcs
         layer_size = snapshot.layer_size
-        output_dim = snapshot.projected_sample_labels.max().item()
+        output_dim = snapshot.projected_sample_labels.max().item() + 1
 
         mean_comps = torch.zeros(PCTrajectoryFFSnapshotMatchInfo.get_expected_len(num_pcs, output_dim),
                                   dtype=torch.uint8)
@@ -497,8 +497,8 @@ def match_snapshots(match_snap: PCTrajectoryFFSnapshot, change_snap: PCTrajector
     if not isinstance(change_snap, PCTrajectoryFFSnapshot):
         raise ValueError(f'expected change_snap is trajectory snapshot, got {change_snap} (type={type(change_snap)})')
 
-    num_labels = match_snap.projected_sample_labels.max().item()
-    ver_num_labels = change_snap.projected_sample_labels.max().item()
+    num_labels = match_snap.projected_sample_labels.max().item() + 1
+    ver_num_labels = change_snap.projected_sample_labels.max().item() + 1
     if ver_num_labels != num_labels:
         raise ValueError(f'expected same number of labels between snapshots, but match has {num_labels} and change has {ver_num_labels}')
 
