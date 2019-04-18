@@ -477,10 +477,15 @@ class LayerWorker:
         self.sample_labels_torch = torch.from_numpy(self.sample_labels)
 
     def _update_match(self):
+        print(f'layer worker get_hidden_pcs; self.hidacts_torch.shape={self.hidacts_torch.shape}')
         pc_vals, pc_vecs = pca.get_hidden_pcs(self.hidacts_torch, 3)
+        print('layer worker project_to_pcs')
         projected = pca.project_to_pcs(self.hidacts_torch, pc_vecs, out=None)
+        print(f'layer worker create snap (pc_vals.shape={pc_vals.shape})')
         snap = pca_ff.PCTrajectoryFFSnapshot(pc_vecs, pc_vals, projected, self.sample_labels_torch)
+        print('layer worker create match')
         match_info = pca_ff.PCTrajectoryFFSnapshotMatchInfo.create(snap)
+        print('layer worker mmap mean_comps')
         self.match_mean_comps_torch[:] = match_info.mean_comps[:]
 
     def _close_mmaps(self):
