@@ -568,6 +568,7 @@ class WorkerConnection:
             raise ValueError(f'expected videos_done acknowledge')
         while self.process.is_alive():
             time.sleep(0.01)
+        print('layer worker closed gracefully')
 
 class PCAThroughTrain:
     """This is setup to be added to the GenericTrainer directly. This will spawn
