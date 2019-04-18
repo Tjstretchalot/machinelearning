@@ -512,6 +512,7 @@ class LayerWorker:
                 break
             if msg[0] != 'hidacts':
                 raise RuntimeError(f'unexpected msg: {msg} (expected hidacts or hidacts_done)')
+            print('layer worker got job')
             epoch = msg[1]
             for _ in range(FRAMES_PER_TRAIN):
                 rot_prog = ROTATION_EASING(rot_time / MS_PER_ROTATION)
@@ -519,7 +520,9 @@ class LayerWorker:
                 self._dispatch_frame(rot, f'{self.layer_name} (epoch {epoch})', frame_counter)
                 frame_counter += 1
                 rot_time = (rot_time + FRAME_TIME) % MS_PER_ROTATION
+            print('layer worker dispatched all jobs, waiting on acks')
             self._wait_all_acks()
+            print('layer worker received all acks, acking back to main thread')
             self.send_queue.put(('hidacts',))
 
         self._shutdown_all()
