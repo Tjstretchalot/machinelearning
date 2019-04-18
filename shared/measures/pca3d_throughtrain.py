@@ -229,8 +229,6 @@ class FrameWorker:
         while self.do_work():
             pass
 
-        print('frame worker shutting down')
-
     def do_work(self, no_wait=False) -> bool:
         """Performs a bit of work until we have no more work to do
 
@@ -239,7 +237,6 @@ class FrameWorker:
         """
 
         if self.state == 0:
-            print('frame worker openning mmaps')
             self._open_mmaps()
             self.state = 1
             return True
@@ -252,9 +249,7 @@ class FrameWorker:
                     self.last_job = time.time()
 
                 return True
-            print('frame worker waiting on job')
             msg = self.receive_queue.get(timeout=15)
-            print('frame worker received job')
             self.last_job = None
             if msg[0] == 'end':
                 self._close_mmaps()
@@ -267,7 +262,6 @@ class FrameWorker:
         if self.state == 2:
             self._get_snapshot()
             if self.ack_mode == 'asap':
-                print('frame worker acking (mode=asap)')
                 self.ack_queue.put(('ack',))
             if self.figure is None:
                 self._init_figure()
@@ -471,11 +465,7 @@ class LayerWorker:
             if time.time() - start > 15000:
                 raise RuntimeError(f'timeout while waiting for frame workers to acknowledge frame')
 
-            work_start = time.time()
             self.anim.do_work()
-            work_time = time.time() - work_start
-            if work_time > 1e-4:
-                print(f'layer worker did some work (took {work_time} seconds)')
             time.sleep(0)
 
     def _shutdown_all(self):
@@ -519,7 +509,6 @@ class LayerWorker:
                 break
             if msg[0] != 'hidacts':
                 raise RuntimeError(f'unexpected msg: {msg} (expected hidacts or hidacts_done)')
-            print('layer worker got job')
             epoch = msg[1]
             for _ in range(FRAMES_PER_TRAIN):
                 rot_prog = ROTATION_EASING(rot_time / MS_PER_ROTATION)
@@ -527,9 +516,7 @@ class LayerWorker:
                 self._dispatch_frame(rot, f'{self.layer_name} (epoch {epoch})', frame_counter)
                 frame_counter += 1
                 rot_time = (rot_time + FRAME_TIME) % MS_PER_ROTATION
-            print('layer worker dispatched all jobs, waiting on acks')
             self._wait_all_acks()
-            print('layer worker received all acks, acking back to main thread')
             self.send_queue.put(('hidacts',))
 
         self._shutdown_all()
