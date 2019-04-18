@@ -471,11 +471,11 @@ class LayerWorker:
             if time.time() - start > 15000:
                 raise RuntimeError(f'timeout while waiting for frame workers to acknowledge frame')
 
-            print('layer worker doing some work while waiting on frame workers to do stuff')
             work_start = time.time()
             self.anim.do_work()
             work_time = time.time() - work_start
-            print(f'layer worker did some work (took {work_time} seconds)')
+            if work_time > 1e-4:
+                print(f'layer worker did some work (took {work_time} seconds)')
             time.sleep(0)
 
     def _shutdown_all(self):
