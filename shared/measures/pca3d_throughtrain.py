@@ -658,7 +658,7 @@ class PCAThroughTrain:
             self.layers.append(np.memmap(filepath, dtype='float64', mode='w+', shape=(self.batch_size, int(lyr.shape[1]))))
 
         self.connections = []
-        for lyr in range(len(self.layers)):
+        for lyr in range(1, len(self.layers)):
             send_queue = Queue()
             receive_queue = Queue()
             proc = Process(target=_worker_target, args=(send_queue, receive_queue)) # swapped
