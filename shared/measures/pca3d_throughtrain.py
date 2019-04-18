@@ -166,9 +166,9 @@ class FrameWorker:
         self.hidden_acts._mmap.close() # pylint: disable=protected-access
         self.hidden_acts = None
 
-        self.sample_labels = None
-        self.sample_labels._mmap.close() # pylint: disable=protected-access
         self.sample_labels_torch = None
+        self.sample_labels._mmap.close() # pylint: disable=protected-access
+        self.sample_labels = None
 
     def _get_snapshot(self):
         pc_vals, pc_vecs = pca.get_hidden_pcs(self.hidden_acts_torch, 3)
