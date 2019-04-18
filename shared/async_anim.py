@@ -246,8 +246,6 @@ class MPAnimation:
             args.extend(['-b', '%dk' % bitrate])
         args.extend(['-y', self.outfile])
 
-        rargs = ' '.join(args)
-        print(rargs)
         self.ffmpeg_proc = sp.Popen(
             args, shell=False, stdout=None, stderr=None,
             stdin=sp.PIPE, creationflags=subprocess_creation_flags)

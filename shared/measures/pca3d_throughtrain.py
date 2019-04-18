@@ -191,7 +191,7 @@ class FrameWorker:
             self.snapshot.projected_samples[:, 0].numpy(),
             self.snapshot.projected_samples[:, 1].numpy(),
             self.snapshot.projected_samples[:, 2].numpy(),
-            s=1,
+            s=3,
             c=self.snapshot.projected_sample_labels.numpy())
         self.axtitle = self.axes.set_title(self.title)
 
