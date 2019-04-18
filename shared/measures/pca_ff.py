@@ -495,8 +495,8 @@ def match_snapshots(match_snap: PCTrajectoryFFSnapshot, change_snap: PCTrajector
     if not isinstance(change_snap, PCTrajectoryFFSnapshot):
         raise ValueError(f'expected change_snap is trajectory snapshot, got {change_snap} (type={type(change_snap)})')
 
-    num_labels = match_snap.projected_sample_labels.max()
-    ver_num_labels = change_snap.projected_sample_labels.max()
+    num_labels = match_snap.projected_sample_labels.max().item()
+    ver_num_labels = change_snap.projected_sample_labels.max().item()
     if ver_num_labels != num_labels:
         raise ValueError(f'expected same number of labels between snapshots, but match has {num_labels} and change has {ver_num_labels}')
 
