@@ -162,6 +162,161 @@ class PCTrajectoryFF:
     def __getitem__(self, i):
         return self.snapshots[i]
 
+class PCTrajectoryFFSnapshotMatchInfo:
+    """Contains the necessary information for a pc trajectory to match it with another pc
+    trajectory. It is usually faster to match via a match info if you are going to match
+    to the same snapshot multiple times. It is also faster to store.
+
+    Attributes:
+        num_pcs (int): the number of principal components in the snapshot that will be matched.
+            We can only match trajectories with the same number of pcs
+        layer_size (int): the size of the layer that will be matched
+            It only makes sense to match trajectories with the same layer size
+        output_dim (int): the number of output dimensions in the snapshot that will be matched.
+            We can only match trajectories with the same output dimension
+
+        mean_comps (torch.tensor uint8): has length 0.5 * num_pcs * output_dim * (output_dim - 1).
+            The index tells you which pc and which 2 labels are being compared, while a
+            0 tells you that lbl1 <= lbl2, 1 says lbl1 > lbl2,, where here
+            "lbl1" is the mean of the first label along the given pc.
+
+            Given pc "P", label 1 "A" and label 2 "B", the index "i" that you want is
+                  P * (0.5 * output_dim * (output_dim - 1))
+                + 0.5 * A * (A - 1)
+                + B - A - 1
+    """
+
+    def __init__(self, num_pcs: int, layer_size: int, output_dim: int,
+                 mean_comps: torch.tensor):
+        if not isinstance(num_pcs, int):
+            raise ValueError(f'expected num_pcs is int, got {num_pcs} (type={type(num_pcs)})')
+        if not isinstance(layer_size, int):
+            raise ValueError(f'expected layer_size is int, got {layer_size} (type={type(layer_size)})')
+        if not isinstance(output_dim, int):
+            raise ValueError(f'expected output_dim is int, got {output_dim} (type={type(output_dim)})')
+        if not torch.is_tensor(mean_comps):
+            raise ValueError(f'expected mean_comps is torch.tensor, got {mean_comps} (type={type(mean_comps)})')
+        if mean_comps.dtype != torch.uint8:
+            raise ValueError(f'expected mean_comps dtype is uint8, got {mean_comps.dtype}')
+        if len(mean_comps.shape) != 1:
+            raise ValueError(f'expected mean_comps is flattened, got {mean_comps.shape}')
+
+        exp_len = PCTrajectoryFFSnapshotMatchInfo.get_expected_len(num_pcs, output_dim)
+        if mean_comps.shape[0] != exp_len:
+            raise ValueError(f'expected mean_comps has length {exp_len} when num_pcs={num_pcs} and output_dim={output_dim}, got {mean_comps.shape[0]}')
+
+        self.num_pcs = num_pcs
+        self.layer_size = layer_size
+        self.output_dim = output_dim
+        self.mean_comps = mean_comps
+
+    @classmethod
+    def create(cls, snapshot: PCTrajectoryFFSnapshot) -> 'PCTrajectoryFFSnapshotMatchInfo':
+        """Creates the match information for the given snapshot"""
+        num_pcs = snapshot.num_pcs
+        layer_size = snapshot.layer_size
+        output_dim = snapshot.projected_sample_labels.max()
+
+        mean_comps = torch.zeros(PCTrajectoryFFSnapshotMatchInfo.get_expected_len(num_pcs, output_dim),
+                                  dtype=torch.uint8)
+
+        means_by_label_and_pc = torch.zeros((num_pcs, output_dim), dtype=snapshot.projected_samples.dtype)
+
+        for lbl in range(output_dim):
+            mask = snapshot.projected_sample_labels == lbl
+            for pc_ind in range(num_pcs):
+                means_by_label_and_pc[pc_ind, lbl] = snapshot.projected_samples[pc_ind, mask].mean()
+
+        counter = 0
+        for pc_ind in range(num_pcs):
+            for lbl1 in range(output_dim):
+                for lbl2 in range(lbl1+1, output_dim):
+                    if means_by_label_and_pc[pc_ind, lbl1] > means_by_label_and_pc[pc_ind, lbl2]:
+                        mean_comps[counter] = 1
+                    counter += 1
+
+        return cls(num_pcs, layer_size, output_dim, mean_comps)
+
+    @staticmethod
+    def get_expected_len(num_pcs: int, output_dim: int) -> int:
+        """Determines the expected number of comparison when there are the specified
+        number of pcs and labels"""
+        return (num_pcs * output_dim * (output_dim - 1)) // 2
+
+    @staticmethod
+    def get_offset_static(output_dim: int, pc_ind: int, lbl1: int, lbl2: int) -> int:
+        """Gets the offset within the mean_comps array for comparing the first label to the
+        second label when there are the given number of pcs and labels."""
+
+        pc_offset = (pc_ind * output_dim * (output_dim - 1)) // 2
+        label1_offset = (lbl1 * (lbl1 - 1)) // 2
+        label2_offset = lbl2 - lbl1 - 1
+
+        return pc_offset + label1_offset + label2_offset
+
+    def get_offset(self, pc_ind: int, lbl1: int, lbl2: int):
+        """Gets the offset within mean_comps for comparing lbl1 to lbl2 within the
+        specified principal component vector space
+
+        Args:
+            pc (int): the index for the principal component
+            lbl1 (int): the first label
+            lbl2 (int): the seocnd label
+
+        Returns:
+            offset (int): the index in mean_comps to get that comparison
+        """
+        return PCTrajectoryFFSnapshotMatchInfo.get_offset_static(
+            self.output_dim, pc_ind, lbl1, lbl2
+        )
+
+    def diff(self, match_info: 'PCTrajectoryFFSnapshotMatchInfo') -> typing.Any:
+        """Produces a diff which can be sent to apply_diff to match the specified
+        match information to this one.
+
+        Args:
+            match_info (PCTrajectoryFFSnapshotMatchInfo): the match info to compare with
+
+        Returns:
+            typing.Any: a result which can be sent to apply_diff
+        """
+        if not isinstance(match_info, PCTrajectoryFFSnapshotMatchInfo):
+            raise ValueError(f'Expected match_info is PCTrajectoryFFSnapshotMatchInfo, got {match_info} (type={type(match_info)})')
+        if match_info.num_pcs != self.num_pcs:
+            raise ValueError(f'Cannot match because different number of pcs (I have {self.num_pcs}, arg has {match_info.num_pcs})')
+        if match_info.layer_size != self.layer_size:
+            raise ValueError(f'Cannot match because different layer sizes (I have {self.layer_size}, arg has {match_info.layer_size})')
+        if match_info.output_dim != self.output_dim:
+            raise ValueError(f'Cannot match because different output dims (I have {self.output_dim}, arg has {match_info.output_dim})')
+
+        diff = torch.zeros((self.num_pcs,), dtype=torch.uint8)
+        pc_offset = (self.output_dim * (self.output_dim - 1)) // 2
+        for pc_ind in range(self.num_pcs):
+            istart = pc_ind*pc_offset
+            iend = istart + pc_offset
+            badness = (self.mean_comps[istart:iend] != match_info.mean_comps[istart:iend]).sum()
+            if badness > (pc_offset // 2):
+                diff[pc_ind] = 1
+        return diff
+
+    @staticmethod
+    def apply_diff(snapshot: PCTrajectoryFFSnapshot, diff: typing.Any):
+        """Modifies the given snapshot in such a way that it is an acceptable result
+        from the pc find trajectory but also is like the diff
+
+        Args:
+            snapshot (PCTrajectoryFFSnapshot): the snapshot to modify
+            diff (typing.Any): the result from diff
+        """
+        snapshot.principal_vectors[diff, :] *= -1
+        snapshot.projected_samples[:, diff] *= -1
+
+    def match(self, snapshot: PCTrajectoryFFSnapshot):
+        """Sets up the given snapshot to match this snapshot"""
+        match_info = PCTrajectoryFFSnapshotMatchInfo.create(snapshot)
+        diff = self.diff(match_info)
+        PCTrajectoryFFSnapshotMatchInfo.apply_diff(snapshot, diff)
+
 def to_trajectory(sample_labels: torch.tensor, all_hid_acts: typing.List[torch.tensor],
                   num_pcs: int) -> PCTrajectoryFF:
     """Converts the specified hidden activations to a feedforward trajectory

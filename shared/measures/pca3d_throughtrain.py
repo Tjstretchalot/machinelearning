@@ -29,11 +29,13 @@ MESSAGE_STYLES = {'start', 'hidacts', 'hidacts_done', 'videos_done'}
 These are messages that are sent from the main thread to the layer worker thread
 
 start:
+    worker_id (str): a unique id for the worker
     outfile (str): the path to the file where the animation should be saved
     batch_size (int): the batch size
     layer_name (str): the name of the layer the layer worker is handling
     layer_size (int): the number of hidden nodes that will be visible in the layer
         that this layer worker is handling
+    output_dim (int): the number of labels / output embedded dim
     sample_labels_file (str): the file that we take sample_labels form
     hid_acts_file (str): the file that contain the hidden activations, with
         the shape (batch_size, layer_size)
@@ -85,14 +87,26 @@ class FrameWorker:
             we only need to load this temporarily for the purpose of blitting the colors and
             from there on we only need to rotate images, however we memmap in order to use
             the pca calculations more smoothly
+        match_mean_comps_file (str): the path to the file which will contain the 'mean_comps' that
+            we should match our snapshots to; updated occassionally via a 'match' call and ensures
+            deterministic behavior among frame workers
+
         batch_size (int): the batch size
         layer_size (int): the layer size
+        output_dim (int): the output dim / number of labels
 
         hidden_acts (np.memmap): the memory mapped hidden activations
         hidden_acts_torch (torch.tensor): the torch tensor that has the same backing as hidden_acts
 
         sample_labels (np.memmap): the memory mapped sample labels
         sample_labels_torch (torch.tensor): the torch tensor that has the same backing as sample_labels
+
+        match_mean_comps (np.memmap): the memory mapped "mean_comps" for the snapshot match info
+        match_mean_comps_torch (torch.tensor): the torch.tensor that has the same backing
+            as match_mean_comps
+
+        match_info (pca_ff.PCTrajectoryFFSnapshotMatchInfo): the match info we use to keep
+            the snapshots within reflection distance of each other
 
         rotation (float): the rotation around the y axes we should have
         title (str): the title we should have
@@ -121,20 +135,25 @@ class FrameWorker:
 
 
     def __init__(self, receive_queue: Queue, img_queue: Queue, ack_queue: Queue, ack_mode: str,
-                 hacts_file: str, labels_file: str, batch_size: int, layer_size: int,
-                 w_in: float, h_in: float, dpi: int):
+                 hacts_file: str, labels_file: str, match_mean_comps_file: str, batch_size: int,
+                 layer_size: int, output_dim: int, w_in: float, h_in: float, dpi: int):
         self.receive_queue = receive_queue
         self.img_queue = img_queue
         self.ack_queue = ack_queue
         self.ack_mode = ack_mode
         self.hacts_file = hacts_file
         self.labels_file = labels_file
+        self.match_mean_comps_file = match_mean_comps_file
         self.batch_size = batch_size
         self.layer_size = layer_size
+        self.output_dim = output_dim
         self.hidden_acts = None
         self.hidden_acts_torch = None
         self.sample_labels = None
         self.sample_labels_torch = None
+        self.match_mean_comps = None
+        self.match_mean_comps_torch = None
+        self.match_info = None
         self.rotation = None
         self.title = None
         self.index = None
@@ -158,8 +177,15 @@ class FrameWorker:
         self.hidden_acts_torch = torch.from_numpy(self.hidden_acts)
 
         self.sample_labels = np.memmap(self.labels_file, dtype='int32',
-                                     mode='r', shape=(self.batch_size,))
+                                       mode='r', shape=(self.batch_size,))
         self.sample_labels_torch = torch.from_numpy(self.sample_labels)
+        self.match_mean_comps = np.memmap(
+            self.match_mean_comps_file, dtype='uint8', mode='r',
+            shape=(pca_ff.PCTrajectoryFFSnapshotMatchInfo.get_expected_len(3, self.output_dim)))
+        self.match_mean_comps_torch = torch.from_numpy(self.match_mean_comps)
+
+        self.match_info = pca_ff.PCTrajectoryFFSnapshotMatchInfo(
+            3, self.layer_size, self.output_dim, self.match_mean_comps_torch)
 
     def _close_mmaps(self):
         self.hidden_acts_torch = None
@@ -170,13 +196,17 @@ class FrameWorker:
         self.sample_labels._mmap.close() # pylint: disable=protected-access
         self.sample_labels = None
 
+        self.match_info = None
+        self.match_mean_comps_torch = None
+        self.match_mean_comps._mmap.close() # pylint: disable=protected-access
+        self.match_mean_comps = None
+
     def _get_snapshot(self):
         pc_vals, pc_vecs = pca.get_hidden_pcs(self.hidden_acts_torch, 3)
         projected = pca.project_to_pcs(self.hidden_acts_torch, pc_vecs, out=None)
         snap = pca_ff.PCTrajectoryFFSnapshot(pc_vecs, pc_vals, projected, self.sample_labels_torch)
 
-        if self.snapshot is not None:
-            pca_ff.match_snapshots(self.snapshot, snap)
+        self.match_info.match(snap)
 
         self.snapshot = snap
 
@@ -250,6 +280,7 @@ class FrameWorker:
                 self._close_figure()
                 self.state = 3
                 return False
+
             self.rotation, self.title, self.index = msg[1:]
             self.state = 2
             return True
@@ -270,10 +301,11 @@ class FrameWorker:
         return False
 
 def _frame_worker_target(receive_queue: Queue, img_queue: Queue, ack_queue: Queue, ack_mode: str,
-                         hacts_file: str, labels_file: str, batch_size: int, layer_size: int,
-                         w_in: float, h_in: float, dpi: int):
+                         hacts_file: str, labels_file: str, match_means_comp_file: str,
+                         batch_size: int, layer_size: int, output_dim: int, w_in: float,
+                         h_in: float, dpi: int):
     worker = FrameWorker(receive_queue, img_queue, ack_queue, ack_mode, hacts_file, labels_file,
-                         batch_size, layer_size, w_in, h_in, dpi)
+                         match_means_comp_file, batch_size, layer_size, output_dim, w_in, h_in, dpi)
     worker.work()
 
 class FrameWorkerConnection:
@@ -347,6 +379,7 @@ class LayerWorker:
         anim (MPAnimation): the animation
         frame_workers (list[FrameWorkerConnection]): the spawned frame workers
 
+        worker_id (str): the id for this worker
         dpi (int or float): the number of pixels per inch
         frame_size (tuple[float, float]): the number of inches in width / height
         fps (int): the number of frames per second
@@ -355,9 +388,19 @@ class LayerWorker:
         batch_size (int): how many points are being sent through the network
         layer_name (str): the name of the layer we are handling
         layer_size (int): the number of nodes in our layer
+        output_dim (int): the number of labels / the output embedded dim
         sample_labels_file (str): the file that contains the sample labels
         hid_acts_file (str): the file that contains the hidden activations
 
+        match_mean_comps_file (str): the file that we are storing the match-means info in
+        match_mean_comps (np.memmap): the memmap'd means_comp
+        match_mean_comps_torch (torch.tensor): torch tensor backed by match_means_comp
+
+        hidacts (np.memmap): the memory mapped hid_acts file
+        hidacts_torch (torch.tensor): the tensor backed with hidacts
+
+        sample_labels (np.memmap): the memory mapped sample labels file
+        sample_labels_torch (torch.tensor): the tensor backed with sample_labaels
     """
 
     def __init__(self, receive_queue: Queue, send_queue: Queue):
@@ -368,6 +411,7 @@ class LayerWorker:
         self.anim = None
         self.frame_workers = None
 
+        self.worker_id = None
         self.dpi = None
         self.frame_size = None
         self.fps = None
@@ -376,8 +420,18 @@ class LayerWorker:
         self.batch_size = None
         self.layer_name = None
         self.layer_size = None
+        self.output_dim = None
         self.sample_labels_file = None
         self.hid_acts_file = None
+
+        self.match_mean_comps_file = None
+        self.match_mean_comps = None
+        self.match_mean_comps_torch = None
+
+        self.hidacts = None
+        self.hidacts_torch = None
+        self.sample_labels = None
+        self.sample_labels_torch = None
 
     def _read_start(self):
         """Reads the start message from the receive queue
@@ -387,6 +441,7 @@ class LayerWorker:
         if msg[0] != 'start':
             raise RuntimeError(f'expected start message got {msg} ({msg[0]} != \'start\')')
 
+        self.worker_id = str(msg[1]['worker_id'])
         self.dpi = msg[1]['dpi']
         self.frame_size = msg[1]['frame_size']
         self.fps = msg[1]['fps']
@@ -396,6 +451,7 @@ class LayerWorker:
         self.batch_size = msg[1]['batch_size']
         self.layer_name = msg[1]['layer_name']
         self.layer_size = msg[1]['layer_size']
+        self.output_dim = msg[1]['output_dim']
         self.sample_labels_file = msg[1]['sample_labels_file']
         self.hid_acts_file = msg[1]['hid_acts_file']
 
@@ -403,6 +459,36 @@ class LayerWorker:
             raise ValueError(f'expected frame_size is tuple, got {self.frame_size} (msg={msg})')
         if len(self.frame_size) != 2:
             raise ValueError(f'expected frame_size has len 2, got {len(self.frame_size)}')
+
+    def _prepare_mmaps(self):
+        output_folder = os.path.dirname(self.outfile)
+        self.match_mean_comps_file = os.path.join(output_folder, f'mean_comps_{self.worker_id}.bin')
+        self.match_mean_comps = np.memmap(
+            self.match_mean_comps_file, dtype='uint8', mode='w+',
+            shape=(pca_ff.PCTrajectoryFFSnapshotMatchInfo.get_expected_len(3, self.output_dim)))
+        self.match_mean_comps_torch = torch.from_numpy(self.match_mean_comps)
+
+        self.hidacts = np.memmap(self.hid_acts_file, dtype='float64',
+                                     mode='r', shape=(self.batch_size, self.layer_size))
+        self.hidacts_torch = torch.from_numpy(self.hidacts)
+
+        self.sample_labels = np.memmap(self.sample_labels_file, dtype='int32',
+                                       mode='r', shape=(self.batch_size,))
+        self.sample_labels_torch = torch.from_numpy(self.sample_labels)
+
+    def _update_match(self):
+        pc_vals, pc_vecs = pca.get_hidden_pcs(self.hidacts_torch, 3)
+        projected = pca.project_to_pcs(self.hidacts_torch, pc_vecs, out=None)
+        snap = pca_ff.PCTrajectoryFFSnapshot(pc_vecs, pc_vals, projected, self.sample_labels_torch)
+        match_info = pca_ff.PCTrajectoryFFSnapshotMatchInfo.create(snap)
+        self.match_mean_comps[:] = match_info.mean_comps[:]
+
+    def _close_mmaps(self):
+        self.match_mean_comps_torch = None
+        self.match_mean_comps._mmap.close() # pylint: disable=protected-access
+        self.match_mean_comps = None
+        os.remove(self.match_mean_comps_file)
+        self.match_mean_comps_file = None
 
     def _spawn_workers(self):
         """Initializes the animation and spawns the frame workers
@@ -422,7 +508,7 @@ class LayerWorker:
             proc = Process(target=_frame_worker_target,
                            args=(jobq, imgq, ackq, 'asap', self.hid_acts_file,
                                  self.sample_labels_file, self.batch_size,
-                                 self.layer_size, self.frame_size[0],
+                                 self.layer_size, self.output_dim, self.frame_size[0],
                                  self.frame_size[1], self.dpi))
             self.anim.register_queue(imgq)
             conn = FrameWorkerConnection(proc, jobq, ackq)
@@ -484,10 +570,12 @@ class LayerWorker:
     def work(self):
         """Handles the work required to render this layer"""
         self._read_start()
+        self._prepare_mmaps()
         self._spawn_workers()
 
         rot_time = 0
         frame_counter = 0
+        work_counter = 0
         last_work_time = time.time()
         while True:
             if not self.receive_queue.empty():
@@ -503,6 +591,9 @@ class LayerWorker:
                 break
             if msg[0] != 'hidacts':
                 raise RuntimeError(f'unexpected msg: {msg} (expected hidacts or hidacts_done)')
+            if work_counter % 100 == 0:
+                self._update_match()
+            work_counter += 1
             epoch = msg[1]
             for _ in range(FRAMES_PER_TRAIN):
                 rot_prog = ROTATION_EASING(rot_time / MS_PER_ROTATION)
@@ -514,6 +605,7 @@ class LayerWorker:
             self.send_queue.put(('hidacts',))
 
         self._shutdown_all()
+        self._close_mmaps()
         self.send_queue.put(('videos_done',))
 
         while not self.send_queue.empty():
@@ -668,10 +760,12 @@ class PCAThroughTrain:
             send_queue.put((
                 'start',
                 {
+                    'worker_id': str(lyr),
                     'outfile': os.path.join(self.output_folder, f'layer_{lyr}.mp4'),
                     'batch_size': self.batch_size,
                     'layer_name': self.layer_names[lyr],
                     'layer_size': layer_sizes[lyr],
+                    'output_dim': context.test_pwl.output_dim,
                     'sample_labels_file': self.sample_labels_file,
                     'hid_acts_file': self.hid_acts_files[lyr],
                     'dpi': self.dpi,
