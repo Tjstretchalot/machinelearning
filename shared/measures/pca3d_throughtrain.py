@@ -477,17 +477,11 @@ class LayerWorker:
         self.sample_labels_torch = torch.from_numpy(self.sample_labels)
 
     def _update_match(self):
-        print(f'layer worker get_hidden_pcs; self.hidacts_torch.shape={self.hidacts_torch.shape}')
         pc_vals, pc_vecs = pca.get_hidden_pcs(self.hidacts_torch, 3)
-        print('layer worker project_to_pcs')
         projected = pca.project_to_pcs(self.hidacts_torch, pc_vecs, out=None)
-        print(f'layer worker create snap (pc_vals.shape={pc_vals.shape})')
         snap = pca_ff.PCTrajectoryFFSnapshot(pc_vecs, pc_vals, projected, self.sample_labels_torch)
-        print('layer worker create match')
         match_info = pca_ff.PCTrajectoryFFSnapshotMatchInfo.create(snap)
-        print(f'layer worker mmap mean_comps; trying to map shape {match_info.mean_comps.shape} dtype {match_info.mean_comps.dtype} into {self.match_mean_comps_torch.shape} dtype {self.match_mean_comps_torch.dtype}')
         self.match_mean_comps_torch[:] = match_info.mean_comps
-        print('layer worker _update_match finished successfully')
 
     def _close_mmaps(self):
         self.match_mean_comps_torch = None
@@ -579,7 +573,6 @@ class LayerWorker:
         self._prepare_mmaps()
         self._spawn_workers()
 
-        print('layer worker started')
         rot_time = 0
         frame_counter = 0
         work_counter = 0
@@ -598,11 +591,8 @@ class LayerWorker:
                 break
             if msg[0] != 'hidacts':
                 raise RuntimeError(f'unexpected msg: {msg} (expected hidacts or hidacts_done)')
-            print('layer worker received work')
             if work_counter % 100 == 0:
-                print('layer worker updating matching')
                 self._update_match()
-                print('layer worker updated match')
             work_counter += 1
             epoch = msg[1]
             for _ in range(FRAMES_PER_TRAIN):
@@ -612,7 +602,6 @@ class LayerWorker:
                 frame_counter += 1
                 rot_time = (rot_time + FRAME_TIME) % MS_PER_ROTATION
             self._wait_all_acks()
-            print('layer worker acking')
             self.send_queue.put(('hidacts',))
 
         self._shutdown_all()
@@ -671,7 +660,6 @@ class WorkerConnection:
             raise ValueError(f'expected videos_done acknowledge')
         while self.process.is_alive():
             time.sleep(0.01)
-        print('layer worker closed gracefully')
 
 class PCAThroughTrain:
     """This is setup to be added to the GenericTrainer directly. This will spawn

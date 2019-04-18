@@ -241,9 +241,7 @@ class PCTrajectoryFFSnapshotMatchInfo:
     def get_expected_len(num_pcs: int, output_dim: int) -> int:
         """Determines the expected number of comparison when there are the specified
         number of pcs and labels"""
-        res = (num_pcs * output_dim * (output_dim - 1)) // 2
-        print(f'get_expected_len({num_pcs}, {output_dim}) -> {res}')
-        return res
+        return (num_pcs * output_dim * (output_dim - 1)) // 2
 
     @staticmethod
     def get_offset_static(output_dim: int, pc_ind: int, lbl1: int, lbl2: int) -> int:
