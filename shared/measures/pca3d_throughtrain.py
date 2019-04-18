@@ -54,7 +54,7 @@ videos_done:
     sent from worker thread to main thread to confirm video finished
 """
 
-FRAMES_PER_TRAIN = 4
+FRAMES_PER_TRAIN = 2
 MS_PER_ROTATION = 3000
 ROTATION_EASING = mytweening.smoothstep
 FPS = 60
@@ -109,6 +109,8 @@ class FrameWorker:
         h_in (float): height in inches
         dpi (int): the dpi we use
 
+        last_job (float): the last time we received a job
+
         state (int):
             0 = haven't started yet
             1 = awaiting receive_queue message
@@ -147,6 +149,7 @@ class FrameWorker:
         self.h_in = h_in
         self.dpi = dpi
 
+        self.last_job = time.time()
         self.state = 0
 
     def _open_mmaps(self):
@@ -234,13 +237,23 @@ class FrameWorker:
         """
 
         if self.state == 0:
+            print('frame worker openning mmaps')
             self._open_mmaps()
             self.state = 1
             return True
         if self.state == 1:
             if no_wait and self.receive_queue.empty():
+                if self.last_job is not None:
+                    if time.time() - self.last_job > 15000:
+                        raise RuntimeError(f'frame worker timed out while waiting for job')
+                else:
+                    self.last_job = time.time()
+
                 return True
+            print('frame worker waiting on job')
             msg = self.receive_queue.get(timeout=15)
+            print('frame worker received job')
+            self.last_job = None
             if msg[0] == 'end':
                 self._close_mmaps()
                 self._close_figure()
