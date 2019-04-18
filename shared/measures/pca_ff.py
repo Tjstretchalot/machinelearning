@@ -351,11 +351,11 @@ def match_snapshots(match_snap: PCTrajectoryFFSnapshot, change_snap: PCTrajector
 
     means_by_label_match = torch.zeros((num_labels, num_pcs), dtype=match_snap.projected_samples.dtype)
     for lbl in range(num_labels):
-        means_by_label_match[lbl] = match_snap.principal_vectors[match_snap.projected_sample_labels == lbl].mean(axis=1)
+        means_by_label_match[lbl] = match_snap.projected_samples[match_snap.projected_sample_labels == lbl].mean(axis=1)
 
     means_by_label_change = torch.zeros((num_labels, num_pcs), dtype=change_snap.projected_samples.dtype)
     for lbl in range(num_labels):
-        means_by_label_change[lbl] = change_snap.principal_vectors[change_snap.projected_sample_labels == lbl].mean(axis=1)
+        means_by_label_change[lbl] = change_snap.projected_samples[change_snap.projected_sample_labels == lbl].mean(axis=1)
 
     result = []
     for pc in range(match_snap.num_pcs): # pylint: disable=invalid-name
