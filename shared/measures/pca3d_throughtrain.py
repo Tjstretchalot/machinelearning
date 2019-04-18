@@ -274,7 +274,7 @@ class FrameWorker:
             if no_wait and self.receive_queue.empty():
                 return True
             msg = self.receive_queue.get() # a 15 second timeout gets hit here? I think side effect of too many workers?
-            self.last_job = None
+            self.last_job = time.time()
             if msg[0] == 'end':
                 self._close_mmaps()
                 self._close_figure()
@@ -573,6 +573,7 @@ class LayerWorker:
         self._prepare_mmaps()
         self._spawn_workers()
 
+        print('layer worker started')
         rot_time = 0
         frame_counter = 0
         work_counter = 0
@@ -591,8 +592,11 @@ class LayerWorker:
                 break
             if msg[0] != 'hidacts':
                 raise RuntimeError(f'unexpected msg: {msg} (expected hidacts or hidacts_done)')
+            print('layer worker received work')
             if work_counter % 100 == 0:
+                print('layer worker updating matching')
                 self._update_match()
+                print('layer worker updated match')
             work_counter += 1
             epoch = msg[1]
             for _ in range(FRAMES_PER_TRAIN):
@@ -602,6 +606,7 @@ class LayerWorker:
                 frame_counter += 1
                 rot_time = (rot_time + FRAME_TIME) % MS_PER_ROTATION
             self._wait_all_acks()
+            print('layer worker acking')
             self.send_queue.put(('hidacts',))
 
         self._shutdown_all()
