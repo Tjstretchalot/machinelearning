@@ -169,7 +169,7 @@ class FrameWorker:
 
     def _get_snapshot(self):
         pc_vals, pc_vecs = pca.get_hidden_pcs(self.hidden_acts_torch, 3)
-        projected = pca.project_to_pcs(self.hidden_acts, pc_vecs, out=None)
+        projected = pca.project_to_pcs(self.hidden_acts_torch, pc_vecs, out=None)
         snap = pca_ff.PCTrajectoryFFSnapshot(pc_vecs, pc_vals, projected, self.sample_labels_torch)
 
         if self.snapshot is not None:
