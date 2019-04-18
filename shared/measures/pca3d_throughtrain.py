@@ -242,14 +242,8 @@ class FrameWorker:
             return True
         if self.state == 1:
             if no_wait and self.receive_queue.empty():
-                if self.last_job is not None:
-                    if time.time() - self.last_job > 15000:
-                        raise RuntimeError(f'frame worker timed out while waiting for job')
-                else:
-                    self.last_job = time.time()
-
                 return True
-            msg = self.receive_queue.get(timeout=15)
+            msg = self.receive_queue.get() # a 15 second timeout gets hit here? I think side effect of too many workers?
             self.last_job = None
             if msg[0] == 'end':
                 self._close_mmaps()
