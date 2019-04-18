@@ -235,7 +235,6 @@ class FrameWorker:
 
         if self.state == 0:
             self._open_mmaps()
-            self._init_figure()
             self.state = 1
             return True
         if self.state == 1:
@@ -254,6 +253,8 @@ class FrameWorker:
             self._get_snapshot()
             if self.ack_mode == 'asap':
                 self.ack_queue.put(('ack',))
+            if self.figure is None:
+                self._init_figure()
             self._setup_frame()
             frm = self._create_frame()
             self.img_queue.put((self.index, frm))
