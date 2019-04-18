@@ -229,6 +229,8 @@ class FrameWorker:
         while self.do_work():
             pass
 
+        print('frame worker shutting down')
+
     def do_work(self, no_wait=False) -> bool:
         """Performs a bit of work until we have no more work to do
 
@@ -265,6 +267,7 @@ class FrameWorker:
         if self.state == 2:
             self._get_snapshot()
             if self.ack_mode == 'asap':
+                print('frame worker acking (mode=asap)')
                 self.ack_queue.put(('ack',))
             if self.figure is None:
                 self._init_figure()
@@ -468,7 +471,11 @@ class LayerWorker:
             if time.time() - start > 15000:
                 raise RuntimeError(f'timeout while waiting for frame workers to acknowledge frame')
 
+            print('layer worker doing some work while waiting on frame workers to do stuff')
+            work_start = time.time()
             self.anim.do_work()
+            work_time = time.time() - work_start
+            print(f'layer worker did some work (took {work_time} seconds)')
             time.sleep(0)
 
     def _shutdown_all(self):
