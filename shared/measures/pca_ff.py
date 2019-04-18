@@ -225,7 +225,7 @@ class PCTrajectoryFFSnapshotMatchInfo:
         for lbl in range(output_dim):
             mask = snapshot.projected_sample_labels == lbl
             for pc_ind in range(num_pcs):
-                means_by_label_and_pc[pc_ind, lbl] = snapshot.projected_samples[pc_ind, mask].mean()
+                means_by_label_and_pc[pc_ind, lbl] = snapshot.projected_samples[mask, pc_ind].mean()
 
         counter = 0
         for pc_ind in range(num_pcs):
