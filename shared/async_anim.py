@@ -235,6 +235,7 @@ class MPAnimation:
 
         bitrate = mpl.rcParams['animation.bitrate']
 
+        print(f'expected frame size: {self.frame_size} = {self.frame_size[0] * self.frame_size[1]}')
         args = [ffmpeg_path, '-f', 'rawvideo', '-vcodec', 'rawvideo',
                 '-s', f'{self.frame_size[0]}x{self.frame_size[1]}',
                 '-pix_fmt', frame_format, '-r', str(self.fps),
@@ -248,7 +249,7 @@ class MPAnimation:
 
 
         self.ffmpeg_proc = sp.Popen(
-            args, shell=False, stdout=sp.PIPE, stderr=sp.PIPE,
+            args, shell=False, stdout=None, stderr=None,
             stdin=sp.PIPE, creationflags=subprocess_creation_flags)
 
     def _cleanup_ffmpeg(self):
