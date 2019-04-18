@@ -182,7 +182,7 @@ class MPAnimation:
             raise ValueError(f'expected frame_size is (width inches, height inches) but len(frame_size)={len(frame_size)}')
         if not isinstance(frame_size[0], (int, float)) or not isinstance(frame_size[1], (int, float)):
             raise ValueError(f'expected frame_size is (width inches, height inches) but not both numbers (got {frame_size})')
-        frame_size = (float(frame_size[0]), float(frame_size[1]))
+        frame_size = (int(frame_size[0]), int(frame_size[1]))
         if not isinstance(fps, int):
             raise ValueError(f'expected fps is int, got {fps} (type={type(fps)})')
         if not isinstance(outfile, str):
