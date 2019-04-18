@@ -144,7 +144,7 @@ class FrameWorker:
         self.axtitle = None
         self.scatter = None
 
-        self.frame_format = str(mpl.rcParams['animation.frame_format'])
+        self.frame_format = 'rgba' #str(mpl.rcParams['animation.frame_format'])
         self.w_in = w_in
         self.h_in = h_in
         self.dpi = dpi

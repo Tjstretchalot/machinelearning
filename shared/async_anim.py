@@ -235,10 +235,9 @@ class MPAnimation:
 
         bitrate = mpl.rcParams['animation.bitrate']
 
-        print(f'expected frame size: {self.frame_size} = {self.frame_size[0] * self.frame_size[1]}')
         args = [ffmpeg_path, '-f', 'rawvideo', '-vcodec', 'rawvideo',
                 '-s', f'{self.frame_size[0]}x{self.frame_size[1]}',
-                '-pix_fmt', frame_format, '-r', str(self.fps),
+                '-pix_fmt', 'rgba', '-r', str(self.fps),
                 '-loglevel', 'quiet',
                 '-i', 'pipe:0']
                 #'-vcodec', 'h264', '-pix_fmt', 'yuv420p']
@@ -247,9 +246,7 @@ class MPAnimation:
             args.extend(['-b', '%dk' % bitrate])
         args.extend(['-y', self.outfile])
 
-        print(f'args: {args}')
         rargs = ' '.join(args)
-        print(f'runnable: {rargs}')
         self.ffmpeg_proc = sp.Popen(
             args, shell=False, stdout=None, stderr=None,
             stdin=sp.PIPE, creationflags=subprocess_creation_flags)
@@ -339,11 +336,9 @@ class MPAnimation:
         img_bytes = self.ooo_frames[self.next_frame]
         del self.ooo_frames[self.next_frame]
 
-        print(f'writing frame to ffmpeg; frame size is {len(img_bytes)}; chunking into 1kb')
-        for kb_start in range(0, len(img_bytes), 1024):
-            self.ffmpeg_proc.stdin.write(img_bytes[kb_start:kb_start+1024])
-            print('sent one kb')
-        print('finished writing frame')
+        block_size = 1024*4
+        for kb_start in range(0, len(img_bytes), block_size):
+            self.ffmpeg_proc.stdin.write(img_bytes[kb_start:kb_start+block_size])
 
         self.next_frame += 1
         return True
