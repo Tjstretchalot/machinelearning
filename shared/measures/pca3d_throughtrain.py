@@ -241,8 +241,7 @@ class FrameWorker:
         if self.state == 1:
             if no_wait and self.receive_queue.empty():
                 return True
-            else:
-                msg = self.receive_queue.get()
+            msg = self.receive_queue.get(timeout=15)
             if msg[0] == 'end':
                 self._close_mmaps()
                 self._close_figure()
@@ -299,7 +298,7 @@ class FrameWorkerConnection:
     def wait_ack(self):
         """Waits for the acknowledgement of the job from the frame worker"""
         if self.awaiting_ack:
-            self.ack_queue.get()
+            self.ack_queue.get(timeout=15)
             self.awaiting_ack = False
 
     def send_job(self, rotation: float, title: str, index: int):
@@ -379,7 +378,7 @@ class LayerWorker:
         """Reads the start message from the receive queue
         """
 
-        msg = self.receive_queue.get()
+        msg = self.receive_queue.get(timeout=15)
         if msg[0] != 'start':
             raise RuntimeError(f'expected start message got {msg} ({msg[0]} != \'start\')')
 
@@ -524,7 +523,7 @@ class WorkerConnection:
     def check_ack(self):
         """Fetches a hidacts acknowledge message from the receive queue if appropriate"""
         if self.expecting_hidacts_ack:
-            msg = self.receive_queue.get()
+            msg = self.receive_queue.get(timeout=15)
             if msg[0] != 'hidacts':
                 raise ValueError(f'expected hidacts response, got {msg}')
 
@@ -543,7 +542,7 @@ class WorkerConnection:
 
     def end_finish(self):
         """Should be called after start_finish to wait until the worker shutdown"""
-        msg = self.receive_queue.get()
+        msg = self.receive_queue.get(timeout=15)
         if msg[0] != 'videos_done':
             raise ValueError(f'expected videos_done acknowledge')
         while self.process.is_alive():
