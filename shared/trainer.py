@@ -477,6 +477,9 @@ class ZipDirOnFinish:
 
     def finished(self, context: GenericTrainingContext, result: dict) -> None: #pylint: disable=unused-argument
         """Zips the directory"""
+        if not os.path.exists(self.dirpath):
+            return
+
         if os.path.exists(self.dirpath + '.zip'):
             os.remove(self.dirpath + '.zip')
         zipdir(self.dirpath)
