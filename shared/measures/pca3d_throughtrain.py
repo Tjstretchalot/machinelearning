@@ -485,7 +485,7 @@ class LayerWorker:
         snap = pca_ff.PCTrajectoryFFSnapshot(pc_vecs, pc_vals, projected, self.sample_labels_torch)
         print('layer worker create match')
         match_info = pca_ff.PCTrajectoryFFSnapshotMatchInfo.create(snap)
-        print(f'layer worker mmap mean_comps; trying to map shape {match_info.mean_comps.shape} dtype {match_info.mean_comps.dtype}')
+        print(f'layer worker mmap mean_comps; trying to map shape {match_info.mean_comps.shape} dtype {match_info.mean_comps.dtype} into {self.match_mean_comps_torch.shape} dtype {self.match_mean_comps_torch.dtype}')
         self.match_mean_comps_torch[:] = match_info.mean_comps
         print('layer worker _update_match finished successfully')
 
