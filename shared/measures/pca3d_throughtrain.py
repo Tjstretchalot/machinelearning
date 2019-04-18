@@ -254,9 +254,12 @@ class FrameWorker:
             self._get_snapshot()
             if self.ack_mode == 'asap':
                 self.ack_queue.put(('ack',))
+            print('frame worker setting up frame')
             self._setup_frame()
             frm = self._create_frame()
+            print('frame worker sending frame')
             self.img_queue.put((self.index, frm))
+            print(f'frame worker finished frame; ack_mode = {self.ack_mode}')
             if self.ack_mode == 'ready':
                 self.ack_queue.put(('ack',))
             self.state = 1
@@ -424,16 +427,22 @@ class LayerWorker:
             self.frame_workers.append(conn)
 
     def _dispatch_frame(self, rotation: float, title: str, index: int):
+        start = time.time()
         while True:
             for worker in self.frame_workers:
                 worker.check_ack()
                 if not worker.awaiting_ack:
                     worker.send_job(rotation, title, index)
                     return
+
+            if time.time() - start > 15000:
+                raise RuntimeError(f'timeout occurred while trying to dispatch frame')
+
             self.anim.do_work()
             time.sleep(0)
 
     def _wait_all_acks(self):
+        start = time.time()
         while True:
             waiting_ack = False
             for worker in self.frame_workers:
@@ -442,6 +451,10 @@ class LayerWorker:
 
             if not waiting_ack:
                 break
+
+            if time.time() - start > 15000:
+                raise RuntimeError(f'timeout while waiting for frame workers to acknowledge frame')
+
             self.anim.do_work()
             time.sleep(0)
 
@@ -483,10 +496,13 @@ class LayerWorker:
             if msg[0] != 'hidacts':
                 raise RuntimeError(f'unexpected msg: {msg} (expected hidacts or hidacts_done)')
             epoch = msg[1]
+            print('received hidacts')
             for _ in range(FRAMES_PER_TRAIN):
                 rot_prog = ROTATION_EASING(rot_time / MS_PER_ROTATION)
                 rot = 45 + 360 * rot_prog
+                print(f'dispatching frame, rot={rot}, layer_name={self.layer_name}, frame_counter={frame_counter}')
                 self._dispatch_frame(rot, f'{self.layer_name} (epoch {epoch})', frame_counter)
+                print(f'dispatched frame, rot={rot}, layer_name={self.layer_name}, frame_counter={frame_counter}')
                 frame_counter += 1
                 rot_time = (rot_time + FRAME_TIME) % MS_PER_ROTATION
             self._wait_all_acks()
