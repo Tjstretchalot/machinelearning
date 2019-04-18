@@ -240,8 +240,8 @@ class MPAnimation:
                 '-s', f'{self.frame_size[0]}x{self.frame_size[1]}',
                 '-pix_fmt', frame_format, '-r', str(self.fps),
                 '-loglevel', 'quiet',
-                '-i', 'pipe:0',
-                '-vcodec', 'h264', '-pix_fmt', 'yuv420p']
+                '-i', 'pipe:0']
+                #'-vcodec', 'h264', '-pix_fmt', 'yuv420p']
 
         if bitrate > 0:
             args.extend(['-b', '%dk' % bitrate])
