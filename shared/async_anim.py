@@ -336,7 +336,7 @@ class MPAnimation:
         img_bytes = self.ooo_frames[self.next_frame]
         del self.ooo_frames[self.next_frame]
 
-        print('writing frame to ffmpeg')
+        print(f'writing frame to ffmpeg; frame size is {len(img_bytes)}')
         self.ffmpeg_proc.stdin.write(img_bytes)
         print('finished writing frame')
 
