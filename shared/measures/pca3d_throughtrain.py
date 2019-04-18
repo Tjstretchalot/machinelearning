@@ -54,9 +54,9 @@ videos_done:
     sent from worker thread to main thread to confirm video finished
 """
 
-FRAMES_PER_TRAIN = 2
-MS_PER_ROTATION = 3000
-ROTATION_EASING = mytweening.smoothstep
+FRAMES_PER_TRAIN = 4
+MS_PER_ROTATION = 10000
+ROTATION_EASING = mytweening.smootheststep
 FPS = 60
 FRAME_TIME = 1000.0 / FPS
 FRAME_SIZE = (19.2, 10.8) # oh baby
