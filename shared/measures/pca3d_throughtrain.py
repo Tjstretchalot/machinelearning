@@ -483,10 +483,14 @@ class LayerWorker:
 
         rot_time = 0
         frame_counter = 0
+        last_work_time = time.time()
         while True:
             if not self.receive_queue.empty():
                 msg = self.receive_queue.get_nowait()
+                last_work_time = time.time()
             else:
+                if time.time() - last_work_time > 15000:
+                    raise RuntimeError(f'layer worker received no work to do and timed out')
                 self.anim.do_work()
                 time.sleep(0)
                 continue
@@ -652,7 +656,7 @@ class PCAThroughTrain:
             send_queue = Queue()
             receive_queue = Queue()
             proc = Process(target=_worker_target, args=(send_queue, receive_queue)) # swapped
-            proc.daemon = True
+            # cannot set to daemonic - it has children!
             proc.start()
 
             send_queue.put((
