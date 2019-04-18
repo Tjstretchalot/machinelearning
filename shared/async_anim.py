@@ -337,8 +337,10 @@ class MPAnimation:
         img_bytes = self.ooo_frames[self.next_frame]
         del self.ooo_frames[self.next_frame]
 
-        print(f'writing frame to ffmpeg; frame size is {len(img_bytes)}')
-        self.ffmpeg_proc.stdin.write(img_bytes)
+        print(f'writing frame to ffmpeg; frame size is {len(img_bytes)}; chunking into 1kb')
+        for kb_start in range(0, len(img_bytes), 1024):
+            self.ffmpeg_proc.stdin.write(img_bytes[kb_start:kb_start+1024])
+            print('sent one kb')
         print('finished writing frame')
 
         self.next_frame += 1
