@@ -481,7 +481,7 @@ class LayerWorker:
         projected = pca.project_to_pcs(self.hidacts_torch, pc_vecs, out=None)
         snap = pca_ff.PCTrajectoryFFSnapshot(pc_vecs, pc_vals, projected, self.sample_labels_torch)
         match_info = pca_ff.PCTrajectoryFFSnapshotMatchInfo.create(snap)
-        self.match_mean_comps[:] = match_info.mean_comps[:]
+        self.match_mean_comps_torch[:] = match_info.mean_comps[:]
 
     def _close_mmaps(self):
         self.match_mean_comps_torch = None
@@ -507,9 +507,9 @@ class LayerWorker:
             ackq = Queue()
             proc = Process(target=_frame_worker_target,
                            args=(jobq, imgq, ackq, 'asap', self.hid_acts_file,
-                                 self.sample_labels_file, self.batch_size,
-                                 self.layer_size, self.output_dim, self.frame_size[0],
-                                 self.frame_size[1], self.dpi))
+                                 self.sample_labels_file, self.match_mean_comps_file,
+                                 self.batch_size, self.layer_size, self.output_dim,
+                                 self.frame_size[0], self.frame_size[1], self.dpi))
             self.anim.register_queue(imgq)
             conn = FrameWorkerConnection(proc, jobq, ackq)
             self.frame_workers.append(conn)
