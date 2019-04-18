@@ -215,7 +215,7 @@ class PCTrajectoryFFSnapshotMatchInfo:
         """Creates the match information for the given snapshot"""
         num_pcs = snapshot.num_pcs
         layer_size = snapshot.layer_size
-        output_dim = snapshot.projected_sample_labels.max()
+        output_dim = snapshot.projected_sample_labels.max().item()
 
         mean_comps = torch.zeros(PCTrajectoryFFSnapshotMatchInfo.get_expected_len(num_pcs, output_dim),
                                   dtype=torch.uint8)
