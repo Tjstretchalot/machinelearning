@@ -226,6 +226,8 @@ class FrameWorker:
         while self.do_work():
             pass
 
+        print('frame worker shutting down')
+
     def do_work(self, no_wait=False) -> bool:
         """Performs a bit of work until we have no more work to do
 
@@ -234,11 +236,14 @@ class FrameWorker:
         """
 
         if self.state == 0:
+            print('frame worker openning mmaps')
             self._open_mmaps()
             self._init_figure()
             self.state = 1
+            print('frame worker inited figure')
             return True
         if self.state == 1:
+            print('frame worker waiting on job')
             if no_wait and self.receive_queue.empty():
                 return True
             msg = self.receive_queue.get(timeout=15)
@@ -246,12 +251,16 @@ class FrameWorker:
                 self._close_mmaps()
                 self._close_figure()
                 self.state = 3
+                print('frame worker received end message')
                 return False
             self.rotation, self.title, self.index = msg[1:]
             self.state = 2
+            print('frame worker got job')
             return True
         if self.state == 2:
+            print('frame worker calculating pcs')
             self._get_snapshot()
+            print('frame worker calculated pcs')
             if self.ack_mode == 'asap':
                 self.ack_queue.put(('ack',))
             print('frame worker setting up frame')
@@ -505,7 +514,9 @@ class LayerWorker:
                 print(f'dispatched frame, rot={rot}, layer_name={self.layer_name}, frame_counter={frame_counter}')
                 frame_counter += 1
                 rot_time = (rot_time + FRAME_TIME) % MS_PER_ROTATION
+            print('waiting on acks from frame workers')
             self._wait_all_acks()
+            print('got acks from frame workers; acking main thread from layer worker')
             self.send_queue.put(('hidacts',))
 
         self._shutdown_all()
