@@ -119,7 +119,8 @@ class PerfStats:
                 raise RuntimeError(f'exceeded max depth with region {region_name}')
             self.children[region_name] = PerfStats(region_name, self.depth + 1)
 
-        self.children[region_name]._start() # pylint: disable=protected-access
+        self.active_child = self.children[region_name]
+        self.active_child._start() # pylint: disable=protected-access
 
     def exit(self) -> typing.Tuple[bool, bool]:
         """Closes the most recent region entered. The first result is True if we closed
@@ -183,11 +184,11 @@ class PerfStats:
 
         for i in range(num_hotspots):
             print(f'{indent}{child_names[i]} - {child_means[i]}s', file=out)
-            self.children[i].print(out, level, indent + '  ')
+            self.children[child_names[i]].print(out, level, indent + '  ')
 
         sum_skipped = child_means[num_hotspots:].sum()
         other_regions = ', '.join(name for name in child_names[num_hotspots:])
-        print(f'{indent}Report skipped {sum_skipped}s in regions {other_regions}', file=out)
+        print(f'{indent}Report skipped {len(other_regions)} regions; {sum_skipped}s in regions {other_regions}', file=out)
 
 class LoggingPerfStats(PerfStats):
     """A simple extension to perf stats that logs to a given file regularly
@@ -231,8 +232,9 @@ class LoggingPerfStats(PerfStats):
     def _log(self):
         self.last_logged = time.time()
         ll_pretty = datetime.fromtimestamp(self.last_logged)
-        print(f'---Performance as of {ll_pretty}---')
+        print(f'---Performance as of {ll_pretty}---', file=self.loghandle)
         self.print(out=self.loghandle, level=self.level)
+        self.loghandle.flush()
         self.last_logged = time.time() # in case printing takes a while
 
     def close(self):
