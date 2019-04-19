@@ -23,6 +23,7 @@ from shared.async_anim import MPAnimation
 import shared.mytweening as mytweening
 import shared.measures.pca_ff as pca_ff
 import shared.measures.pca as pca
+from shared.perf_stats import LoggingPerfStats
 
 MESSAGE_STYLES = {'start', 'hidacts', 'hidacts_done', 'videos_done'}
 """
@@ -365,6 +366,7 @@ class FrameWorkerConnection:
         """Checks if the worker has shutdown yet"""
         return not self.process.is_alive()
 
+
 class LayerWorker:
     """Describes a worker instance. A worker manages rendering of a single layer. It itself
     will delegate to FrameWorkers which will render the individual frames.
@@ -386,6 +388,7 @@ class LayerWorker:
         frame_size (tuple[float, float]): the number of inches in width / height
         fps (int): the number of frames per second
         ffmpeg_logfile (str): the path to the logfile for ffmpeg
+        perf_logfile (str): the path we are saving performance info
         outfile (str): the path to the file we are saving the video
         batch_size (int): how many points are being sent through the network
         layer_name (str): the name of the layer we are handling
@@ -403,6 +406,8 @@ class LayerWorker:
 
         sample_labels (np.memmap): the memory mapped sample labels file
         sample_labels_torch (torch.tensor): the tensor backed with sample_labaels
+
+        perf (LoggingPerfStats): the layer worker performance tracker
     """
 
     def __init__(self, receive_queue: Queue, send_queue: Queue):
@@ -418,6 +423,7 @@ class LayerWorker:
         self.frame_size = None
         self.fps = None
         self.ffmpeg_logfile = None
+        self.perf_logfile = None
         self.outfile = None
         self.batch_size = None
         self.layer_name = None
@@ -435,6 +441,8 @@ class LayerWorker:
         self.sample_labels = None
         self.sample_labels_torch = None
 
+        self.perf = None
+
     def _read_start(self):
         """Reads the start message from the receive queue
         """
@@ -448,6 +456,7 @@ class LayerWorker:
         self.frame_size = msg[1]['frame_size']
         self.fps = msg[1]['fps']
         self.ffmpeg_logfile = msg[1]['ffmpeg_logfile']
+        self.perf_logfile = msg[1]['perf_logfile']
         self.num_frame_workers = msg[1]['num_frame_workers']
         self.outfile = msg[1]['outfile']
         self.batch_size = msg[1]['batch_size']
@@ -461,6 +470,8 @@ class LayerWorker:
             raise ValueError(f'expected frame_size is tuple, got {self.frame_size} (msg={msg})')
         if len(self.frame_size) != 2:
             raise ValueError(f'expected frame_size has len 2, got {len(self.frame_size)}')
+
+        self.perf = LoggingPerfStats(self.worker_id, self.perf_logfile)
 
     def _prepare_mmaps(self):
         output_folder = os.path.dirname(self.outfile)
@@ -530,7 +541,7 @@ class LayerWorker:
             if time.time() - start > 15000:
                 raise RuntimeError(f'timeout occurred while trying to dispatch frame')
 
-            self.anim.do_work()
+            self._busy_work()
             time.sleep(0)
 
     def _wait_all_acks(self):
@@ -547,7 +558,7 @@ class LayerWorker:
             if time.time() - start > 15000:
                 raise RuntimeError(f'timeout while waiting for frame workers to acknowledge frame')
 
-            self.anim.do_work()
+            self._busy_work()
             time.sleep(0)
 
     def _shutdown_all(self):
@@ -562,12 +573,18 @@ class LayerWorker:
 
             if not waiting_end:
                 break
-            self.anim.do_work()
+            self._busy_work()
             time.sleep(0)
 
         while self.anim.process_frame():
             pass
         self.anim.finish()
+
+    def _busy_work(self):
+        """This function can (and must be called) whenever there is time available"""
+        self.perf.enter('ANIM_DO_WORK')
+        self.anim.do_work()
+        self.perf.exit()
 
     def work(self):
         """Handles the work required to render this layer"""
@@ -579,14 +596,16 @@ class LayerWorker:
         frame_counter = 0
         work_counter = 0
         last_work_time = time.time()
+        self.perf.enter('RECEIVE_QUEUE')
         while True:
             if not self.receive_queue.empty():
                 msg = self.receive_queue.get_nowait()
+                self.perf.exit()
                 last_work_time = time.time()
             else:
                 if time.time() - last_work_time > 15000:
                     raise RuntimeError(f'layer worker received no work to do and timed out')
-                self.anim.do_work()
+                self._busy_work()
                 time.sleep(0)
                 continue
             if msg[0] == 'hidacts_done':
@@ -594,19 +613,28 @@ class LayerWorker:
             if msg[0] != 'hidacts':
                 raise RuntimeError(f'unexpected msg: {msg} (expected hidacts or hidacts_done)')
             if work_counter % 100 == 0:
+                self.perf.enter('UPDATE_MATCH')
                 self._update_match()
+                self.perf.exit()
             work_counter += 1
             epoch = msg[1]
             for _ in range(FRAMES_PER_TRAIN):
                 rot_prog = ROTATION_EASING(rot_time / MS_PER_ROTATION)
                 rot = 45 + 360 * rot_prog
+                self.perf.enter('DISPATCH_FRAME')
                 self._dispatch_frame(rot, f'{self.layer_name} (epoch {epoch})', frame_counter)
+                self.perf.exit()
                 frame_counter += 1
                 rot_time = (rot_time + FRAME_TIME) % MS_PER_ROTATION
+            self.perf.enter('')
             self._wait_all_acks()
             self.send_queue.put(('hidacts',))
+            self.perf.enter('RECEIVE_QUEUE')
 
+        self.perf.enter('SHUTDOWN_ALL')
         self._shutdown_all()
+        self.perf.exit()
+        self.perf.close()
         self._close_mmaps()
         self.send_queue.put(('videos_done',))
 
@@ -773,6 +801,7 @@ class PCAThroughTrain:
                     'fps': self.fps,
                     'frame_size': self.frame_size,
                     'ffmpeg_logfile': os.path.join(self.output_folder, f'layer_{lyr}_ffmpeg.log'),
+                    'perf_logfile': os.path.join(self.output_folder, f'layer_{lyr}_perf.log'),
                     'num_frame_workers': NUM_FRAME_WORKERS
                 }
             ))
