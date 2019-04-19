@@ -626,8 +626,9 @@ class LayerWorker:
                 self.perf.exit()
                 frame_counter += 1
                 rot_time = (rot_time + FRAME_TIME) % MS_PER_ROTATION
-            self.perf.enter('')
+            self.perf.enter('WAIT_ALL_ACKS')
             self._wait_all_acks()
+            self.perf.exit()
             self.send_queue.put(('hidacts',))
             self.perf.enter('RECEIVE_QUEUE')
 
