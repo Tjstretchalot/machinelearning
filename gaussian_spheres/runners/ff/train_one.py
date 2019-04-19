@@ -14,6 +14,7 @@ import shared.measures.svm as svm
 import shared.measures.saturation as satur
 import shared.filetools
 import shared.npmp as npmp
+import shared.criterion as mycrits
 import torch
 from gaussian_spheres.pwl import GaussianSpheresPWLP
 import os
@@ -22,18 +23,18 @@ import os
 SAVEDIR = shared.filetools.savepath()
 
 FRAME_TIME = 200 # 16.67 for 60fps
-INPUT_DIM = 200
+INPUT_DIM = 5
 OUTPUT_DIM = 3
 
 def main():
     """Entry point"""
     pwl = GaussianSpheresPWLP.create(
         epoch_size=2700, input_dim=INPUT_DIM, output_dim=OUTPUT_DIM, cube_half_side_len=2,
-        num_clusters=90, std_dev=0.04, mean=0, min_sep=0.1
+        num_clusters=3, std_dev=0.2, mean=0, min_sep=0.4, force_split=True
     )
 
     layers_and_nonlins = (
-        (90, 'relu'),
+        (5, 'tanh'),
         #(90, 'tanh'),
         #(90, 'tanh'),
         #(90, 'linear'),
@@ -58,15 +59,15 @@ def main():
         train_pwl=pwl,
         test_pwl=pwl,
         teacher=FFTeacher(),
-        batch_size=45,
+        batch_size=5,
         learning_rate=0.001,
         optimizer=torch.optim.Adam([p for p in network.parameters() if p.requires_grad], lr=0.001),
-        criterion=torch.nn.CrossEntropyLoss()
+        criterion=mycrits.meansqerr#torch.nn.CrossEntropyLoss()
     )
 
     dig = npmp.NPDigestor('train_one', 35)
-    #pca_3d.plot_ff(pca_ff.find_trajectory(network, pwl, 3), os.path.join(SAVEDIR, 'pca_3d_start'), True,
-    #               digestor=dig, frame_time=FRAME_TIME, layer_names=layer_names)
+    pca_3d.plot_ff(pca_ff.find_trajectory(network, pwl, 3), os.path.join(SAVEDIR, 'pca_3d_start'), True,
+                   digestor=dig, frame_time=FRAME_TIME, layer_names=layer_names)
     dtt_training_dir = os.path.join(SAVEDIR, 'dtt')
     pca_training_dir = os.path.join(SAVEDIR, 'pca')
     pr_training_dir = os.path.join(SAVEDIR, 'pr')
@@ -75,17 +76,17 @@ def main():
     pca_throughtrain_dir = os.path.join(SAVEDIR, 'pca_throughtrain')
     (trainer
      .reg(tnr.EpochsTracker())
-     .reg(tnr.EpochsStopper(3))
+     .reg(tnr.EpochsStopper(300))
      .reg(tnr.DecayTracker())
      .reg(tnr.DecayStopper(8))
      .reg(tnr.LRMultiplicativeDecayer())
      .reg(tnr.DecayOnPlateau())
      .reg(tnr.AccuracyTracker(5, 1000, True))
      .reg(tnr.OnEpochCaller.create_every(satur.during_training(satur_training_dir, True, dig), skip=1000))
-     #.reg(tnr.OnEpochCaller.create_every(dtt.during_training_ff(dtt_training_dir, True, dig), skip=1000))
-     #.reg(tnr.OnEpochCaller.create_every(pca_ff.during_training(pca_training_dir, True, dig), skip=1000))
+     .reg(tnr.OnEpochCaller.create_every(dtt.during_training_ff(dtt_training_dir, True, dig), skip=1000))
+     .reg(tnr.OnEpochCaller.create_every(pca_ff.during_training(pca_training_dir, True, dig), skip=1000))
      .reg(tnr.OnEpochCaller.create_every(pr.during_training_ff(pr_training_dir, True, dig), skip=1000))
-     #.reg(tnr.OnEpochCaller.create_every(svm.during_training_ff(svm_training_dir, True, dig), skip=1000))
+     .reg(tnr.OnEpochCaller.create_every(svm.during_training_ff(svm_training_dir, True, dig), skip=1000))
      .reg(pca3d_throughtrain.PCAThroughTrain(pca_throughtrain_dir, layer_names, True))
      .reg(tnr.OnFinishCaller(lambda *args, **kwargs: dig.join()))
      .reg(tnr.ZipDirOnFinish(dtt_training_dir))
@@ -95,8 +96,8 @@ def main():
      .reg(tnr.ZipDirOnFinish(satur_training_dir))
     )
     trainer.train(network)
-    #pca_3d.plot_ff(pca_ff.find_trajectory(network, pwl, 3), os.path.join(SAVEDIR, 'pca_3d_end'), True,
-    #               digestor=dig, frame_time=FRAME_TIME, layer_names=layer_names)
+    pca_3d.plot_ff(pca_ff.find_trajectory(network, pwl, 3), os.path.join(SAVEDIR, 'pca_3d_end'), True,
+                   digestor=dig, frame_time=FRAME_TIME, layer_names=layer_names)
     dig.archive_raw_inputs(os.path.join(SAVEDIR, 'raw_digestor.zip'))
 
 if __name__ == '__main__':

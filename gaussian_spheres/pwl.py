@@ -27,7 +27,8 @@ class GaussianSpheresPWLP(PointWithLabelProducer):
 
     @classmethod
     def create(cls, epoch_size: int, input_dim: int, output_dim: int, cube_half_side_len: float,
-               num_clusters: int, std_dev: float, mean: float, min_sep: float):
+               num_clusters: int, std_dev: float, mean: float, min_sep: float,
+               force_split: bool = False):
         """Creates a new gaussian spheres pwlp, pulling points from the cube with a side length
         of 2*cube_half_side_len centered at the origin
 
@@ -40,12 +41,17 @@ class GaussianSpheresPWLP(PointWithLabelProducer):
             std_dev (float): standard deviation of the radius
             mean (float): mean of the radius
             min_sep (float): minimum separation between points
+            force_split (bool, optional): if True then there will be an even as possible
+                distribution of cluster labels. if False then there will be a multinomial
+                distribution of cluster labels with the same probability for each
         """
         # rejection sampling
 
         clust_centers = np.zeros((num_clusters, input_dim), dtype='double')
 
         clusters = []
+        if force_split:
+            next_label = 0
         for i in range(num_clusters):
             rejections = 0
 
@@ -64,7 +70,12 @@ class GaussianSpheresPWLP(PointWithLabelProducer):
                     break
 
             clust_centers[i, :] = center.numpy()
-            clusters.append(PointWithLabel(point=center, label=torch.randint(output_dim, (1,)).item()))
+            if force_split:
+                clust_label = next_label
+                next_label = (next_label + 1) % output_dim
+            else:
+                clust_label = torch.randint(output_dim, (1,)).item()
+            clusters.append(PointWithLabel(point=center, label=clust_label))
 
         return cls(epoch_size, input_dim, output_dim, clusters, std_dev, mean)
 

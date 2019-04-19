@@ -14,24 +14,13 @@ import shared.measures.pca3d_throughtrain as pca3d_throughtrain
 import shared.filetools
 import shared.measures.pca_3d as pca_3d
 import shared.npmp as npmp
+import shared.criterion as mycrits
 import torch
 from mnist.pwl import MNISTData
 import os
 
 SAVEDIR = shared.filetools.savepath()
 
-def _meansqerr_criterion(output: torch.tensor, labels: torch.tensor):
-    # output is [batch_size x output_dim]
-    # labels is [batch_size]
-
-    # for each pt in range(batch_size):
-    #   output[pt, labels[pt]] -= 1
-
-    bats = output.shape[0]
-
-    adj_output = output.clone()
-    adj_output[torch.arange(bats), labels] -= 1
-    return torch.sum(adj_output ** 2)
 
 def main():
     """Entry point"""

@@ -8,6 +8,7 @@ import numpy as np
 import torch
 import os
 import typing
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D # pylint: disable=unused-import
 from matplotlib.animation import FuncAnimation
@@ -115,7 +116,8 @@ def _plot_ff_real(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool,
                                   snapsh.projected_samples[:, 1].numpy(),
                                   snapsh.projected_samples[:, 2].numpy(),
                                   s=1,
-                                  c=snapsh.projected_sample_labels.numpy())
+                                  c=snapsh.projected_sample_labels.numpy(),
+                                  cmap=mpl.cm.get_cmap('Set1'))
             if not norotate:
                 ax.view_init(30, 45)
 

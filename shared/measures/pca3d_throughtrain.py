@@ -222,7 +222,8 @@ class FrameWorker:
             self.snapshot.projected_samples[:, 1].numpy(),
             self.snapshot.projected_samples[:, 2].numpy(),
             s=3,
-            c=self.snapshot.projected_sample_labels.numpy())
+            c=self.snapshot.projected_sample_labels.numpy(),
+            cmap=mpl.cm.get_cmap('Set1'))
         self.axtitle = self.axes.set_title(self.title)
 
         self.axes.view_init(30, self.rotation)
