@@ -57,6 +57,7 @@ videos_done:
 """
 
 FRAMES_PER_TRAIN = 4
+NUM_FRAME_WORKERS = 4
 MS_PER_ROTATION = 10000
 ROTATION_EASING = mytweening.smootheststep
 FPS = 60
@@ -772,7 +773,7 @@ class PCAThroughTrain:
                     'fps': self.fps,
                     'frame_size': self.frame_size,
                     'ffmpeg_logfile': os.path.join(self.output_folder, f'layer_{lyr}_ffmpeg.log'),
-                    'num_frame_workers': 4
+                    'num_frame_workers': NUM_FRAME_WORKERS
                 }
             ))
             connection = WorkerConnection(proc, send_queue, receive_queue)
