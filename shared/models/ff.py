@@ -172,10 +172,9 @@ class FeedforwardSmall(FeedforwardNetwork):
 
 class FeedforwardLarge(FeedforwardNetwork):
     """Describes a feedforward network of arbitrary size that uses the standard
-    torch layers. Assumes we use the same nonlinearity between all layers. Very
+    torch layers. Does not assume we use the same nonlinearity between all layers. Very
     similar to torch.nn.Sequential, except supporting the feedforwardnetwork
-    properties and attributes we expect and assuming the nonlinearity is always
-    the same & there.
+    properties and attributes we expect and splitting the layers and nonlinearities
 
     Attributes:
         layers (list[torch.nn.Module]): the underlying layers. After each layer we

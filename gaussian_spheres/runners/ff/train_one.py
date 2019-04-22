@@ -65,7 +65,7 @@ def main():
         criterion=mycrits.meansqerr#torch.nn.CrossEntropyLoss()
     )
 
-    pca3d_throughtrain.FRAMES_PER_TRAIN = 3
+    pca3d_throughtrain.FRAMES_PER_TRAIN = 1
     pca3d_throughtrain.NUM_FRAME_WORKERS = 6
 
     dig = npmp.NPDigestor('train_one', 35)
@@ -79,12 +79,15 @@ def main():
     pca_throughtrain_dir = os.path.join(SAVEDIR, 'pca_throughtrain')
     (trainer
      .reg(tnr.EpochsTracker())
-     .reg(tnr.EpochsStopper(300))
+     .reg(tnr.EpochsStopper(10))
      .reg(tnr.DecayTracker())
      .reg(tnr.DecayStopper(8))
      .reg(tnr.LRMultiplicativeDecayer())
      .reg(tnr.DecayOnPlateau())
      .reg(tnr.AccuracyTracker(5, 1000, True))
+     .reg(tnr.WeightNoiser(
+         wi.GaussianWeightInitializer(mean=0, vari=0.02, normalize_dim=None),
+         lambda ctxt: ctxt.model.layers[-1].weight.data))
      .reg(tnr.OnEpochCaller.create_every(satur.during_training(satur_training_dir, True, dig), skip=1000))
      .reg(tnr.OnEpochCaller.create_every(dtt.during_training_ff(dtt_training_dir, True, dig), skip=1000))
      .reg(tnr.OnEpochCaller.create_every(pca_ff.during_training(pca_training_dir, True, dig), skip=1000))

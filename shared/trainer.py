@@ -15,6 +15,7 @@ from shared.pwl import PointWithLabelProducer
 from shared.teachers import NetworkTeacher
 from shared.filetools import zipdir
 from shared.npmp import NPDigestor
+from shared.weight_inits import WeightInitializer
 
 class GenericTrainingContext(typing.NamedTuple):
     """Describes the training context. Acts a store for the common variables we need in
@@ -461,6 +462,32 @@ class AccuracyTracker:
         """Remeasures and stores accuracy"""
         self.measure(context)
         result['accuracy'] = self.accuracy
+class WeightNoiser:
+    """Adds some noise to the last->output weights during training
+
+    Attributes:
+        noise (WeightInitializer): the noise initialization
+        tensor_fetcher (callable): a function that accepts the GenericTrainingContext
+            and returns the tensor to noise
+        current_noise (torch.tensor [like tensor_fetcher result]):
+            the underlying noise tensor we store noise in during training
+    """
+
+    def __init__(self, noise: WeightInitializer, tensor_fetcher: typing.Callable):
+        self.noise = noise
+        self.tensor_fetcher = tensor_fetcher
+        self.current_noise = None
+
+    def setup(self, context: GenericTrainingContext, **kwargs) -> None:
+        """Initializes the noise tensor like the tensor_fetcher"""
+        to_noise = self.tensor_fetcher(context)
+        self.current_noise = torch.zeros_like(to_noise)
+
+    def pre_train(self, context: GenericTrainingContext):
+        """Updates the current noise and applies it"""
+        self.current_noise[:] = 0
+        self.noise.initialize(self.current_noise)
+        self.tensor_fetcher(context)[:] += self.current_noise
 
 class ZipDirOnFinish:
     """Zips a particular directory to directory + .zip when finished. Deletes the
