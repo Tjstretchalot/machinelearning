@@ -34,7 +34,7 @@ def main():
     )
 
     layers_and_nonlins = (
-        (5, 'tanh'),
+        (25, 'tanh'),
         #(90, 'tanh'),
         #(90, 'tanh'),
         #(90, 'linear'),
@@ -85,9 +85,9 @@ def main():
      .reg(tnr.LRMultiplicativeDecayer())
      .reg(tnr.DecayOnPlateau())
      .reg(tnr.AccuracyTracker(5, 1000, True))
-     .reg(tnr.WeightNoiser(
-         wi.GaussianWeightInitializer(mean=0, vari=0.02, normalize_dim=None),
-         lambda ctxt: ctxt.model.layers[-1].weight.data))
+     #.reg(tnr.WeightNoiser(
+     #    wi.GaussianWeightInitializer(mean=0, vari=0.02, normalize_dim=None),
+     #    lambda ctxt: ctxt.model.layers[-1].weight.data))
      .reg(tnr.OnEpochCaller.create_every(satur.during_training(satur_training_dir, True, dig), skip=1000))
      .reg(tnr.OnEpochCaller.create_every(dtt.during_training_ff(dtt_training_dir, True, dig), skip=1000))
      .reg(tnr.OnEpochCaller.create_every(pca_ff.during_training(pca_training_dir, True, dig), skip=1000))
