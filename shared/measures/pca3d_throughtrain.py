@@ -704,7 +704,7 @@ class WorkerConnection:
 
     def end_finish(self):
         """Should be called after start_finish to wait until the worker shutdown"""
-        msg = self.receive_queue.get(timeout=15)
+        msg = self.receive_queue.get(timeout=120)
         if msg[0] != 'videos_done':
             raise ValueError(f'expected videos_done acknowledge')
         while self.process.is_alive():
@@ -839,7 +839,7 @@ class PCAThroughTrain:
         for connection in self.connections:
             connection.send_hidacts(int(context.shared['epochs'].epochs))
 
-    def pre_loop(self, context: GenericTrainingContext):
+    def post_train(self, context: GenericTrainingContext, loss: float):
         """Feeds hidden activations to the network"""
         self._send_hidacts(context)
 
