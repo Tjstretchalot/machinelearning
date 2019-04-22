@@ -34,7 +34,7 @@ def main():
     )
 
     layers_and_nonlins = (
-        (50, 'tanh'),
+        (50, 'relu'),
         (50, 'tanh'),
         (50, 'tanh'),
         #(90, 'tanh'),
