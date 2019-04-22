@@ -509,10 +509,8 @@ class LayerWorker:
         pc_vals, pc_vecs = pca.get_hidden_pcs(self.hidacts_torch, 3)
         projected = pca.project_to_pcs(self.hidacts_torch, pc_vecs, out=None)
         snap = pca_ff.PCTrajectoryFFSnapshot(pc_vecs, pc_vals, projected, self.sample_labels_torch)
+        self.match_info.match(snap)
         match_info = pca_ff.PCTrajectoryFFSnapshotMatchInfo.create(snap)
-        print(f'_update_match match_info={match_info}, self.match_info={self.match_info}')
-        match_info.match(self.match_info)
-        print('success')
         self.match_mean_comps_torch[:] = match_info.mean_comps
 
     def _close_mmaps(self):
