@@ -20,11 +20,6 @@ import os
 import math
 import shutil
 
-STABILITY_BIAS = 0.1
-"""This improves the stability of the snapshot match info by biasing earlier pcs to be
-top. If the bias exceeds the difference between the means then it is treated as if the first
-pc mean is bigger than the second.
-"""
 
 class PCTrajectoryFFSnapshot:
     """Describes the principal components of a network at a particular layer. Unlike
@@ -237,7 +232,7 @@ class PCTrajectoryFFSnapshotMatchInfo:
         for pc_ind in range(num_pcs):
             for lbl1 in range(output_dim):
                 for lbl2 in range(lbl1+1, output_dim):
-                    if means_by_label_and_pc[pc_ind, lbl1] + STABILITY_BIAS > means_by_label_and_pc[pc_ind, lbl2]:
+                    if means_by_label_and_pc[pc_ind, lbl1] > means_by_label_and_pc[pc_ind, lbl2]:
                         mean_comps[counter] = 1
                     counter += 1
 

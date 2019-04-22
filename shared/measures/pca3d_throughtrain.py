@@ -412,6 +412,7 @@ class LayerWorker:
         match_mean_comps_file (str): the file that we are storing the match-means info in
         match_mean_comps (np.memmap): the memmap'd means_comp
         match_mean_comps_torch (torch.tensor): torch tensor backed by match_means_comp
+        match_info (PCATrajectoryFFSnapshotMatchInfo): the match info the above correspond to
 
         hidacts (np.memmap): the memory mapped hid_acts file
         hidacts_torch (torch.tensor): the tensor backed with hidacts
@@ -447,6 +448,7 @@ class LayerWorker:
         self.match_mean_comps_file = None
         self.match_mean_comps = None
         self.match_mean_comps_torch = None
+        self.match_info = None
 
         self.hidacts = None
         self.hidacts_torch = None
@@ -492,6 +494,8 @@ class LayerWorker:
             self.match_mean_comps_file, dtype='uint8', mode='w+',
             shape=(pca_ff.PCTrajectoryFFSnapshotMatchInfo.get_expected_len(3, self.output_dim)))
         self.match_mean_comps_torch = torch.from_numpy(self.match_mean_comps)
+        self.match_info = pca_ff.PCTrajectoryFFSnapshotMatchInfo(
+            3, self.layer_size, self.output_dim, self.match_mean_comps_torch)
 
         self.hidacts = np.memmap(self.hid_acts_file, dtype='float64',
                                      mode='r', shape=(self.batch_size, self.layer_size))
@@ -506,12 +510,14 @@ class LayerWorker:
         projected = pca.project_to_pcs(self.hidacts_torch, pc_vecs, out=None)
         snap = pca_ff.PCTrajectoryFFSnapshot(pc_vecs, pc_vals, projected, self.sample_labels_torch)
         match_info = pca_ff.PCTrajectoryFFSnapshotMatchInfo.create(snap)
+        match_info.match(self.match_info)
         self.match_mean_comps_torch[:] = match_info.mean_comps
 
     def _close_mmaps(self):
         self.match_mean_comps_torch = None
         self.match_mean_comps._mmap.close() # pylint: disable=protected-access
         self.match_mean_comps = None
+        self.match_info = None
         os.remove(self.match_mean_comps_file)
         self.match_mean_comps_file = None
 
