@@ -30,11 +30,11 @@ def main():
     """Entry point"""
     pwl = GaussianSpheresPWLP.create(
         epoch_size=2700, input_dim=INPUT_DIM, output_dim=OUTPUT_DIM, cube_half_side_len=2,
-        num_clusters=3, std_dev=0.2, mean=0, min_sep=0.4, force_split=True
+        num_clusters=6, std_dev=0.2, mean=0, min_sep=0.4, force_split=True
     )
 
     layers_and_nonlins = (
-        (25, 'tanh'),
+        (50, 'tanh'),
         #(90, 'tanh'),
         #(90, 'tanh'),
         #(90, 'linear'),
@@ -85,9 +85,9 @@ def main():
      .reg(tnr.LRMultiplicativeDecayer())
      .reg(tnr.DecayOnPlateau())
      .reg(tnr.AccuracyTracker(5, 1000, True))
-     .reg(tnr.WeightNoiser(
-         wi.GaussianWeightInitializer(mean=0, vari=0.02, normalize_dim=None),
-         lambda ctxt: ctxt.model.layers[-1].weight.data))
+     #.reg(tnr.WeightNoiser(
+     #    wi.GaussianWeightInitializer(mean=0, vari=0.02, normalize_dim=None),
+     #    lambda ctxt: ctxt.model.layers[-1].weight.data))
      .reg(tnr.OnEpochCaller.create_every(satur.during_training(satur_training_dir, True, dig), skip=1000))
      .reg(tnr.OnEpochCaller.create_every(dtt.during_training_ff(dtt_training_dir, True, dig), skip=1000))
      .reg(tnr.OnEpochCaller.create_every(pca_ff.during_training(pca_training_dir, True, dig), skip=1000))
