@@ -25,6 +25,9 @@ import shared.measures.pca_ff as pca_ff
 import shared.measures.pca as pca
 from shared.perf_stats import LoggingPerfStats
 
+INDEPENDENT_SCALING = False
+"""True to scale each axis independently, false for each axis to have the same scale"""
+
 MESSAGE_STYLES = {'start', 'hidacts', 'hidacts_done', 'videos_done'}
 """
 These are messages that are sent from the main thread to the layer worker thread
@@ -241,12 +244,21 @@ class FrameWorker:
         self.scatter._offsets3d = (snapsh.projected_samples[:, 0].numpy(), # pylint: disable=protected-access
                                    snapsh.projected_samples[:, 1].numpy(),
                                    snapsh.projected_samples[:, 2].numpy())
-        self.axes.set_xlim(float(snapsh.projected_samples[:, 0].min()),
-                           float(snapsh.projected_samples[:, 0].max()))
-        self.axes.set_ylim(float(snapsh.projected_samples[:, 1].min()),
-                           float(snapsh.projected_samples[:, 1].max()))
-        self.axes.set_zlim(float(snapsh.projected_samples[:, 2].min()),
-                           float(snapsh.projected_samples[:, 2].max()))
+
+        if INDEPENDENT_SCALING:
+            self.axes.set_xlim(float(snapsh.projected_samples[:, 0].min()),
+                            float(snapsh.projected_samples[:, 0].max()))
+            self.axes.set_ylim(float(snapsh.projected_samples[:, 1].min()),
+                            float(snapsh.projected_samples[:, 1].max()))
+            self.axes.set_zlim(float(snapsh.projected_samples[:, 2].min()),
+                            float(snapsh.projected_samples[:, 2].max()))
+        else:
+            minlim = float(snapsh.projected_samples.min())
+            maxlim = float(snapsh.projected_samples.max())
+            self.axes.set_xlim(minlim, maxlim)
+            self.axes.set_ylim(minlim, maxlim)
+            self.axes.set_zlim(minlim, maxlim)
+
         self.axes.view_init(30, self.rotation)
         self.axtitle.set_text(self.title)
 
