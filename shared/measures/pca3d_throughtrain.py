@@ -8,8 +8,8 @@ import typing
 import os
 from multiprocessing import Queue, Process
 import time
-import queue
 import io
+import traceback
 
 import torch
 import numpy as np
@@ -95,6 +95,7 @@ class FrameWorker:
         match_mean_comps_file (str): the path to the file which will contain the 'mean_comps' that
             we should match our snapshots to; updated occassionally via a 'match' call and ensures
             deterministic behavior among frame workers
+        perf_file (str): the path to the file which we will log performance information to
 
         batch_size (int): the batch size
         layer_size (int): the layer size
@@ -112,6 +113,8 @@ class FrameWorker:
 
         match_info (pca_ff.PCTrajectoryFFSnapshotMatchInfo): the match info we use to keep
             the snapshots within reflection distance of each other
+
+        perf (perf_stats.PerfStats)
 
         rotation (float): the rotation around the y axes we should have
         title (str): the title we should have
@@ -141,7 +144,8 @@ class FrameWorker:
 
     def __init__(self, receive_queue: Queue, img_queue: Queue, ack_queue: Queue, ack_mode: str,
                  hacts_file: str, labels_file: str, match_mean_comps_file: str, batch_size: int,
-                 layer_size: int, output_dim: int, w_in: float, h_in: float, dpi: int):
+                 layer_size: int, output_dim: int, w_in: float, h_in: float, dpi: int,
+                 perf_file: str):
         self.receive_queue = receive_queue
         self.img_queue = img_queue
         self.ack_queue = ack_queue
@@ -159,6 +163,9 @@ class FrameWorker:
         self.match_mean_comps = None
         self.match_mean_comps_torch = None
         self.match_info = None
+
+        self.perf = LoggingPerfStats(hacts_file, perf_file)
+
         self.rotation = None
         self.title = None
         self.index = None
@@ -270,9 +277,15 @@ class FrameWorker:
 
     def work(self):
         """Initializes and produces frames until the end message is received"""
-
-        while self.do_work():
-            pass
+        try:
+            while self.do_work():
+                pass
+        except:
+            self.perf.loghandle.flush()
+            print('--CRASH--', file=self.perf.loghandle)
+            traceback.print_exc(file=self.perf.loghandle)
+            self.perf.loghandle.flush()
+            raise
 
     def do_work(self, no_wait=False) -> bool:
         """Performs a bit of work until we have no more work to do
@@ -288,28 +301,42 @@ class FrameWorker:
         if self.state == 1:
             if no_wait and self.receive_queue.empty():
                 return True
-            msg = self.receive_queue.get() # a 15 second timeout gets hit here? I think side effect of too many workers?
+            msg = self.receive_queue.get() # cannot timeout here & support extra workers
             self.last_job = time.time()
             if msg[0] == 'end':
                 self._close_mmaps()
                 self._close_figure()
                 self.state = 3
                 return False
-
-            self.rotation, self.title, self.index = msg[1:]
+            self.rotation, self.title, self.index, job_sent_at = msg[1:]
+            self.perf.enter('RECEIVE_JOB_DELAY', force_time=job_sent_at)
+            self.perf.exit()
             self.state = 2
             return True
         if self.state == 2:
+            self.perf.enter('GET_SNAPSHOT')
             self._get_snapshot()
+            self.perf.exit()
             if self.ack_mode == 'asap':
+                self.perf.enter('ACK_ASAP')
                 self.ack_queue.put(('ack',))
+                self.perf.exit()
             if self.figure is None:
                 self._init_figure()
+            self.perf.enter('RENDER')
+            self.perf.enter('SETUP_FRAME')
             self._setup_frame()
+            self.perf.exit()
+            self.perf.enter('CREATE_FRAME')
             frm = self._create_frame()
+            self.perf.exit()
+            self.perf.enter('IMG_QUEUE_PUT')
             self.img_queue.put((self.index, frm))
+            self.perf.exit()
             if self.ack_mode == 'ready':
+                self.perf.enter('ACK_READY')
                 self.ack_queue.put(('ack',))
+                self.perf.exit()
             self.state = 1
             return True
 
@@ -318,9 +345,10 @@ class FrameWorker:
 def _frame_worker_target(receive_queue: Queue, img_queue: Queue, ack_queue: Queue, ack_mode: str,
                          hacts_file: str, labels_file: str, match_means_comp_file: str,
                          batch_size: int, layer_size: int, output_dim: int, w_in: float,
-                         h_in: float, dpi: int):
+                         h_in: float, dpi: int, perf_file: str):
     worker = FrameWorker(receive_queue, img_queue, ack_queue, ack_mode, hacts_file, labels_file,
-                         match_means_comp_file, batch_size, layer_size, output_dim, w_in, h_in, dpi)
+                         match_means_comp_file, batch_size, layer_size, output_dim, w_in, h_in, dpi,
+                         perf_file)
     worker.work()
 
 class FrameWorkerConnection:
@@ -363,7 +391,7 @@ class FrameWorkerConnection:
             index (int): the index in the video of the frame
         """
         self.wait_ack()
-        self.job_queue.put(('frame', rotation, title, index))
+        self.job_queue.put(('frame', rotation, title, index, time.time()))
         self.awaiting_ack = True
 
     def send_end(self):
@@ -532,7 +560,7 @@ class LayerWorker:
         self.anim.start()
 
         self.frame_workers = []
-        for _ in range(self.num_frame_workers):
+        for idx in range(self.num_frame_workers):
             jobq = Queue()
             imgq = Queue()
             ackq = Queue()
@@ -540,7 +568,8 @@ class LayerWorker:
                            args=(jobq, imgq, ackq, 'asap', self.hid_acts_file,
                                  self.sample_labels_file, self.match_mean_comps_file,
                                  self.batch_size, self.layer_size, self.output_dim,
-                                 self.frame_size[0], self.frame_size[1], self.dpi))
+                                 self.frame_size[0], self.frame_size[1], self.dpi,
+                                 f'layer_{self.worker_id}_frame_{idx}.log'))
             self.anim.register_queue(imgq)
             conn = FrameWorkerConnection(proc, jobq, ackq)
             self.frame_workers.append(conn)
@@ -560,7 +589,6 @@ class LayerWorker:
                 raise RuntimeError(f'timeout occurred while trying to dispatch frame')
 
             self._busy_work()
-            time.sleep(0)
 
     def _wait_all_acks(self):
         start = time.time()
@@ -577,7 +605,6 @@ class LayerWorker:
                 raise RuntimeError(f'timeout while waiting for frame workers to acknowledge frame')
 
             self._busy_work()
-            time.sleep(0)
 
     def _shutdown_all(self):
         for worker in self.frame_workers:
@@ -592,7 +619,6 @@ class LayerWorker:
             if not waiting_end:
                 break
             self._busy_work()
-            time.sleep(0)
 
         while self.anim.process_frame():
             pass
@@ -624,7 +650,6 @@ class LayerWorker:
                 if time.time() - last_work_time > 15000:
                     raise RuntimeError(f'layer worker received no work to do and timed out')
                 self._busy_work()
-                time.sleep(0)
                 continue
             if msg[0] == 'hidacts_done':
                 break
@@ -658,7 +683,7 @@ class LayerWorker:
         self.send_queue.put(('videos_done',))
 
         while not self.send_queue.empty():
-            time.sleep(0)
+            time.sleep(0.1)
 
 def _worker_target(receive_queue, send_queue):
     worker = LayerWorker(receive_queue, send_queue)

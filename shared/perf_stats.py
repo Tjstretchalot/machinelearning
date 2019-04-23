@@ -69,11 +69,11 @@ class PerfStats:
         self.children = dict()
         self.active_child = None
 
-    def _start(self):
+    def _start(self, force_time=None):
         if self.cur_start is not None:
             raise RuntimeError(f'cannot start {self.identifier} (already started)')
 
-        the_time = time.time()
+        the_time = force_time or time.time()
         if self.cur_sum_count == 0:
             self.cur_sum_start = the_time
         self.cur_start = the_time
@@ -104,14 +104,16 @@ class PerfStats:
         self.cur_sum_time = 0
         self.cur_sum_count = 0
 
-    def enter(self, region_name):
+    def enter(self, region_name, force_time=None):
         """Enters the region denoted by the specified name
 
         Args:
             region_name (str): the name of the region to enter, typically caps and underscores
+            force_time (optional, float): if specified then the enter is retroactive. Required
+                for profiling some multiprocessing applications
         """
         if self.active_child is not None:
-            self.active_child.enter(region_name)
+            self.active_child.enter(region_name, force_time)
             return
 
         if region_name not in self.children:
@@ -120,7 +122,7 @@ class PerfStats:
             self.children[region_name] = PerfStats(region_name, self.depth + 1)
 
         self.active_child = self.children[region_name]
-        self.active_child._start() # pylint: disable=protected-access
+        self.active_child._start(force_time) # pylint: disable=protected-access
 
     def exit(self) -> typing.Tuple[bool, bool]:
         """Closes the most recent region entered. The first result is True if we closed
@@ -181,14 +183,17 @@ class PerfStats:
         child_means = child_means[sortinds]
 
         num_hotspots = min(num_hotspots, len(self.children))
+        num_skipped = len(self.children) - num_hotspots
 
         for i in range(num_hotspots):
             print(f'{indent}{child_names[i]} - {child_means[i]}s', file=out)
             self.children[child_names[i]].print(out, level, indent + '  ')
 
-        sum_skipped = child_means[num_hotspots:].sum()
-        other_regions = ', '.join(name for name in child_names[num_hotspots:])
-        print(f'{indent}Report skipped {len(other_regions)} regions; {sum_skipped}s in regions {other_regions}', file=out)
+        if num_skipped > 0:
+            sum_skipped = child_means[num_hotspots:].sum()
+            other_regions = ', '.join(name for name in child_names[num_hotspots:])
+            print(f'{indent}Report skipped {num_skipped} regions;'
+                  + f'{sum_skipped}s in regions {other_regions}', file=out)
 
 class LoggingPerfStats(PerfStats):
     """A simple extension to perf stats that logs to a given file regularly
