@@ -164,7 +164,7 @@ class FrameWorker:
         self.match_mean_comps_torch = None
         self.match_info = None
 
-        self.perf = LoggingPerfStats(hacts_file, perf_file)
+        self.perf = LoggingPerfStats(None, perf_file)
 
         self.rotation = None
         self.title = None
@@ -514,6 +514,7 @@ class LayerWorker:
         if len(self.frame_size) != 2:
             raise ValueError(f'expected frame_size has len 2, got {len(self.frame_size)}')
 
+        print(f'num frame workers={num_frame_workers}')'
         self.perf = LoggingPerfStats(self.worker_id, self.perf_logfile)
 
     def _prepare_mmaps(self):
@@ -570,7 +571,9 @@ class LayerWorker:
                                  self.sample_labels_file, self.match_mean_comps_file,
                                  self.batch_size, self.layer_size, self.output_dim,
                                  self.frame_size[0], self.frame_size[1], self.dpi,
-                                 f'layer_{self.worker_id}_frame_{idx}.log'))
+                                 os.path.join(
+                                     os.path.dirname(self.outfile),
+                                     f'layer_{self.worker_id}_frame_{idx}.log')))
             self.anim.register_queue(imgq)
             conn = FrameWorkerConnection(proc, jobq, ackq)
             self.frame_workers.append(conn)
