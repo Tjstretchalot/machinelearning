@@ -24,6 +24,7 @@ import shared.mytweening as mytweening
 import shared.measures.pca_ff as pca_ff
 import shared.measures.pca as pca
 from shared.perf_stats import LoggingPerfStats
+from shared.myqueue import ZeroMQQueue
 
 INDEPENDENT_SCALING = False
 """True to scale each axis independently, false for each axis to have the same scale"""
@@ -75,11 +76,11 @@ class FrameWorker:
     because we will render more than one frame per training sample.
 
     Attributes:
-        receive_queue (Queue): the queue we receive messages from. Messages come in the form of
+        receive_queue (ZeroMQQueue): the queue we receive messages from. Messages come in the form of
             either ('frame', rotation, title, index) or ('end',)
-        img_queue (Queue): the queue we send messages in the form (index, rawdata) where rawdata
+        img_queue (ZeroMQQueue): the queue we send messages in the form (index, rawdata) where rawdata
             is the bytes that ought to be sent to the ffmpeg process.
-        ack_queue (Queue): the queue we send messages in the form ('ack',) once we have completed
+        ack_queue (ZeroMQQueue): the queue we send messages in the form ('ack',) once we have completed
             a frame. this lets the layer worker know its safe to tell the main thread that the
             hidden activations file can be modified
         ack_mode (str): determines when we send the 'ack' message through the ack_queue
@@ -142,7 +143,7 @@ class FrameWorker:
 
 
 
-    def __init__(self, receive_queue: Queue, img_queue: Queue, ack_queue: Queue, ack_mode: str,
+    def __init__(self, receive_queue: ZeroMQQueue, img_queue: ZeroMQQueue, ack_queue: ZeroMQQueue, ack_mode: str,
                  hacts_file: str, labels_file: str, match_mean_comps_file: str, batch_size: int,
                  layer_size: int, output_dim: int, w_in: float, h_in: float, dpi: int,
                  perf_file: str):
@@ -343,10 +344,13 @@ class FrameWorker:
 
         return False
 
-def _frame_worker_target(receive_queue: Queue, img_queue: Queue, ack_queue: Queue, ack_mode: str,
+def _frame_worker_target(receive_queue: ZeroMQQueue, img_queue: ZeroMQQueue, ack_queue: ZeroMQQueue, ack_mode: str,
                          hacts_file: str, labels_file: str, match_means_comp_file: str,
                          batch_size: int, layer_size: int, output_dim: int, w_in: float,
                          h_in: float, dpi: int, perf_file: str):
+    receive_queue = ZeroMQQueue.deser(receive_queue)
+    img_queue = ZeroMQQueue.deser(img_queue)
+    ack_queue = ZeroMQQueue.deser(ack_queue)
     worker = FrameWorker(receive_queue, img_queue, ack_queue, ack_mode, hacts_file, labels_file,
                          match_means_comp_file, batch_size, layer_size, output_dim, w_in, h_in, dpi,
                          perf_file)
@@ -357,13 +361,13 @@ class FrameWorkerConnection:
 
     Attributes:
         process (Process): the process that the frame worker is running on
-        job_queue (Queue): the queue which we send jobs to
-        ack_queue (Queue): the queue which we receive acks from
+        job_queue (ZeroMQQueue): the queue which we send jobs to
+        ack_queue (ZeroMQQueue): the queue which we receive acks from
 
         awaiting_ack (bool): True if we haven't seen an ack from the last job yet
     """
 
-    def __init__(self, process: Process, job_queue: Queue, ack_queue: Queue):
+    def __init__(self, process: Process, job_queue: ZeroMQQueue, ack_queue: ZeroMQQueue):
         self.process = process
         self.job_queue = job_queue
         self.ack_queue = ack_queue
@@ -417,8 +421,8 @@ class LayerWorker:
         which is probably only going to work on a cluster
 
     Attributes:
-        receive_queue (Queue): the queue we receive messages from
-        send_queue (Queue): the queue we send messages through
+        receive_queue (ZeroMQQueue): the queue we receive messages from
+        send_queue (ZeroMQQueue): the queue we send messages through
 
         num_frame_workers (int): the number of frame workers we are allowed
         anim (MPAnimation): the animation
@@ -452,7 +456,7 @@ class LayerWorker:
         perf (LoggingPerfStats): the layer worker performance tracker
     """
 
-    def __init__(self, receive_queue: Queue, send_queue: Queue):
+    def __init__(self, receive_queue: ZeroMQQueue, send_queue: ZeroMQQueue):
         self.receive_queue = receive_queue
         self.send_queue = send_queue
 
@@ -563,11 +567,11 @@ class LayerWorker:
         self.frame_workers = []
         closure = lambda x: x
         for idx in range(self.num_frame_workers):
-            jobq = Queue()
-            imgq = Queue()
-            ackq = Queue()
+            jobq = ZeroMQQueue.create_send()
+            imgq = ZeroMQQueue.create_recieve()
+            ackq = ZeroMQQueue.create_recieve()
             proc = Process(target=_frame_worker_target,
-                           args=(jobq, imgq, ackq, 'asap', self.hid_acts_file,
+                           args=(jobq.serd(), imgq.serd(), ackq.serd(), 'asap', self.hid_acts_file,
                                  self.sample_labels_file, self.match_mean_comps_file,
                                  self.batch_size, self.layer_size, self.output_dim,
                                  self.frame_size[0], self.frame_size[1], self.dpi,
@@ -691,7 +695,7 @@ class LayerWorker:
             time.sleep(0.1)
 
 def _worker_target(receive_queue, send_queue):
-    worker = LayerWorker(receive_queue, send_queue)
+    worker = LayerWorker(ZeroMQQueue.deser(receive_queue), ZeroMQQueue.deser(send_queue))
     worker.work()
 
 class WorkerConnection:
@@ -829,9 +833,9 @@ class PCAThroughTrain:
 
         self.connections = []
         for lyr in range(1, len(self.layers)):
-            send_queue = Queue()
-            receive_queue = Queue()
-            proc = Process(target=_worker_target, args=(send_queue, receive_queue)) # swapped
+            send_queue = ZeroMQQueue.create_send()
+            receive_queue = ZeroMQQueue.create_recieve()
+            proc = Process(target=_worker_target, args=(send_queue.serd(), receive_queue.serd())) # swapped
             # cannot set to daemonic - it has children!
             proc.start()
 

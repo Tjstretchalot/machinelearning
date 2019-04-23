@@ -30,11 +30,11 @@ def main():
     """Entry point"""
     pwl = GaussianSpheresPWLP.create(
         epoch_size=2700, input_dim=INPUT_DIM, output_dim=OUTPUT_DIM, cube_half_side_len=2,
-        num_clusters=10, std_dev=1, mean=0, min_sep=0.5, force_split=True
+        num_clusters=2, std_dev=0.2, mean=0, min_sep=0.5, force_split=True
     )
 
     layers_and_nonlins = (
-        (100, 'tanh'),
+        (25, 'tanh'),
         #(100, 'linear'),
         #(25, 'linear'),
         #(90, 'tanh'),
