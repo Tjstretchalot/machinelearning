@@ -567,6 +567,7 @@ class LayerWorker:
             jobq = Queue()
             imgq = Queue()
             ackq = Queue()
+            print('filename=' + f'layer_{self.worker_id}_frame_{closure(idx)}.log')
             proc = Process(target=_frame_worker_target,
                            args=(jobq, imgq, ackq, 'asap', self.hid_acts_file,
                                  self.sample_labels_file, self.match_mean_comps_file,
