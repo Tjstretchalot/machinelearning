@@ -164,6 +164,7 @@ class FrameWorker:
         self.match_mean_comps_torch = None
         self.match_info = None
 
+        print(f'frame worker using perf_file={perf_file}')
         self.perf = LoggingPerfStats(None, perf_file)
 
         self.rotation = None
@@ -347,6 +348,7 @@ def _frame_worker_target(receive_queue: Queue, img_queue: Queue, ack_queue: Queu
                          hacts_file: str, labels_file: str, match_means_comp_file: str,
                          batch_size: int, layer_size: int, output_dim: int, w_in: float,
                          h_in: float, dpi: int, perf_file: str):
+    print(f'frame worker target perf_file={perf_file}')
     worker = FrameWorker(receive_queue, img_queue, ack_queue, ack_mode, hacts_file, labels_file,
                          match_means_comp_file, batch_size, layer_size, output_dim, w_in, h_in, dpi,
                          perf_file)
