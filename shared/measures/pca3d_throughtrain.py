@@ -513,7 +513,9 @@ class LayerWorker:
         self.sample_labels_file = msg[1]['sample_labels_file']
         self.hid_acts_file = msg[1]['hid_acts_file']
 
-        if not isinstance(self.frame_size, tuple):
+        if isinstance(self.frame_size, list):
+            self.frame_size = tuple(self.frame_size)
+        elif not isinstance(self.frame_size, tuple):
             raise ValueError(f'expected frame_size is tuple, got {self.frame_size} (msg={msg})')
         if len(self.frame_size) != 2:
             raise ValueError(f'expected frame_size has len 2, got {len(self.frame_size)}')
