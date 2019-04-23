@@ -164,7 +164,6 @@ class FrameWorker:
         self.match_mean_comps_torch = None
         self.match_info = None
 
-        print(f'frame worker using perf_file={perf_file}')
         self.perf = LoggingPerfStats(None, perf_file)
 
         self.rotation = None
@@ -348,7 +347,6 @@ def _frame_worker_target(receive_queue: Queue, img_queue: Queue, ack_queue: Queu
                          hacts_file: str, labels_file: str, match_means_comp_file: str,
                          batch_size: int, layer_size: int, output_dim: int, w_in: float,
                          h_in: float, dpi: int, perf_file: str):
-    print(f'frame worker target perf_file={perf_file}')
     worker = FrameWorker(receive_queue, img_queue, ack_queue, ack_mode, hacts_file, labels_file,
                          match_means_comp_file, batch_size, layer_size, output_dim, w_in, h_in, dpi,
                          perf_file)
@@ -516,7 +514,6 @@ class LayerWorker:
         if len(self.frame_size) != 2:
             raise ValueError(f'expected frame_size has len 2, got {len(self.frame_size)}')
 
-        print(f'num frame workers={self.num_frame_workers}')
         self.perf = LoggingPerfStats(self.worker_id, self.perf_logfile)
 
     def _prepare_mmaps(self):
@@ -569,7 +566,6 @@ class LayerWorker:
             jobq = Queue()
             imgq = Queue()
             ackq = Queue()
-            print('filename=' + f'layer_{self.worker_id}_frame_{closure(idx)}.log')
             proc = Process(target=_frame_worker_target,
                            args=(jobq, imgq, ackq, 'asap', self.hid_acts_file,
                                  self.sample_labels_file, self.match_mean_comps_file,
