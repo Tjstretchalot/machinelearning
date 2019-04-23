@@ -30,13 +30,11 @@ def main():
     """Entry point"""
     pwl = GaussianSpheresPWLP.create(
         epoch_size=2700, input_dim=INPUT_DIM, output_dim=OUTPUT_DIM, cube_half_side_len=2,
-        num_clusters=12, std_dev=0.2, mean=0, min_sep=0.4, force_split=True
+        num_clusters=3, std_dev=0.2, mean=0, min_sep=0.4, force_split=True
     )
 
     layers_and_nonlins = (
-        (50, 'none'),
-        (50, 'none'),
-        (50, 'none'),
+        (25, 'linear'),
         #(90, 'tanh'),
         #(90, 'tanh'),
         #(90, 'linear'),
@@ -67,8 +65,8 @@ def main():
         criterion=mycrits.meansqerr#torch.nn.CrossEntropyLoss()
     )
 
-    pca3d_throughtrain.FRAMES_PER_TRAIN = 4
-    pca3d_throughtrain.NUM_FRAME_WORKERS = 6
+    pca3d_throughtrain.FRAMES_PER_TRAIN = 1
+    pca3d_throughtrain.NUM_FRAME_WORKERS = 3
 
     dig = npmp.NPDigestor('train_one', 35)
     pca_3d.plot_ff(pca_ff.find_trajectory(network, pwl, 3), os.path.join(SAVEDIR, 'pca_3d_start'), True,
@@ -81,7 +79,7 @@ def main():
     pca_throughtrain_dir = os.path.join(SAVEDIR, 'pca_throughtrain')
     (trainer
      .reg(tnr.EpochsTracker())
-     .reg(tnr.EpochsStopper(1))
+     .reg(tnr.EpochsStopper(100))
      .reg(tnr.DecayTracker())
      .reg(tnr.DecayStopper(8))
      .reg(tnr.LRMultiplicativeDecayer())
