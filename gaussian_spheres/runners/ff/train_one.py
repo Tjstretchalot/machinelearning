@@ -79,7 +79,7 @@ def main():
     pca_throughtrain_dir = os.path.join(SAVEDIR, 'pca_throughtrain')
     (trainer
      .reg(tnr.EpochsTracker())
-     .reg(tnr.EpochsStopper(100))
+     .reg(tnr.EpochsStopper(1))
      .reg(tnr.DecayTracker())
      .reg(tnr.DecayStopper(8))
      .reg(tnr.LRMultiplicativeDecayer())
