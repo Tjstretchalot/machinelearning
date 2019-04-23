@@ -69,8 +69,8 @@ def main():
     pca3d_throughtrain.NUM_FRAME_WORKERS = 3
 
     dig = npmp.NPDigestor('train_one', 35)
-    pca_3d.plot_ff(pca_ff.find_trajectory(network, pwl, 3), os.path.join(SAVEDIR, 'pca_3d_start'), True,
-                   digestor=dig, frame_time=FRAME_TIME, layer_names=layer_names)
+    #pca_3d.plot_ff(pca_ff.find_trajectory(network, pwl, 3), os.path.join(SAVEDIR, 'pca_3d_start'), True,
+    #               digestor=dig, frame_time=FRAME_TIME, layer_names=layer_names)
     dtt_training_dir = os.path.join(SAVEDIR, 'dtt')
     pca_training_dir = os.path.join(SAVEDIR, 'pca')
     pr_training_dir = os.path.join(SAVEDIR, 'pr')
@@ -102,8 +102,8 @@ def main():
      .reg(tnr.ZipDirOnFinish(satur_training_dir))
     )
     trainer.train(network)
-    pca_3d.plot_ff(pca_ff.find_trajectory(network, pwl, 3), os.path.join(SAVEDIR, 'pca_3d_end'), True,
-                   digestor=dig, frame_time=FRAME_TIME, layer_names=layer_names)
+    #pca_3d.plot_ff(pca_ff.find_trajectory(network, pwl, 3), os.path.join(SAVEDIR, 'pca_3d_end'), True,
+    #               digestor=dig, frame_time=FRAME_TIME, layer_names=layer_names)
     dig.archive_raw_inputs(os.path.join(SAVEDIR, 'raw_digestor.zip'))
 
 if __name__ == '__main__':

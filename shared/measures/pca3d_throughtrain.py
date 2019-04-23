@@ -561,6 +561,7 @@ class LayerWorker:
 
         self.anim.start()
 
+        indexes = [i for i in range(self.num_frame_workers)] # this is required
         self.frame_workers = []
         for idx in range(self.num_frame_workers):
             jobq = Queue()
@@ -573,7 +574,8 @@ class LayerWorker:
                                  self.frame_size[0], self.frame_size[1], self.dpi,
                                  os.path.join(
                                      os.path.dirname(self.outfile),
-                                     f'layer_{self.worker_id}_frame_{idx}.log')))
+                                     # do not change below to just idx because it wont be closed
+                                     f'layer_{self.worker_id}_frame_{indexes[idx]}.log')))
             self.anim.register_queue(imgq)
             conn = FrameWorkerConnection(proc, jobq, ackq)
             self.frame_workers.append(conn)
