@@ -514,7 +514,7 @@ class LayerWorker:
         if len(self.frame_size) != 2:
             raise ValueError(f'expected frame_size has len 2, got {len(self.frame_size)}')
 
-        print(f'num frame workers={num_frame_workers}')'
+        print(f'num frame workers={num_frame_workers}')
         self.perf = LoggingPerfStats(self.worker_id, self.perf_logfile)
 
     def _prepare_mmaps(self):
