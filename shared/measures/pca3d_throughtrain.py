@@ -333,6 +333,7 @@ class FrameWorker:
             self.perf.enter('IMG_QUEUE_PUT')
             self.img_queue.put((self.index, frm))
             self.perf.exit()
+            self.perf.exit()
             if self.ack_mode == 'ready':
                 self.perf.enter('ACK_READY')
                 self.ack_queue.put(('ack',))
