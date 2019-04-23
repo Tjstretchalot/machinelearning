@@ -34,7 +34,7 @@ def main():
     )
 
     layers_and_nonlins = (
-        (100, 'linear'),
+        (100, 'tanh'),
         #(100, 'linear'),
         #(25, 'linear'),
         #(90, 'tanh'),
@@ -44,7 +44,7 @@ def main():
     )
     layers = [lyr[0] for lyr in layers_and_nonlins]
     nonlins = [lyr[1] for lyr in layers_and_nonlins]
-    nonlins.append('linear') # output
+    nonlins.append('tanh') # output
     layer_names = [f'{lyr[1]} ({idx})' for idx, lyr in enumerate(layers_and_nonlins)]
     layer_names.insert(0, 'input')
     layer_names.append('output')
