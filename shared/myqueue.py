@@ -88,7 +88,7 @@ class ZeroMQQueue:
             self.last_val = None
             return val
 
-        return self.connection.recv_json()
+        return self.connection.recv_pyobj()
 
     def get_nowait(self):
         """Gets the value in the queue if there is one, raises queue.Empty if not"""
@@ -102,7 +102,7 @@ class ZeroMQQueue:
             return val
 
         try:
-            return self.connection.recv_json(zmq.NOBLOCK) # pylint: disable=no-member
+            return self.connection.recv_pyobj(zmq.NOBLOCK) # pylint: disable=no-member
         except zmq.ZMQError as exc:
             raise queue.Empty from exc
 
@@ -114,7 +114,7 @@ class ZeroMQQueue:
         if not block:
             return self.put_nowait(val)
 
-        return self.connection.send_json(val)
+        return self.connection.send_pyobj(val)
 
     def put_nowait(self, val):
         """Puts a value into the queue, nonblocking. Raises queue.Full if not"""
@@ -122,7 +122,7 @@ class ZeroMQQueue:
             raise RuntimeError('tried to put into a get-only queue')
 
         try:
-            self.connection.send_json(val, zmq.NOBLOCK) # pylint: disable=no-member
+            self.connection.send_pyobj(val, zmq.NOBLOCK) # pylint: disable=no-member
         except zmq.ZMQError as exc:
             raise queue.Full from exc
 
