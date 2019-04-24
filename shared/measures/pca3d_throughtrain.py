@@ -10,6 +10,7 @@ from multiprocessing import Queue, Process
 import time
 import io
 import traceback
+import datetime
 
 import torch
 import numpy as np
@@ -512,9 +513,9 @@ class LayerEncoderWorker:
                         break
                     else:
                         work_count += 1
-                        if work_count % 1 == 0:
-                            print(f'Finished work item {work_count}', file=self.loghandle)
-                            if work_count % 1 == 0:
+                        if work_count % 100 == 0:
+                            print(f'{datetime.datetime.now()} - Finished work item {work_count}', file=self.loghandle)
+                            if work_count % 500 == 0:
                                 self.loghandle.flush()
                 else:
                     print('Getting behind (100 iters without break)', file=self.loghandle)
@@ -522,13 +523,16 @@ class LayerEncoderWorker:
 
                 time.sleep(0.001)
 
-            print('Received shutdown message, clearing it...', file=self.loghandle)
+            print(f'{datetime.datetime.now()} Received shutdown message, clearing it...', file=self.loghandle)
             self.loghandle.flush()
             self.receive_queue.get()
 
             print('Shutting down...', file=self.loghandle)
             self.loghandle.flush()
             self.shutdown()
+
+            print('Successfully shutdown', file=self.loghandle)
+            self.loghandle.close()
         except:
             traceback.print_exc(file=self.loghandle)
             self.loghandle.close()
