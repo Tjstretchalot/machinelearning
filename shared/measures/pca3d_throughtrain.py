@@ -488,6 +488,8 @@ class LayerEncoderWorker:
     def work(self):
         """Should be called after initialization to work until we receive a shutdown message"""
 
+        self.prepare()
+
         while self.receive_queue.empty():
             while self.do_work():
                 pass
