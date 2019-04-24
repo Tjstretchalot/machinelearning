@@ -588,11 +588,13 @@ class LayerWorker:
 
         self.anim.start()
 
+        imgq = ZeroMQQueue.create_recieve()
+        self.anim.register_queue(imgq)
+
         self.frame_workers = []
         closure = lambda x: x
         for idx in range(self.num_frame_workers):
             jobq = ZeroMQQueue.create_send()
-            imgq = ZeroMQQueue.create_recieve()
             ackq = ZeroMQQueue.create_recieve()
             ackm = 'both'
             proc = Process(target=_frame_worker_target,
@@ -604,11 +606,11 @@ class LayerWorker:
                                      os.path.dirname(self.outfile),
                                      # do not change below to just idx because it wont be closed
                                      f'layer_{self.worker_id}_frame_{closure(idx)}.log')))
-            self.anim.register_queue(imgq)
             conn = FrameWorkerConnection(proc, jobq, ackq, ackm)
             self.frame_workers.append(conn)
 
             proc.start()
+
 
     def _dispatch_frame(self, rotation: float, title: str, index: int):
         start = time.time()
@@ -914,7 +916,7 @@ class PCAThroughTrain:
         self.sample_labels_torch = None
         self.sample_points_torch = None
 
-        self.sample_labels._mmap.close()
+        self.sample_labels._mmap.close() # pylint: disable=protected-access
         self.sample_labels = None
 
         self.sample_points = None
