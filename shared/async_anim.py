@@ -305,6 +305,8 @@ class MPAnimation:
         """
 
         did_work = False
+
+        earliest_frame = float('inf')
         for queue in self.receive_queues:
             if not queue.empty():
                 did_work = True
@@ -320,13 +322,15 @@ class MPAnimation:
 
                 frame = msg[0]
                 img_bytes = msg[1]
+
                 if frame < self.next_frame:
                     raise ValueError(f'expected msg from receive_queue is (frame, raw) but we got frame={frame} which we have already seen (next frame is {self.next_frame})')
                 if frame in self.ooo_frames:
                     raise ValueError(f'expected msg from receive_queue is (frame, raw) but we already have frame={frame} in out of order frames')
-                if len(self.ooo_frames) >= 1000:
+                if len(self.ooo_frames) >= 5000:
                     raise ValueError(f'exceeded maximum frame cache (have {len(self.ooo_frames)} out of order while waiting for {self.next_frame})')
                 self.ooo_frames[frame] = img_bytes
+
         return did_work
 
     def process_frame(self) -> bool:
