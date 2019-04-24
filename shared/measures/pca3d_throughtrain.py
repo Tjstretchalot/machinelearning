@@ -767,18 +767,26 @@ class LayerWorker:
                 raise RuntimeError(f'timeout while waiting for frame workers to acknowledge frame')
 
     def _shutdown_all(self):
+        print('_shutdown_all')
         for worker in self.frame_workers:
+            print('send_end')
             worker.send_end()
-
+            print('send_end succ')
+        print('send ends succ')
         start = time.time()
         printed_warn = False
         while True:
             waiting_end = False
             for worker in self.frame_workers:
+                print('check end')
                 if not worker.check_end():
+                    print('awaiting end')
                     waiting_end = True
+                else:
+                    print('not waiting end')
 
             if not waiting_end:
+                print('done waiting on frame workers')
                 break
             if (not printed_warn) and ((time.time() - start) > 15000):
                 print(f'LayerWorker {self.worker_id} - frame workers taking a long time to close')
