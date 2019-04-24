@@ -494,35 +494,26 @@ class LayerEncoderWorker:
     def work(self):
         """Should be called after initialization to work until we receive a shutdown message"""
 
-        print('Preparing...', file=self.loghandle)
         try:
+            print('Preparing...', file=self.loghandle)
             self.prepare()
-        except:
-            traceback.print_exc(file=self.loghandle)
-            raise
 
-        print('Working..', file=self.loghandle)
-        try:
+            print('Working..', file=self.loghandle)
+            self.loghandle.flush()
             while self.receive_queue.empty():
                 while self.do_work():
                     pass
                 time.sleep(0.001)
-        except:
-            traceback.print_exc(file=self.loghandle)
-            raise
 
-        print('Received shutdown message, clearing it...')
-        try:
+            print('Received shutdown message, clearing it...')
             self.receive_queue.get()
-        except:
-            traceback.print_exc(file=self.loghandle)
-            raise
 
-        print('Shutting down...')
-        try:
+            print('Shutting down...')
             self.shutdown()
         except:
             traceback.print_exc(file=self.loghandle)
+            self.loghandle.close()
+            self.loghandle = None
             raise
 
 def _layer_encoder_target(recq, imgq, dpi, frame_size, fps, outfile, ffmpeg_logfile):
