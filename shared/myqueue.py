@@ -138,8 +138,15 @@ class ZeroMQQueue:
         except queue.Empty:
             return True
 
-    def serd(self):
+    def serd(self, same_side=False):
         """Creates an object which can be passed to deser to get the opposite end
         of this queue.
+
+        Args:
+            same_side (bool): if True we do not change sides, False to change sides
         """
-        return (self.port, not self.is_output)
+        if same_side:
+            side = self.is_output
+        else:
+            side = not self.is_output
+        return (self.port, side)

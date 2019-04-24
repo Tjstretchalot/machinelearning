@@ -436,21 +436,109 @@ class FrameWorkerConnection:
         """Checks if the worker has shutdown yet"""
         return not self.process.is_alive()
 
+class LayerEncoderWorker:
+    """Describes a worker which simply manages sending the image queue through to the
+    ffmpeg instance. This was originally part of the LayerWorker but is actually fairly
+    expensive
+
+    Attributes:
+        receive_queue (ZeroMQQueue): the queue we receive meta messages (i.e. shutdown) from
+        img_queue (ZeroMQQueue): the queue that images are passed in through
+
+        dpi (int): pixels per inch
+        frame_size (tuple): the width/height in inches to render at
+        fps (int): number of frames per second
+        outfile (str): the file to save at
+        ffmpeg_logfile (str): where we can save ffmpeg performance information
+
+        anim (MPAnimation): the animation
+    """
+
+    def __init__(self, receive_queue: ZeroMQQueue, img_queue: ZeroMQQueue, dpi: int,
+                 frame_size: tuple, fps: int, outfile: str, ffmpeg_logfile: str):
+        self.receive_queue = receive_queue
+        self.img_queue = img_queue
+        self.dpi = dpi
+        self.frame_size = frame_size
+        self.fps = fps
+        self.outfile = outfile
+        self.ffmpeg_logfile = ffmpeg_logfile
+
+        self.anim = None
+
+    def prepare(self):
+        """Prepares this worker to do work"""
+
+        self.anim = MPAnimation(
+            self.dpi, (int(self.frame_size[0] * self.dpi), int(self.frame_size[1] * self.dpi)),
+            self.fps, self.outfile, self.ffmpeg_logfile)
+        self.anim.register_queue(self.img_queue)
+
+    def do_work(self):
+        """Tries to do some work and returns True if we did something False if we did nothing"""
+        return self.anim.do_work()
+
+    def shutdown(self):
+        """Prepares this worker to be shutdown"""
+        while self.do_work():
+            pass
+        self.anim.finish()
+        self.anim = None
+
+    def work(self):
+        """Should be called after initialization to work until we receive a shutdown message"""
+
+        while self.receive_queue.empty():
+            while self.do_work():
+                pass
+            time.sleep(0.001)
+
+        self.receive_queue.get()
+        self.shutdown()
+
+def __layer_encoder_target(recq, imgq, dpi, frame_size, fps, outfile, ffmpeg_logfile):
+    recq = ZeroMQQueue.deser(recq)
+    imgq = ZeroMQQueue.deser(imgq)
+    worker = LayerEncoderWorker(recq, imgq, dpi, frame_size, fps, outfile, ffmpeg_logfile)
+    worker.work()
+
+class LayerEncoderWorkerConnection:
+    """Describes a connecter from the layerworker to the layerencoder worker
+
+    Attributes:
+        process (Process): the encoder worker process
+        notif_queue (ZeroMQQueue): the put queue we can send notifications with
+    """
+
+    def __init__(self, process: Process, notif_queue: ZeroMQQueue):
+        self.process = process
+        self.notif_queue = notif_queue
+
+    def shutdown(self):
+        """Cleanly shuts down the encoder"""
+        if not self.process.is_alive():
+            return
+
+        self.notif_queue.put(('shutdown',))
+        while self.process.is_alive():
+            time.sleep(0.001)
 
 class LayerWorker:
     """Describes a worker instance. A worker manages rendering of a single layer. It itself
-    will delegate to FrameWorkers which will render the individual frames.
+    will delegate to FrameWorkers which will render the individual frames, and then to a
+    LayerEncoderWorker to push the animations to ffmpeg for encoding, which is typically the
+    expensive part of the process.
 
     Example training a 7-layer network: the main thread delegates to 7 layer thread which each
-        delegate to 4 frame threads. A total of 30 threads are used for generating this plot,
-        which is probably only going to work on a cluster
+        delegate to 4 frame threads and 7 encoder threads. A total of 37 threads are used for
+        generating this plot, which is probably only going to work on a cluster
 
     Attributes:
         receive_queue (ZeroMQQueue): the queue we receive messages from
         send_queue (ZeroMQQueue): the queue we send messages through
 
         num_frame_workers (int): the number of frame workers we are allowed
-        anim (MPAnimation): the animation
+        encoder (LayerEncoderWorkerConnection): the encoder connection
         frame_workers (list[FrameWorkerConnection]): the spawned frame workers
 
         worker_id (str): the id for this worker
@@ -486,7 +574,7 @@ class LayerWorker:
         self.send_queue = send_queue
 
         self.num_frame_workers = None
-        self.anim = None
+        self.encoder = None
         self.frame_workers = None
 
         self.worker_id = None
@@ -585,14 +673,15 @@ class LayerWorker:
         """Initializes the animation and spawns the frame workers
         """
 
-        self.anim = MPAnimation(
-            self.dpi, (int(self.frame_size[0] * self.dpi), int(self.frame_size[1] * self.dpi)),
-            self.fps, self.outfile, self.ffmpeg_logfile)
-
-        self.anim.start()
-
+        enc_notif_queue = ZeroMQQueue.create_send()
         imgq = ZeroMQQueue.create_recieve()
-        self.anim.register_queue(imgq)
+        proc = Process(target=__layer_encoder_target,
+                       args=(enc_notif_queue.serd(), imgq.serd(same_side=True),
+                             self.dpi, self.frame_size, self.fps, self.outfile,
+                             self.ffmpeg_logfile))
+        proc.start()
+
+        self.encoder = LayerEncoderWorkerConnection(proc, enc_notif_queue)
 
         self.frame_workers = []
         closure = lambda x: x
@@ -626,8 +715,6 @@ class LayerWorker:
 
             if time.time() - start > 15000:
                 raise RuntimeError(f'timeout occurred while trying to dispatch frame')
-
-            self._busy_work()
 
     def _wait_all_acks(self):
         """Waits for the ASAP acks"""
@@ -663,18 +750,9 @@ class LayerWorker:
 
             if not waiting_end:
                 break
-            self._busy_work()
 
-        while self.anim.process_frame():
-            pass
-        self.anim.finish()
-
-    def _busy_work(self):
-        """This function can (and must be called) whenever there is time available"""
-        self.perf.enter('ANIM_DO_WORK')
-        res = self.anim.do_work()
-        self.perf.exit()
-        return res
+        self.encoder.shutdown()
+        self.encoder = None
 
     def work(self):
         """Handles the work required to render this layer"""
@@ -695,7 +773,6 @@ class LayerWorker:
             else:
                 if time.time() - last_work_time > 15000:
                     raise RuntimeError(f'layer worker received no work to do and timed out')
-                self._busy_work()
                 continue
             if msg[0] == 'hidacts_done':
                 break
@@ -719,11 +796,6 @@ class LayerWorker:
             self._wait_all_acks()
             self.perf.exit()
             self.send_queue.put(('hidacts',))
-            if work_counter % 100 == 0:
-                self.perf.enter('CLEAR_WORK')
-                while self._busy_work():
-                    pass
-                self.perf.exit()
             self.perf.enter('RECEIVE_QUEUE')
 
         self.perf.enter('SHUTDOWN_ALL')
