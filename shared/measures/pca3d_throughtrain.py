@@ -386,8 +386,6 @@ class FrameWorkerConnection:
         """
         if not self.awaiting_ready_ack:
             return
-        if not ready and not self.awaiting_asap_ack:
-            return
         if not self.ack_queue.empty():
             ack = self.ack_queue.get_nowait()
             if ack is None:
