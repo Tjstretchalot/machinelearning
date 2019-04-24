@@ -500,11 +500,18 @@ class LayerEncoderWorker:
             self.prepare()
 
             print('Working..', file=self.loghandle)
+            work_count = 0
             self.loghandle.flush()
             while self.receive_queue.empty():
                 for _ in range(100):
                     if not self.do_work():
                         break
+                    else:
+                        work_count += 1
+                        if work_count % 100 == 0:
+                            print(f'Finished work item {work_count}', file=self.loghandle)
+                            if work_count % 1000 == 0:
+                                self.loghandle.flush()
                 else:
                     print('Getting behind (100 iters without break)', file=self.loghandle)
                     self.loghandle.flush()
