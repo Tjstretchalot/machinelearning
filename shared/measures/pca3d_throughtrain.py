@@ -741,7 +741,7 @@ class LayerWorker:
                     worker.send_job(rotation, title, index)
                     return
 
-            if time.time() - start > 15000:
+            if time.time() - start > 15:
                 raise RuntimeError(f'timeout occurred while trying to dispatch frame')
 
     def _wait_all_acks(self):
@@ -763,32 +763,23 @@ class LayerWorker:
             if not waiting_ack:
                 break
 
-            if time.time() - start > 15000:
+            if time.time() - start > 15:
                 raise RuntimeError(f'timeout while waiting for frame workers to acknowledge frame')
 
     def _shutdown_all(self):
-        print('_shutdown_all')
         for worker in self.frame_workers:
-            print('send_end')
             worker.send_end()
-            print('send_end succ')
-        print('send ends succ')
         start = time.time()
         printed_warn = False
         while True:
             waiting_end = False
             for worker in self.frame_workers:
-                print('check end')
                 if not worker.check_end():
-                    print('awaiting end')
                     waiting_end = True
-                else:
-                    print('not waiting end')
 
             if not waiting_end:
-                print('done waiting on frame workers')
                 break
-            if (not printed_warn) and ((time.time() - start) > 15000):
+            if (not printed_warn) and ((time.time() - start) > 15):
                 print(f'LayerWorker {self.worker_id} - frame workers taking a long time to close')
                 printed_warn = True
 
@@ -814,7 +805,7 @@ class LayerWorker:
                 self.perf.exit()
                 last_work_time = time.time()
             else:
-                if time.time() - last_work_time > 15000:
+                if time.time() - last_work_time > 15:
                     raise RuntimeError(f'layer worker received no work to do and timed out')
                 continue
             if msg[0] == 'hidacts_done':
