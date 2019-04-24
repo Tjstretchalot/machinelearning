@@ -450,6 +450,8 @@ class LayerEncoderWorker:
         fps (int): number of frames per second
         outfile (str): the file to save at
         ffmpeg_logfile (str): where we can save ffmpeg performance information
+        logfile (str): where we can save our debug information
+        loghandle (file): the file handle to logfile
 
         anim (MPAnimation): the animation
     """
@@ -463,6 +465,9 @@ class LayerEncoderWorker:
         self.fps = fps
         self.outfile = outfile
         self.ffmpeg_logfile = ffmpeg_logfile
+
+        self.logfile = os.path.join(os.path.dirname(outfile), os.path.splitext(outfile)[0] + '_encoder.log')
+        self.loghandle = open(self.logfile, 'w')
 
         self.anim = None
 
@@ -488,15 +493,36 @@ class LayerEncoderWorker:
     def work(self):
         """Should be called after initialization to work until we receive a shutdown message"""
 
-        self.prepare()
+        print('Preparing...', file=self.loghandle)
+        try:
+            self.prepare()
+        except:
+            traceback.print_exc(file=self.loghandle)
+            raise
 
-        while self.receive_queue.empty():
-            while self.do_work():
-                pass
-            time.sleep(0.001)
+        print('Working..', file=self.loghandle)
+        try:
+            while self.receive_queue.empty():
+                while self.do_work():
+                    pass
+                time.sleep(0.001)
+        except:
+            traceback.print_exc(file=self.loghandle)
+            raise
 
-        self.receive_queue.get()
-        self.shutdown()
+        print('Received shutdown message, clearing it...')
+        try:
+            self.receive_queue.get()
+        except:
+            traceback.print_exc(file=self.loghandle)
+            raise
+
+        print('Shutting down...')
+        try:
+            self.shutdown()
+        except:
+            traceback.print_exc(file=self.loghandle)
+            raise
 
 def _layer_encoder_target(recq, imgq, dpi, frame_size, fps, outfile, ffmpeg_logfile):
     recq = ZeroMQQueue.deser(recq)
