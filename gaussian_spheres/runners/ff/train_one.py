@@ -24,13 +24,13 @@ SAVEDIR = shared.filetools.savepath()
 
 FRAME_TIME = 200 # 16.67 for 60fps
 INPUT_DIM = 5
-OUTPUT_DIM = 3
+OUTPUT_DIM = 10
 
 def main():
     """Entry point"""
     pwl = GaussianSpheresPWLP.create(
         epoch_size=2700, input_dim=INPUT_DIM, output_dim=OUTPUT_DIM, cube_half_side_len=2,
-        num_clusters=3, std_dev=0.2, mean=0, min_sep=0.5, force_split=True
+        num_clusters=10, std_dev=0.5, mean=0, min_sep=1, force_split=True
     )
 
     layers_and_nonlins = (
