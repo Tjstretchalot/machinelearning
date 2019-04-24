@@ -496,7 +496,7 @@ class LayerEncoderWorker:
         self.receive_queue.get()
         self.shutdown()
 
-def __layer_encoder_target(recq, imgq, dpi, frame_size, fps, outfile, ffmpeg_logfile):
+def _layer_encoder_target(recq, imgq, dpi, frame_size, fps, outfile, ffmpeg_logfile):
     recq = ZeroMQQueue.deser(recq)
     imgq = ZeroMQQueue.deser(imgq)
     worker = LayerEncoderWorker(recq, imgq, dpi, frame_size, fps, outfile, ffmpeg_logfile)
@@ -675,7 +675,7 @@ class LayerWorker:
 
         enc_notif_queue = ZeroMQQueue.create_send()
         imgq = ZeroMQQueue.create_recieve()
-        proc = Process(target=__layer_encoder_target,
+        proc = Process(target=_layer_encoder_target,
                        args=(enc_notif_queue.serd(), imgq.serd(same_side=True),
                              self.dpi, self.frame_size, self.fps, self.outfile,
                              self.ffmpeg_logfile))
