@@ -501,8 +501,13 @@ class LayerEncoderWorker:
             print('Working..', file=self.loghandle)
             self.loghandle.flush()
             while self.receive_queue.empty():
-                while self.do_work():
-                    pass
+                for i in range(100):
+                    if not self.do_work():
+                        break
+                else:
+                    print('Getting behind (100 iters without break)', file=self.loghandle)
+                    self.loghandle.flush()
+
                 time.sleep(0.001)
 
             print('Received shutdown message, clearing it...')
