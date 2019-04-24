@@ -68,7 +68,7 @@ def main():
     )
 
     pca3d_throughtrain.FRAMES_PER_TRAIN = 1
-    pca3d_throughtrain.NUM_FRAME_WORKERS = 3
+    pca3d_throughtrain.NUM_FRAME_WORKERS = 6
 
     dig = npmp.NPDigestor('train_one', 35)
     #pca_3d.plot_ff(pca_ff.find_trajectory(network, pwl, 3), os.path.join(SAVEDIR, 'pca_3d_start'), True,
