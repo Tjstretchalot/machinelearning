@@ -86,6 +86,7 @@ class FrameWorker:
         ack_mode (str): determines when we send the 'ack' message through the ack_queue
                 'asap': we send as soon as modifying hidden_acts would not hurt our rendering
                 'ready': we send as soon as we're ready for a new hidden_acts
+                'both': ack both times
 
         hacts_file (str): the path to the hidden activations file, which contains the memmappable
             [batch_size x layer_size] data
@@ -318,7 +319,7 @@ class FrameWorker:
             self.perf.enter('GET_SNAPSHOT')
             self._get_snapshot()
             self.perf.exit()
-            if self.ack_mode == 'asap':
+            if self.ack_mode in ('asap', 'both'):
                 self.perf.enter('ACK_ASAP')
                 self.ack_queue.put(('ack',))
                 self.perf.exit()
@@ -335,7 +336,7 @@ class FrameWorker:
             self.img_queue.put((self.index, frm))
             self.perf.exit()
             self.perf.exit()
-            if self.ack_mode == 'ready':
+            if self.ack_mode in ('ready', 'both'):
                 self.perf.enter('ACK_READY')
                 self.ack_queue.put(('ack',))
                 self.perf.exit()
@@ -364,27 +365,51 @@ class FrameWorkerConnection:
         job_queue (ZeroMQQueue): the queue which we send jobs to
         ack_queue (ZeroMQQueue): the queue which we receive acks from
 
-        awaiting_ack (bool): True if we haven't seen an ack from the last job yet
+        awaiting_asap_ack (bool): True if we haven't seen an ack from the last job yet
+        awaiting_ready_ack (bool): True if we haven't seen a ready ack for the last job
+
+        ack_mode (str): one of 'asap', 'ready', 'both'
     """
 
-    def __init__(self, process: Process, job_queue: ZeroMQQueue, ack_queue: ZeroMQQueue):
+    def __init__(self, process: Process, job_queue: ZeroMQQueue, ack_queue: ZeroMQQueue,
+                 ack_mode: str):
         self.process = process
         self.job_queue = job_queue
         self.ack_queue = ack_queue
-        self.awaiting_ack = False
+        self.ack_mode = ack_mode
+
+        self.awaiting_asap_ack = False
+        self.awaiting_ready_ack = False
+
+    def _wait_next_ack(self):
 
     def check_ack(self):
-        """Non-blocking equivalent of wait_ack"""
-        if self.awaiting_ack and not self.ack_queue.empty():
+        """Checks if we have any acks waiting in the queue
+        """
+        if not self.awaiting_ready_ack:
+            return
+        if not ready and not self.awaiting_asap_ack:
+            return
+        if not self.ack_queue.empty():
             ack = self.ack_queue.get_nowait()
-            if ack is not None:
-                self.awaiting_ack = False
+            if ack is None:
+                return
+            if self.awaiting_asap_ack:
+                self.awaiting_asap_ack = False
+            else:
+                self.awaiting_ready_ack = False
 
-    def wait_ack(self):
+    def wait_ack(self, ready=True):
         """Waits for the acknowledgement of the job from the frame worker"""
-        if self.awaiting_ack:
-            self.ack_queue.get(timeout=15)
-            self.awaiting_ack = False
+        if not self.awaiting_ready_ack:
+            return
+        if not ready and not self.awaiting_asap_ack:
+            return
+        self.ack_queue.get(timeout=15)
+        if self.awaiting_asap_ack:
+            self.awaiting_asap_ack = False
+        else:
+            self.awaiting_ready_ack = False
 
     def send_job(self, rotation: float, title: str, index: int):
         """Tells the frame worker to produce an image of the given rotation and title. The
@@ -397,7 +422,8 @@ class FrameWorkerConnection:
         """
         self.wait_ack()
         self.job_queue.put(('frame', rotation, title, index, time.time()))
-        self.awaiting_ack = True
+        self.awaiting_asap_ack = self.ack_mode in ('asap', 'both')
+        self.awaiting_ready_ack = self.ack_mode in ('ready', 'both')
 
     def send_end(self):
         """Tells the worker to shutdown"""
@@ -572,8 +598,9 @@ class LayerWorker:
             jobq = ZeroMQQueue.create_send()
             imgq = ZeroMQQueue.create_recieve()
             ackq = ZeroMQQueue.create_recieve()
+            ackm = 'both'
             proc = Process(target=_frame_worker_target,
-                           args=(jobq.serd(), imgq.serd(), ackq.serd(), 'asap', self.hid_acts_file,
+                           args=(jobq.serd(), imgq.serd(), ackq.serd(), ackm, self.hid_acts_file,
                                  self.sample_labels_file, self.match_mean_comps_file,
                                  self.batch_size, self.layer_size, self.output_dim,
                                  self.frame_size[0], self.frame_size[1], self.dpi,
@@ -582,7 +609,7 @@ class LayerWorker:
                                      # do not change below to just idx because it wont be closed
                                      f'layer_{self.worker_id}_frame_{closure(idx)}.log')))
             self.anim.register_queue(imgq)
-            conn = FrameWorkerConnection(proc, jobq, ackq)
+            conn = FrameWorkerConnection(proc, jobq, ackq, ackm)
             self.frame_workers.append(conn)
 
             proc.start()
@@ -592,7 +619,7 @@ class LayerWorker:
         while True:
             for worker in self.frame_workers:
                 worker.check_ack()
-                if not worker.awaiting_ack:
+                if not worker.awaiting_ready_ack:
                     worker.send_job(rotation, title, index)
                     return
 
@@ -602,12 +629,13 @@ class LayerWorker:
             self._busy_work()
 
     def _wait_all_acks(self):
+        """Waits for the ASAP acks"""
         start = time.time()
         while True:
             waiting_ack = False
             for worker in self.frame_workers:
                 worker.check_ack()
-                waiting_ack = waiting_ack or worker.awaiting_ack
+                waiting_ack = waiting_ack or worker.awaiting_asap_ack
 
             if not waiting_ack:
                 break
