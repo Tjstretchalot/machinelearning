@@ -672,8 +672,9 @@ class LayerWorker:
     def _busy_work(self):
         """This function can (and must be called) whenever there is time available"""
         self.perf.enter('ANIM_DO_WORK')
-        self.anim.do_work()
+        res = self.anim.do_work()
         self.perf.exit()
+        return res
 
     def work(self):
         """Handles the work required to render this layer"""
@@ -718,6 +719,11 @@ class LayerWorker:
             self._wait_all_acks()
             self.perf.exit()
             self.send_queue.put(('hidacts',))
+            if work_counter % 100 == 0:
+                self.perf.enter('CLEAR_WORK')
+                while self._busy_work():
+                    pass
+                self.perf.exit()
             self.perf.enter('RECEIVE_QUEUE')
 
         self.perf.enter('SHUTDOWN_ALL')

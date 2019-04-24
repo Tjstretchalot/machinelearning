@@ -304,8 +304,10 @@ class MPAnimation:
         """Pushes queues onto the local memory stack. This operation should be fairly quick.
         """
 
+        did_work = False
         for queue in self.receive_queues:
             if not queue.empty():
+                did_work = True
                 msg = queue.get_nowait()
                 if not isinstance(msg, tuple):
                     raise ValueError(f'expected msg from receive_queue is tuple, got {msg} (type={type(msg)})')
@@ -325,6 +327,7 @@ class MPAnimation:
                 if len(self.ooo_frames) >= 1000:
                     raise ValueError(f'exceeded maximum frame cache (have {len(self.ooo_frames)} out of order while waiting for {self.next_frame})')
                 self.ooo_frames[frame] = img_bytes
+        return did_work
 
     def process_frame(self) -> bool:
         """Processes the next frame if it is available. Returns True if we
@@ -343,9 +346,13 @@ class MPAnimation:
         return True
 
     def do_work(self):
-        """A general catch-all function to do some work"""
-        self.check_queues()
-        self.process_frame()
+        """A general catch-all function to do some work, returns True if did work"""
+        did_work = False
+        if self.check_queues():
+            did_work = True
+        if self.process_frame():
+            did_work = True
+        return did_work
 
     def finish(self):
         """Cleanly closes handles"""
