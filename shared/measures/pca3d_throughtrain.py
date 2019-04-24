@@ -321,7 +321,7 @@ class FrameWorker:
             self.perf.exit()
             if self.ack_mode in ('asap', 'both'):
                 self.perf.enter('ACK_ASAP')
-                self.ack_queue.put(('ack',))
+                self.ack_queue.put(('ack', time.time()))
                 self.perf.exit()
             if self.figure is None:
                 self._init_figure()
@@ -338,7 +338,7 @@ class FrameWorker:
             self.perf.exit()
             if self.ack_mode in ('ready', 'both'):
                 self.perf.enter('ACK_READY')
-                self.ack_queue.put(('ack',))
+                self.ack_queue.put(('ack', time.time()))
                 self.perf.exit()
             self.state = 1
             return True
@@ -382,18 +382,21 @@ class FrameWorkerConnection:
         self.awaiting_ready_ack = False
 
     def check_ack(self):
-        """Checks if we have any acks waiting in the queue
+        """Checks if we have any acks waiting in the queue. Returns the ack
+        sent at time if we receive one
         """
         if not self.awaiting_ready_ack:
-            return
+            return None
         if not self.ack_queue.empty():
             ack = self.ack_queue.get_nowait()
             if ack is None:
-                return
+                return None
             if self.awaiting_asap_ack:
                 self.awaiting_asap_ack = False
             else:
                 self.awaiting_ready_ack = False
+
+            return ack[1]
 
     def wait_ack(self, ready=True):
         """Waits for the acknowledgement of the job from the frame worker"""
@@ -632,8 +635,15 @@ class LayerWorker:
         while True:
             waiting_ack = False
             for worker in self.frame_workers:
-                worker.check_ack()
+                ack_start = worker.check_ack()
                 waiting_ack = waiting_ack or worker.awaiting_asap_ack
+
+                if ack_start is not None:
+                    if worker.awaiting_ready_ack:
+                        self.perf.enter('ASAP_ACK_DELAY', force_time=ack_start)
+                    else:
+                        self.perf.enter('READY_ACK_DELAY', force_time=ack_start)
+                    self.perf.exit()
 
             if not waiting_ack:
                 break
