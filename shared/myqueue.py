@@ -57,27 +57,29 @@ class ZeroMQQueue:
 
     @classmethod
     def create_recieve(cls, port=None):
-        """Creates a queue which you can get() from"""
+        """Creates a queue which you can get() from. If the port is specified
+        this connects to it, otherwise it binds to a random port."""
 
         context = zmq.Context()
         connection = context.socket(zmq.PULL) # pylint: disable=no-member
         if port is None:
             port = connection.bind_to_random_port('tcp://127.0.0.1')
         else:
-            connection.bind(f'tcp://127.0.0.1:{port}')
+            connection.connect(f'tcp://127.0.0.1:{port}')
 
         return cls(connection, port, False)
 
     @classmethod
     def create_send(cls, port=None):
-        """Creates a queue which you can put() into"""
+        """Creates a queue which you can put() into.  If the port is specified
+        this connects to it, otherwise it binds to a random port."""
 
         context = zmq.Context()
         connection = context.socket(zmq.PUSH) # pylint: disable=no-member
         if port is None:
             port = connection.bind_to_random_port('tcp://127.0.0.1')
         else:
-            connection.bind(f'tcp://127.0.0.1:{port}')
+            connection.connect(f'tcp://127.0.0.1:{port}')
 
         return cls(connection, port, True)
 
