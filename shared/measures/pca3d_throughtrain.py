@@ -508,9 +508,9 @@ class LayerEncoderWorker:
                         break
                     else:
                         work_count += 1
-                        if work_count % 100 == 0:
+                        if work_count % 1 == 0:
                             print(f'Finished work item {work_count}', file=self.loghandle)
-                            if work_count % 1000 == 0:
+                            if work_count % 1 == 0:
                                 self.loghandle.flush()
                 else:
                     print('Getting behind (100 iters without break)', file=self.loghandle)
