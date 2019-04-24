@@ -717,9 +717,6 @@ class LayerWorker:
         self._close_mmaps()
         self.send_queue.put(('videos_done',))
 
-        while not self.send_queue.empty():
-            time.sleep(0.1)
-
 def _worker_target(receive_queue, send_queue):
     worker = LayerWorker(ZeroMQQueue.deser(receive_queue), ZeroMQQueue.deser(send_queue))
     worker.work()
