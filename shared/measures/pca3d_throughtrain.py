@@ -466,7 +466,8 @@ class LayerEncoderWorker:
         self.outfile = outfile
         self.ffmpeg_logfile = ffmpeg_logfile
 
-        self.logfile = os.path.join(os.path.dirname(outfile), os.path.splitext(outfile)[0] + '_encoder.log')
+        self.logfile = os.path.join(os.path.dirname(outfile),
+                                    os.path.splitext(os.path.basename(outfile))[0] + '_encoder.log')
         self.loghandle = open(self.logfile, 'w')
 
         self.anim = None
