@@ -381,8 +381,6 @@ class FrameWorkerConnection:
         self.awaiting_asap_ack = False
         self.awaiting_ready_ack = False
 
-    def _wait_next_ack(self):
-
     def check_ack(self):
         """Checks if we have any acks waiting in the queue
         """
