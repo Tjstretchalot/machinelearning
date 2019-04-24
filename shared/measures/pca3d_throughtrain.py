@@ -443,6 +443,7 @@ class LayerEncoderWorker:
 
     Attributes:
         receive_queue (ZeroMQQueue): the queue we receive meta messages (i.e. shutdown) from
+        response_queue (ZeroMQQueue): the queue we send meta messages through
         img_queue (ZeroMQQueue): the queue that images are passed in through
 
         dpi (int): pixels per inch
@@ -456,10 +457,11 @@ class LayerEncoderWorker:
         anim (MPAnimation): the animation
     """
 
-    def __init__(self, receive_queue: ZeroMQQueue, img_queue: ZeroMQQueue, dpi: int,
+    def __init__(self, receive_queue: ZeroMQQueue, response_queue: ZeroMQQueue, dpi: int,
                  frame_size: tuple, fps: int, outfile: str, ffmpeg_logfile: str):
         self.receive_queue = receive_queue
-        self.img_queue = img_queue
+        self.response_queue = response_queue
+        self.img_queue = None
         self.dpi = dpi
         self.frame_size = frame_size
         self.fps = fps
@@ -474,6 +476,8 @@ class LayerEncoderWorker:
 
     def prepare(self):
         """Prepares this worker to do work"""
+        self.img_queue = ZeroMQQueue.create_recieve()
+        self.response_queue.put(self.img_queue.port)
 
         self.anim = MPAnimation(
             self.dpi, (int(self.frame_size[0] * self.dpi), int(self.frame_size[1] * self.dpi)),
@@ -531,10 +535,10 @@ class LayerEncoderWorker:
             self.loghandle = None
             raise
 
-def _layer_encoder_target(recq, imgq, dpi, frame_size, fps, outfile, ffmpeg_logfile):
+def _layer_encoder_target(recq, respq, dpi, frame_size, fps, outfile, ffmpeg_logfile):
     recq = ZeroMQQueue.deser(recq)
-    imgq = ZeroMQQueue.deser(imgq)
-    worker = LayerEncoderWorker(recq, imgq, dpi, frame_size, fps, outfile, ffmpeg_logfile)
+    respq = ZeroMQQueue.deser(respq)
+    worker = LayerEncoderWorker(recq, respq, dpi, frame_size, fps, outfile, ffmpeg_logfile)
     worker.work()
 
 class LayerEncoderWorkerConnection:
@@ -709,12 +713,15 @@ class LayerWorker:
         """
 
         enc_notif_queue = ZeroMQQueue.create_send()
-        imgq = ZeroMQQueue.create_recieve()
+        enc_notif_squeue = ZeroMQQueue.create_recieve()
         proc = Process(target=_layer_encoder_target,
-                       args=(enc_notif_queue.serd(), imgq.serd(same_side=True),
+                       args=(enc_notif_queue.serd(), enc_notif_squeue.serd(),
                              self.dpi, self.frame_size, self.fps, self.outfile,
                              self.ffmpeg_logfile))
         proc.start()
+
+        imgq_port = enc_notif_squeue.get()
+        imgq = ZeroMQQueue.create_recieve(port=imgq_port)
 
         self.encoder = LayerEncoderWorkerConnection(proc, enc_notif_queue)
 
