@@ -651,8 +651,6 @@ class LayerWorker:
             if time.time() - start > 15000:
                 raise RuntimeError(f'timeout while waiting for frame workers to acknowledge frame')
 
-            self._busy_work()
-
     def _shutdown_all(self):
         for worker in self.frame_workers:
             worker.send_end()
