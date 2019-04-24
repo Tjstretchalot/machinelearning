@@ -780,7 +780,7 @@ class LayerWorker:
 
             if not waiting_end:
                 break
-            elif not printed_warn and time.time() - start > 15000:
+            if (not printed_warn) and ((time.time() - start) > 15000):
                 print(f'LayerWorker {self.worker_id} - frame workers taking a long time to close')
                 printed_warn = True
 
@@ -843,7 +843,11 @@ class LayerWorker:
 
 def _worker_target(receive_queue, send_queue):
     worker = LayerWorker(ZeroMQQueue.deser(receive_queue), ZeroMQQueue.deser(send_queue))
-    worker.work()
+    try:
+        worker.work()
+    except:
+        traceback.print_exc()
+        raise
 
 class WorkerConnection:
     """Describes the main threads connection to the worker.
