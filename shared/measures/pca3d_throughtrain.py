@@ -479,6 +479,7 @@ class LayerEncoderWorker:
             self.dpi, (int(self.frame_size[0] * self.dpi), int(self.frame_size[1] * self.dpi)),
             self.fps, self.outfile, self.ffmpeg_logfile)
         self.anim.register_queue(self.img_queue)
+        self.anim.start()
 
     def do_work(self):
         """Tries to do some work and returns True if we did something False if we did nothing"""
@@ -510,10 +511,12 @@ class LayerEncoderWorker:
 
                 time.sleep(0.001)
 
-            print('Received shutdown message, clearing it...')
+            print('Received shutdown message, clearing it...', file=self.loghandle)
+            self.loghandle.flush()
             self.receive_queue.get()
 
-            print('Shutting down...')
+            print('Shutting down...', file=self.loghandle)
+            self.loghandle.flush()
             self.shutdown()
         except:
             traceback.print_exc(file=self.loghandle)
@@ -776,7 +779,9 @@ class LayerWorker:
             if not waiting_end:
                 break
 
+        print(f'LayerWorker {self.worker_id} shutting down encoder')
         self.encoder.shutdown()
+        print(f'LayerWorker {self.worker_id} successfully shutdown encoder')
         self.encoder = None
 
     def work(self):
