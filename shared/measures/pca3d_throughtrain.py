@@ -502,7 +502,7 @@ class LayerEncoderWorker:
             print('Working..', file=self.loghandle)
             self.loghandle.flush()
             while self.receive_queue.empty():
-                for i in range(100):
+                for _ in range(100):
                     if not self.do_work():
                         break
                 else:
@@ -770,6 +770,8 @@ class LayerWorker:
         for worker in self.frame_workers:
             worker.send_end()
 
+        start = time.time()
+        printed_warn = False
         while True:
             waiting_end = False
             for worker in self.frame_workers:
@@ -778,6 +780,9 @@ class LayerWorker:
 
             if not waiting_end:
                 break
+            elif not printed_warn and time.time() - start > 15000:
+                print(f'LayerWorker {self.worker_id} - frame workers taking a long time to close')
+                printed_warn = True
 
         print(f'LayerWorker {self.worker_id} shutting down encoder')
         self.encoder.shutdown()
@@ -828,6 +833,7 @@ class LayerWorker:
             self.send_queue.put(('hidacts',))
             self.perf.enter('RECEIVE_QUEUE')
 
+        print(f'LayerWorker {self.worker_id} shutting down')
         self.perf.enter('SHUTDOWN_ALL')
         self._shutdown_all()
         self.perf.exit()
