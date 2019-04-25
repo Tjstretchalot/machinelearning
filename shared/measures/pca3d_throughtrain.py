@@ -953,6 +953,8 @@ class PCAThroughTrain:
             with the worker thread via memmap'd files
         layer_names (list[str]): the name of each layer starting with 'input' and ending with
             'output'
+        layer_indices (list[int]): the indicies in layer_names that we actually send to layer
+            workers
 
         connections (list[WorkerConnection]): the connections to the workers
         skip_counter (int): number of hidacts skipped since last sent one
@@ -970,7 +972,8 @@ class PCAThroughTrain:
         hid_acts_files (list[str]): the paths to the hidden activation files (by layer) mmap'd
     """
 
-    def __init__(self, output_path: str, layer_names: typing.List[str], exist_ok: bool = False):
+    def __init__(self, output_path: str, layer_names: typing.List[str], exist_ok: bool = False,
+                 layer_indices=None):
         """
         Args:
             output_path (str): either the output folder or the output archive
@@ -979,10 +982,14 @@ class PCAThroughTrain:
             exist_ok (bool, optional): Defaults to False. If True, if the output
                 archive already exists it will be deleted. Otherwise, if the output
                 archive already exists an error will be raised
+            layer_indices (list[int], optional): Default to None. If specified, only the
+                given layers are rendered (where 0 is the input and -1 is output). Otherwise
+                defaults to [1:]
         """
 
         _, self.output_folder = mutils.process_outfile(output_path, exist_ok)
         self.layer_names = layer_names
+        self.layer_indices = layer_indices
 
         self.connections = None
         self.skip_counter = None
@@ -1023,10 +1030,13 @@ class PCAThroughTrain:
 
         acts = mutils.get_hidacts_with_sample(context.model, self.sample_points_torch, self.sample_labels_torch)
 
+        if self.layer_indices is None:
+            self.layer_indices = [i for i in range(1, len(acts))]
         layer_sizes = []
         self.hid_acts_files = []
         self.layers = []
-        for idx, lyr in enumerate(acts.hid_acts):
+        for idx in self.layer_indices:
+            lyr = acts.hid_acts[idx]
             filepath = os.path.join(self.output_folder, f'hid_acts_{idx}.bin')
             self.hid_acts_files.append(filepath)
             layer_sizes.append(int(lyr.shape[1]))
@@ -1034,7 +1044,7 @@ class PCAThroughTrain:
 
         self.skip_counter = 0
         self.connections = []
-        for lyr in range(1, len(self.layers)):
+        for lyr in self.layer_indices:
             send_queue = ZeroMQQueue.create_send()
             receive_queue = ZeroMQQueue.create_recieve()
             proc = Process(target=_worker_target, args=(send_queue.serd(), receive_queue.serd())) # swapped
@@ -1070,8 +1080,8 @@ class PCAThroughTrain:
 
         nhacts = mutils.get_hidacts_with_sample(
             context.model, self.sample_points_torch, self.sample_labels_torch)
-        for idx, lyr in enumerate(nhacts.hid_acts):
-            self.layers[idx][:] = lyr
+        for lyrs_idx, idx in enumerate(self.layer_indices):
+            self.layers[lyrs_idx][:] = nhacts.hid_acts[idx]
         for connection in self.connections:
             connection.send_hidacts(int(context.shared['epochs'].epochs))
 
@@ -1103,7 +1113,7 @@ class PCAThroughTrain:
         self.sample_points = None
 
         for lyr in self.layers:
-            lyr._mmap.close()
+            lyr._mmap.close() # pylint: disable=protected-access
 
         self.layers = None
 
