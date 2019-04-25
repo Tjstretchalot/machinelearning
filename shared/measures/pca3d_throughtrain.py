@@ -1044,7 +1044,7 @@ class PCAThroughTrain:
 
         self.skip_counter = 0
         self.connections = []
-        for lyr in self.layer_indices:
+        for lyrsidx, lyr in enumerate(self.layer_indices):
             send_queue = ZeroMQQueue.create_send()
             receive_queue = ZeroMQQueue.create_recieve()
             proc = Process(target=_worker_target, args=(send_queue.serd(), receive_queue.serd())) # swapped
@@ -1054,14 +1054,14 @@ class PCAThroughTrain:
             send_queue.put((
                 'start',
                 {
-                    'worker_id': str(lyr),
+                    'worker_id': str(lyrsidx),
                     'outfile': os.path.join(self.output_folder, f'layer_{lyr}.mp4'),
                     'batch_size': self.batch_size,
                     'layer_name': self.layer_names[lyr],
                     'layer_size': layer_sizes[lyr],
                     'output_dim': context.test_pwl.output_dim,
                     'sample_labels_file': self.sample_labels_file,
-                    'hid_acts_file': self.hid_acts_files[lyr],
+                    'hid_acts_file': self.hid_acts_files[lyrsidx],
                     'dpi': self.dpi,
                     'fps': self.fps,
                     'frame_size': self.frame_size,
