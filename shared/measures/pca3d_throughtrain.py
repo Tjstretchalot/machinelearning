@@ -62,6 +62,8 @@ videos_done:
     sent from worker thread to main thread to confirm video finished
 """
 
+TIMEOUT_TIME = 300 # how long we wait before we give up on queues, should be long unless debugging
+SYNC_WORK_ITEMS = 1000
 FRAMES_PER_TRAIN = 4
 NUM_FRAME_WORKERS = 4
 MS_PER_ROTATION = 10000
@@ -405,7 +407,7 @@ class FrameWorkerConnection:
             return
         if not ready and not self.awaiting_asap_ack:
             return
-        self.ack_queue.get(timeout=15)
+        self.ack_queue.get(timeout=TIMEOUT_TIME)
         if self.awaiting_asap_ack:
             self.awaiting_asap_ack = False
         else:
@@ -507,9 +509,22 @@ class LayerEncoderWorker:
             print('Working..', file=self.loghandle)
             work_count = 0
             self.loghandle.flush()
-            while self.receive_queue.empty():
+
+            syncing = False
+            sync_start = None
+            sync_work_start = None
+            while True:
                 for _ in range(100):
                     if not self.do_work():
+                        if syncing:
+                            time_req = time.time() - sync_start
+                            item_req = work_count - sync_work_start
+                            self.response_queue.put(('sync',))
+                            syncing = False
+                            sync_start = None
+                            sync_work_start = None
+                            print(f'completed sync in {time_req} seconds - was {item_req} items behind', file=self.loghandle)
+                            self.loghandle.flush()
                         break
                     else:
                         work_count += 1
@@ -517,15 +532,24 @@ class LayerEncoderWorker:
                             print(f'{datetime.datetime.now()} - Finished work item {work_count}', file=self.loghandle)
                             if work_count % 500 == 0:
                                 self.loghandle.flush()
-                else:
-                    print('Getting behind (100 iters without break)', file=self.loghandle)
-                    self.loghandle.flush()
+
+                if not syncing and not self.receive_queue.empty():
+                    msg = self.receive_queue.get()
+
+                    if msg[0] == 'sync':
+                        if syncing:
+                            raise RuntimeError(f'receiving sync message while still syncing!')
+                        syncing = True
+                        sync_work_start = work_count
+                        print(f'received sync message')
+                        sync_start = time.time()
+                    elif msg[0] == 'shutdown':
+                        break
 
                 time.sleep(0.001)
 
-            print(f'{datetime.datetime.now()} Received shutdown message, clearing it...', file=self.loghandle)
+            print(f'{datetime.datetime.now()} Received shutdown message', file=self.loghandle)
             self.loghandle.flush()
-            self.receive_queue.get()
 
             print('Shutting down...', file=self.loghandle)
             self.loghandle.flush()
@@ -551,11 +575,18 @@ class LayerEncoderWorkerConnection:
     Attributes:
         process (Process): the encoder worker process
         notif_queue (ZeroMQQueue): the put queue we can send notifications with
+        ack_queue (ZeroMQQueue): the get queue we can receive messages from
     """
 
-    def __init__(self, process: Process, notif_queue: ZeroMQQueue):
+    def __init__(self, process: Process, notif_queue: ZeroMQQueue, ack_queue: ZeroMQQueue):
         self.process = process
         self.notif_queue = notif_queue
+        self.ack_queue = ack_queue
+
+    def sync(self):
+        """Waits for the encoder worker to catch up"""
+        self.notif_queue.put(('sync',))
+        self.ack_queue.get()
 
     def shutdown(self):
         """Cleanly shuts down the encoder"""
@@ -650,7 +681,7 @@ class LayerWorker:
         """Reads the start message from the receive queue
         """
 
-        msg = self.receive_queue.get(timeout=15)
+        msg = self.receive_queue.get(timeout=TIMEOUT_TIME)
         if msg[0] != 'start':
             raise RuntimeError(f'expected start message got {msg} ({msg[0]} != \'start\')')
 
@@ -727,7 +758,7 @@ class LayerWorker:
         imgq_port = enc_notif_squeue.get()
         imgq = ZeroMQQueue.create_recieve(port=imgq_port)
 
-        self.encoder = LayerEncoderWorkerConnection(proc, enc_notif_queue)
+        self.encoder = LayerEncoderWorkerConnection(proc, enc_notif_queue, enc_notif_squeue)
 
         self.frame_workers = []
         closure = lambda x: x
@@ -759,7 +790,7 @@ class LayerWorker:
                     worker.send_job(rotation, title, index)
                     return
 
-            if time.time() - start > 15:
+            if time.time() - start > TIMEOUT_TIME:
                 raise RuntimeError(f'timeout occurred while trying to dispatch frame')
 
     def _wait_all_acks(self):
@@ -781,7 +812,7 @@ class LayerWorker:
             if not waiting_ack:
                 break
 
-            if time.time() - start > 15:
+            if time.time() - start > TIMEOUT_TIME:
                 raise RuntimeError(f'timeout while waiting for frame workers to acknowledge frame')
 
     def _shutdown_all(self):
@@ -797,7 +828,7 @@ class LayerWorker:
 
             if not waiting_end:
                 break
-            if (not printed_warn) and ((time.time() - start) > 15):
+            if (not printed_warn) and ((time.time() - start) > TIMEOUT_TIME):
                 print(f'LayerWorker {self.worker_id} - frame workers taking a long time to close')
                 printed_warn = True
 
@@ -823,7 +854,7 @@ class LayerWorker:
                 self.perf.exit()
                 last_work_time = time.time()
             else:
-                if time.time() - last_work_time > 15:
+                if time.time() - last_work_time > TIMEOUT_TIME:
                     raise RuntimeError(f'layer worker received no work to do and timed out')
                 continue
             if msg[0] == 'hidacts_done':
@@ -834,6 +865,11 @@ class LayerWorker:
                 self.perf.enter('UPDATE_MATCH')
                 self._update_match()
                 self.perf.exit()
+            if work_counter % SYNC_WORK_ITEMS == 0:
+                self.perf.enter('SYNC_ENCODER')
+                self.encoder.sync()
+                self.perf.exit()
+
             work_counter += 1
             epoch = msg[1]
             for _ in range(FRAMES_PER_TRAIN):
@@ -887,7 +923,7 @@ class WorkerConnection:
     def check_ack(self):
         """Fetches a hidacts acknowledge message from the receive queue if appropriate"""
         if self.expecting_hidacts_ack:
-            msg = self.receive_queue.get(timeout=15)
+            msg = self.receive_queue.get(timeout=TIMEOUT_TIME)
             if msg[0] != 'hidacts':
                 raise ValueError(f'expected hidacts response, got {msg}')
 

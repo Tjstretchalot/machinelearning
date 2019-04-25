@@ -4,6 +4,8 @@ with faster implementations from other libraries without too much development wo
 
 import zmq
 import queue
+import sys
+import time
 
 class ZeroMQQueue:
     """A queue-like object that uses zmq as the backend. Each side is unidirectional,
@@ -83,6 +85,11 @@ class ZeroMQQueue:
 
         return cls(connection, port, True)
 
+    def _again(self, desc=None):
+        """Called when we receive an EAGAIN error"""
+        print(f'Received EAGAIN response (operation: {desc}) - sleeping 1ms')
+        time.sleep(0.001)
+
     def get(self, block=True, timeout=None): # pylint: disable=unused-argument
         """Gets the next value from the queue, blocking by default. Timeout is ignored"""
         if self.is_output:
@@ -96,7 +103,11 @@ class ZeroMQQueue:
             self.last_val = None
             return val
 
-        return self.connection.recv_pyobj()
+        while True:
+            try:
+                return self.connection.recv_pyobj()
+            except zmq.Again:
+                self._again('recv_pyobj')
 
     def get_nowait(self):
         """Gets the value in the queue if there is one, raises queue.Empty if not"""
@@ -122,7 +133,11 @@ class ZeroMQQueue:
         if not block:
             return self.put_nowait(val)
 
-        return self.connection.send_pyobj(val)
+        while True:
+            try:
+                return self.connection.send_pyobj(val)
+            except zmq.Again:
+                self._again('send_pyobj')
 
     def put_nowait(self, val):
         """Puts a value into the queue, nonblocking. Raises queue.Full if not"""
