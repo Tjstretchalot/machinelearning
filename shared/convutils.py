@@ -6,13 +6,21 @@ from functools import reduce
 import operator
 from shared.models.ff import ComplexLayer
 
+class Reshape(torch.nn.Module):
+    def __init__(self, *args):
+        super().__init__()
+        self.shape = args
+
+    def forward(self, x):
+        return x.view(self.shape)
+
 def flatten_after_maxpool(hidacts):
     """A valid operation on the hidacts that flattens after maxpooling"""
     return hidacts.reshape(-1, reduce(operator.mul, hidacts.shape[1:]))
 
 def unflatten_to(*args):
     """Calls reshape on the hidacts with the given args"""
-    return lambda x: x.reshape(*args)
+    return Reshape(*args)
 
 class FluentShape:
     """a fluent api for reshaping from maxpooling
