@@ -10,6 +10,10 @@ def flatten_after_maxpool(hidacts):
     """A valid operation on the hidacts that flattens after maxpooling"""
     return hidacts.reshape(-1, reduce(operator.mul, hidacts.shape[1:]))
 
+def unflatten_to(*args):
+    """Calls reshape on the hidacts with the given args"""
+    return lambda x: x.reshape(*args)
+
 class FluentShape:
     """a fluent api for reshaping from maxpooling
 
@@ -69,7 +73,7 @@ class FluentShape:
         newme = self.unflatten_conv(channels, width, height)
         lyr = ComplexLayer(
             style='other', is_module=False, invokes_callback=False,
-            action=lambda x: x.reshape(-1, channels, width, height))
+            action=unflatten_to(-1, channels, width, height))
         self.copy_(newme)
         return lyr
 
