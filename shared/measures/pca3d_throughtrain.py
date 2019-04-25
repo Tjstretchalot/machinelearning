@@ -64,6 +64,7 @@ videos_done:
 
 TIMEOUT_TIME = 300 # how long we wait before we give up on queues, should be long unless debugging
 SYNC_WORK_ITEMS = 1000
+SKIP_TRAINS = 0 # number of frames skipped between every hidacts
 FRAMES_PER_TRAIN = 4
 NUM_FRAME_WORKERS = 4
 MS_PER_ROTATION = 10000
@@ -954,6 +955,7 @@ class PCAThroughTrain:
             'output'
 
         connections (list[WorkerConnection]): the connections to the workers
+        skip_counter (int): number of hidacts skipped since last sent one
 
         batch_size (int): the number of points we are plotting
         sample_labels [np.ndarray]: the memmap'd int32 array we share labels with
@@ -983,6 +985,7 @@ class PCAThroughTrain:
         self.layer_names = layer_names
 
         self.connections = None
+        self.skip_counter = None
 
         self.batch_size = None
         self.sample_labels = None
@@ -1029,6 +1032,7 @@ class PCAThroughTrain:
             layer_sizes.append(int(lyr.shape[1]))
             self.layers.append(np.memmap(filepath, dtype='float64', mode='w+', shape=(self.batch_size, int(lyr.shape[1]))))
 
+        self.skip_counter = 0
         self.connections = []
         for lyr in range(1, len(self.layers)):
             send_queue = ZeroMQQueue.create_send()
@@ -1073,7 +1077,11 @@ class PCAThroughTrain:
 
     def post_train(self, context: GenericTrainingContext, loss: float):
         """Feeds hidden activations to the network"""
-        self._send_hidacts(context)
+        if self.skip_counter >= SKIP_TRAINS:
+            self._send_hidacts(context)
+            self.skip_counter = 0
+        else:
+            self.skip_counter += 1
 
     def finished(self, context: GenericTrainingContext, result: dict):
         """Finishes the worker, closes and deletes mmap'd files, zips directory"""

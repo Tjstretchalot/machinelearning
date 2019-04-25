@@ -61,13 +61,14 @@ def main():
         train_pwl=pwl,
         test_pwl=pwl,
         teacher=FFTeacher(),
-        batch_size=5,
+        batch_size=20,
         learning_rate=0.001,
         optimizer=torch.optim.Adam([p for p in network.parameters() if p.requires_grad], lr=0.001),
         criterion=mycrits.meansqerr#torch.nn.CrossEntropyLoss()
     )
 
     pca3d_throughtrain.FRAMES_PER_TRAIN = 1
+    pca3d_throughtrain.SKIP_TRAINS = 4
     pca3d_throughtrain.NUM_FRAME_WORKERS = 6
 
     dig = npmp.NPDigestor('train_one', 35)
