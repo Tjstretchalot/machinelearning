@@ -35,11 +35,11 @@ def main():
         INPUT_DIM, OUTPUT_DIM,
         [
             nets.unflatten_conv_(1, 28, 28),
-            nets.conv_(5, 5, 5),
+            nets.conv_(25, 5, 5),
             nets.relu(),
             nets.maxpool_(2),
             nets.flatten_(invokes_callback=True),
-            nets.linear_(80), # 80 -> 80
+            nets.linear_(nets.dims[0]),
             nets.tanh(),
             nets.linear_(OUTPUT_DIM),
             nets.tanh()
@@ -58,8 +58,8 @@ def main():
         test_pwl=test_pwl,
         teacher=FFTeacher(),
         batch_size=45,
-        learning_rate=0.0005,
-        optimizer=torch.optim.Adam([p for p in network.parameters() if p.requires_grad], lr=0.0005),
+        learning_rate=0.001,
+        optimizer=torch.optim.Adam([p for p in network.parameters() if p.requires_grad], lr=0.001),
         criterion=torch.nn.CrossEntropyLoss()
     )
 
