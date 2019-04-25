@@ -363,9 +363,9 @@ class FeedforwardComplex(FeedforwardNetwork):
             activations_callback(FFHiddenActivations(layer=0, hidden_acts=inp.double()))
 
         layer_ind = 1
-        for idx, lyr in enumerate(self.layers):
+        for lyr in self.layers:
             activations = lyr.action(activations)
-            print(f'after layer {idx} (style={lyr.style}), shape={activations.shape}, dtype={activations.dtype}')
+            #print(f'after layer {idx} (style={lyr.style}), shape={activations.shape}, dtype={activations.dtype}')
             if lyr.invokes_callback and activations_callback:
                 cb_activations = activations.double()
                 if len(activations.shape) != 2:

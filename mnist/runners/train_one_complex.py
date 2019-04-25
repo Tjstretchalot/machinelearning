@@ -39,7 +39,7 @@ def main():
             nets.relu(),
             nets.maxpool_(2),
             nets.flatten_(invokes_callback=True),
-            nets.linear_(200),
+            nets.linear_(80), # 80 -> 80
             nets.tanh(),
             nets.linear_(OUTPUT_DIM),
             nets.tanh()
