@@ -7,11 +7,13 @@ import operator
 from shared.models.ff import ComplexLayer
 
 class Reshape(torch.nn.Module):
+    """Simple reshaping layer"""
     def __init__(self, *args):
         super().__init__()
         self.shape = args
 
     def forward(self, x):
+        """Changes the view of x to the desired shape"""
         return x.view(self.shape)
 
 def flatten_after_maxpool(hidacts):
