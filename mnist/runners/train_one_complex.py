@@ -25,19 +25,17 @@ import os
 SAVEDIR = shared.filetools.savepath()
 
 INPUT_DIM = 28*28 # not modifiable
-OUTPUT_DIM = 3
+OUTPUT_DIM = 10
 
 def main():
     """Entry point"""
-    train_pwl = MNISTData.load_train().to_pwl().restrict_to(set(range(10))).rescale()
-    test_pwl = MNISTData.load_test().to_pwl().restrict_to(set(range(10))).rescale()
 
     nets = cu.FluentShape(28*28)
     network = FeedforwardComplex(
         INPUT_DIM, OUTPUT_DIM,
         [
             nets.unflatten_conv_(1, 28, 28),
-            nets.conv_(1, 5, 5),
+            nets.conv_(5, 5, 5),
             nets.relu(),
             nets.maxpool_(2),
             nets.flatten_(invokes_callback=True),
@@ -47,6 +45,11 @@ def main():
             nets.tanh()
         ]
     )
+
+    #breakpoint()
+
+    train_pwl = MNISTData.load_train().to_pwl().restrict_to(set(range(10))).rescale()
+    test_pwl = MNISTData.load_test().to_pwl().restrict_to(set(range(10))).rescale()
 
     layer_names = ('input', 'conv2d-relu', 'maxpool', 'tanh', 'output')
 

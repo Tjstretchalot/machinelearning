@@ -12,9 +12,9 @@ class Reshape(torch.nn.Module):
         super().__init__()
         self.shape = args
 
-    def forward(self, x):
+    def forward(self, *args):
         """Changes the view of x to the desired shape"""
-        return x.view(self.shape)
+        return args[0].view(self.shape)
 
 def flatten_after_maxpool(hidacts):
     """A valid operation on the hidacts that flattens after maxpooling"""
