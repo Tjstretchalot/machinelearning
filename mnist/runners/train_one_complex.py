@@ -35,7 +35,7 @@ def main():
         INPUT_DIM, OUTPUT_DIM,
         [
             nets.unflatten_conv_(1, 28, 28),
-            nets.conv_(25, 5, 5),
+            nets.conv_(5, 5, 5),
             nets.relu(),
             nets.maxpool_(2),
             nets.flatten_(invokes_callback=True),
@@ -52,6 +52,7 @@ def main():
     test_pwl = MNISTData.load_test().to_pwl().restrict_to(set(range(10))).rescale()
 
     layer_names = ('input', 'conv2d-relu', 'maxpool', 'tanh', 'output')
+    plot_layers = (3,)
 
     trainer = tnr.GenericTrainer(
         train_pwl=train_pwl,
@@ -64,7 +65,7 @@ def main():
     )
 
     pca3d_throughtrain.FRAMES_PER_TRAIN = 1
-    pca3d_throughtrain.SKIP_TRAINS = 2
+    pca3d_throughtrain.SKIP_TRAINS = 0
     pca3d_throughtrain.NUM_FRAME_WORKERS = 6
 
     dig = npmp.NPDigestor('train_one_complex', 35)
@@ -92,7 +93,7 @@ def main():
      .reg(tnr.OnEpochCaller.create_every(svm.during_training_ff(svm_training_dir, True, dig), skip=100))
      .reg(tnr.OnEpochCaller.create_every(satur.during_training(satur_training_dir, True, dig), skip=100))
      .reg(tnr.OnEpochCaller.create_every(tnr.save_model(trained_net_dir), skip=100))
-     .reg(pca3d_throughtrain.PCAThroughTrain(pca_throughtrain_dir, layer_names, True))
+     .reg(pca3d_throughtrain.PCAThroughTrain(pca_throughtrain_dir, layer_names, True, layer_indices=plot_layers))
      .reg(tnr.OnFinishCaller(lambda *args, **kwargs: dig.join()))
      .reg(tnr.ZipDirOnFinish(dtt_training_dir))
      .reg(tnr.ZipDirOnFinish(pca_training_dir))
