@@ -58,13 +58,13 @@ def main():
         test_pwl=test_pwl,
         teacher=FFTeacher(),
         batch_size=45,
-        learning_rate=0.001,
-        optimizer=torch.optim.Adam([p for p in network.parameters() if p.requires_grad], lr=0.001),
+        learning_rate=0.0005,
+        optimizer=torch.optim.Adam([p for p in network.parameters() if p.requires_grad], lr=0.0005),
         criterion=torch.nn.CrossEntropyLoss()
     )
 
-    pca3d_throughtrain.FRAMES_PER_TRAIN = 2
-    pca3d_throughtrain.SKIP_TRAINS = 4
+    pca3d_throughtrain.FRAMES_PER_TRAIN = 1
+    pca3d_throughtrain.SKIP_TRAINS = 2
     pca3d_throughtrain.NUM_FRAME_WORKERS = 6
 
     dig = npmp.NPDigestor('train_one_complex', 35)
@@ -79,7 +79,7 @@ def main():
     pca_throughtrain_dir = os.path.join(SAVEDIR, 'pca_throughtrain')
     (trainer
      .reg(tnr.EpochsTracker())
-     .reg(tnr.EpochsStopper(3))
+     .reg(tnr.EpochsStopper(5))
      .reg(tnr.DecayTracker())
      .reg(tnr.DecayStopper(8))
      .reg(tnr.LRMultiplicativeDecayer())
