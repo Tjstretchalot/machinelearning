@@ -1058,7 +1058,7 @@ class PCAThroughTrain:
                     'outfile': os.path.join(self.output_folder, f'layer_{lyr}.mp4'),
                     'batch_size': self.batch_size,
                     'layer_name': self.layer_names[lyr],
-                    'layer_size': layer_sizes[lyr],
+                    'layer_size': layer_sizes[lyrsidx],
                     'output_dim': context.test_pwl.output_dim,
                     'sample_labels_file': self.sample_labels_file,
                     'hid_acts_file': self.hid_acts_files[lyrsidx],
