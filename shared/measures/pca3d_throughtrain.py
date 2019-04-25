@@ -1031,7 +1031,7 @@ class PCAThroughTrain:
         acts = mutils.get_hidacts_with_sample(context.model, self.sample_points_torch, self.sample_labels_torch)
 
         if self.layer_indices is None:
-            self.layer_indices = [i for i in range(1, len(acts))]
+            self.layer_indices = [i for i in range(1, len(acts.hid_acts))]
         layer_sizes = []
         self.hid_acts_files = []
         self.layers = []
