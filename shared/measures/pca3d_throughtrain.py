@@ -517,7 +517,7 @@ class LayerEncoderWorker:
                     if not self.do_work():
                         if syncing:
                             self.response_queue.put(('sync',))
-                            print(f'completed sync', file=self.loghandle)
+                            syncing = False
                             self.loghandle.flush()
                         break
                     else:
