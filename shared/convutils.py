@@ -133,11 +133,11 @@ class FluentShape:
 
         return FluentShape((channels, out_height, out_width))
 
-    def maxpool_(self, kernel_size, stride=1, invokes_callback=True):
+    def maxpool_(self, kernel_size, stride=1):
         """Inplace maxpool2d and return appropriate ComplexLayer"""
         newme = self.maxpool(kernel_size, stride)
         lyr = ComplexLayer(
-            style='layer', is_module=True, invokes_callback=invokes_callback,
+            style='layer', is_module=True, invokes_callback=False,
             action=torch.nn.MaxPool2d(kernel_size=kernel_size, stride=stride))
         self.copy_(newme)
         return lyr
