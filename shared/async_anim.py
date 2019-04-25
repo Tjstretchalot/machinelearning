@@ -306,7 +306,6 @@ class MPAnimation:
 
         did_work = False
 
-        earliest_frame = float('inf')
         for queue in self.receive_queues:
             if not queue.empty():
                 did_work = True

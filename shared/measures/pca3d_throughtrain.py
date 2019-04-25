@@ -511,19 +511,12 @@ class LayerEncoderWorker:
             self.loghandle.flush()
 
             syncing = False
-            sync_start = None
-            sync_work_start = None
             while True:
                 for _ in range(100):
                     if not self.do_work():
                         if syncing:
-                            time_req = time.time() - sync_start
-                            item_req = work_count - sync_work_start
                             self.response_queue.put(('sync',))
-                            syncing = False
-                            sync_start = None
-                            sync_work_start = None
-                            print(f'completed sync in {time_req} seconds - was {item_req} items behind', file=self.loghandle)
+                            print(f'completed sync', file=self.loghandle)
                             self.loghandle.flush()
                         break
                     else:
@@ -540,9 +533,6 @@ class LayerEncoderWorker:
                         if syncing:
                             raise RuntimeError(f'receiving sync message while still syncing!')
                         syncing = True
-                        sync_work_start = work_count
-                        print(f'received sync message')
-                        sync_start = time.time()
                     elif msg[0] == 'shutdown':
                         break
 
@@ -585,8 +575,12 @@ class LayerEncoderWorkerConnection:
 
     def sync(self):
         """Waits for the encoder worker to catch up"""
+        start = time.time()
         self.notif_queue.put(('sync',))
         self.ack_queue.get()
+        sync_time = time.time() - start
+        if sync_time > 1:
+            print(f'Syncing layer encoder took {sync_time:.2f}s')
 
     def shutdown(self):
         """Cleanly shuts down the encoder"""
