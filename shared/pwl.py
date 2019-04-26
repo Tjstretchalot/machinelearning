@@ -177,7 +177,6 @@ class SimplePointWithLabelProducer(PointWithLabelProducer):
             avail = int((self.real_labels == lbl).sum())
             if avail == 0:
                 raise ValueError(f'expected all of labels are in dataset, but there are none with lbl={lbl}')
-            print(f'there are {avail} points with label {lbl}')
             num_per_lbl = min(num_per_lbl, avail)
 
         result_points = torch.zeros((len(labels) * num_per_lbl, self.input_dim), dtype=self.real_points.dtype)

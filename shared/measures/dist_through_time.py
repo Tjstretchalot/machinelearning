@@ -461,7 +461,9 @@ def digest_ff_activations(
         raise FileExistsError(f'outfile {outfile} already exists (use exist_ok=True) to overwrite')
 
     num_samples = sample_points.shape[0]
-    output_dim = hid_acts[-1].shape[1]
+    output_dim = sample_labels.max().item()
+    if not isinstance(output_dim, int):
+        raise ValueError(f'expected output_dim is int, got {output_dim}')
 
     within_dists = [] # each value corresponds to a torch tensor of within dists
     within_means = torch.zeros(len(hid_acts), dtype=torch.double)
