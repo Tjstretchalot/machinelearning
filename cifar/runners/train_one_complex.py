@@ -27,6 +27,8 @@ SAVEDIR = shared.filetools.savepath()
 INPUT_DIM = 32*32*3 # not modifiable
 OUTPUT_DIM = 10
 
+STOP_EPOCH = 5
+
 def main():
     """Entry point"""
 
@@ -82,10 +84,10 @@ def main():
     logpath = os.path.join(SAVEDIR, 'log.txt')
     (trainer
      .reg(tnr.EpochsTracker())
-     .reg(tnr.EpochsStopper(5))
+     .reg(tnr.EpochsStopper(STOP_EPOCH))
      .reg(tnr.DecayTracker())
      .reg(tnr.DecayStopper(8))
-     .reg(tnr.EpochProgress())
+     .reg(tnr.EpochProgress(hint_end_epoch=STOP_EPOCH))
      .reg(tnr.LRMultiplicativeDecayer())
      .reg(tnr.DecayOnPlateau(patience=3))
      .reg(tnr.AccuracyTracker(5, 1000, True))

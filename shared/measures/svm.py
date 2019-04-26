@@ -45,7 +45,7 @@ def train_svms_with(sample_points: torch.tensor, sample_labels: torch.tensor,
 
     num_points = sample_points.shape[0]
     train_points = int(num_points * (13.0/15.0))
-    output_dim = sample_labels.max.item()
+    output_dim = sample_labels.max().item()
     if not isinstance(output_dim, int):
         raise ValueError(f'expected output_dim is int, got {output_dim}')
 
