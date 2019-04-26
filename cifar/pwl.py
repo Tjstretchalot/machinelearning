@@ -48,6 +48,7 @@ class CIFARData:
     def load_train(cls):
         """Downloads (if necessary) and loads the train data"""
         data = torchvision.datasets.CIFAR10(DATA_FOLDER, train=True, download=True)
+        breakpoint()
         return cls(data.data, np.array(data.targets, dtype='uint8'), data.classes)
 
     @classmethod
