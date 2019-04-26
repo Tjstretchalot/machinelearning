@@ -177,6 +177,7 @@ def get_hidden_pcs(hidden_acts: torch.tensor, num_pcs: typing.Optional[int], vec
     if not vecs:
         eig = scipy.linalg.eigvals(cov)
         print(f'[PCA] took {(time.time() - starttime):.3f}s to calculate eigenvalues')
+        eig = np.real(eig)
         np.sort(eig)
         return torch.tensor(eig, dtype=hidden_acts.dtype)
     eig, eig_vecs = scipy.linalg.eig(cov)
