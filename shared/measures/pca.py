@@ -140,7 +140,7 @@ class PCTrajectory:
         return (self.projected_samples[recur_time, sample_ind],
                 self.projected_sample_labels[recur_time, sample_ind])
 
-def get_hidden_pcs(hidden_acts: torch.tensor, num_pcs: typing.Optional[int]):
+def get_hidden_pcs(hidden_acts: torch.tensor, num_pcs: typing.Optional[int], vecs=True):
     """Fetches the principal component values and vectors corresponding with the given hidden
     activations.
 
@@ -150,7 +150,7 @@ def get_hidden_pcs(hidden_acts: torch.tensor, num_pcs: typing.Optional[int]):
                 1. The first index tells you which sample
                 2. The second index tells you which hidden node
         num_pcs (int): The number of pcs to return (None for all)
-
+        vecs (bool): if True, eigenvectors are returned. If false, only eigenvalues are returned
     Returns:
         eigs (torch.tensor[num_pcs]): the relative importance in sorted descending order for the pc vectors
         eig_vecs (torch.tensor[num_pcs x num_hidden]): the principal component vectors
@@ -174,8 +174,15 @@ def get_hidden_pcs(hidden_acts: torch.tensor, num_pcs: typing.Optional[int]):
     cov = np.cov(hidden_acts_np.T)
     print(f'[PCA] took {(time.time() - starttime):.3f}s to calculate covariance')
     starttime = time.time()
+    if not vecs:
+        eig = scipy.linalg.eigvals(cov)
+        print(f'[PCA] took {(time.time() - starttime):.3f}s to calculate eigenvalues')
+        np.sort(eig)
+        return eig
     eig, eig_vecs = scipy.linalg.eig(cov)
-    print(f'[PCA] took {(time.time() - starttime):.3f}s to calculate eigenvalues')
+    # TODO switch to skcuda for gpu-accelerated eigenvalues for matrices bigger than 1000
+    # https://scikit-cuda.readthedocs.io/en/latest/generated/skcuda.linalg.eig.html
+    print(f'[PCA] took {(time.time() - starttime):.3f}s to calculate eigenvalues and eigenvectors')
     starttime = time.time()
     eig = np.real(eig)
     print(f'[PCA] took {(time.time() - starttime):.3f}s to convert to real')
