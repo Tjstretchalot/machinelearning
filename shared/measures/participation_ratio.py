@@ -217,9 +217,17 @@ def digest_measure_and_plot_pr_ff(sample_points: np.ndarray, sample_labels: np.n
     print('[PR] calculating particip ratios')
     starttime = time.time()
     for layer, hid_acts in enumerate(all_hid_acts):
+        prit(f'[PR] calculating ratio for layer {layer} (all)')
+        lstarttime = time.time()
         pr_overall[layer] = measure_pr(hid_acts)
+        lduration = time.time() - lstarttime
+        print(f'[PR] took {lduration:.3f}s to calculation pr for layer {layer}')
         for lbl in range(output_dim):
+            print(f'[PR] calculating ratio for layer {layer} and label {lbl}')
+            lstarttime = time.time()
             pr_by_label[lbl, layer] = measure_pr(hid_acts[masks_by_lbl[lbl]])
+            lduration = time.time() - lstarttime
+            print(f'[PR] calculated pr for layer {layer} and label {lbl} in {lduration:.3f}s')
     duration = time.time() - starttime
     print(f'[PR] took {duration:.3f}s to calculate prs by label')
     traj = PRTrajectory(overall=pr_overall, by_label=pr_by_label, layers=True)
