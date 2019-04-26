@@ -59,7 +59,7 @@ def measure_instant(hid_acts: torch.tensor,
 
     for lbl in range(num_labels):
         if (labels == lbl).sum() <= 5:
-            raise ValueError(f'not enough points with label {lbl} (got {(labels == lbl).sum()})')
+            raise ValueError(f'not enough points with label {lbl} (num_labels={num_labels}) (got {(labels == lbl).sum()})')
 
     within_dists = None
     across_dists = None
@@ -448,7 +448,7 @@ def digest_ff_activations(
         exist_ok (bool): True to overwrite, False to error when file exists
     """
     sample_points = torch.from_numpy(sample_points).double()
-    sample_labels = torch.from_numpy(sample_labels)
+    sample_labels = torch.from_numpy(sample_labels).int()
     hid_acts = [torch.from_numpy(hid_act).double() for hid_act in hid_acts]
 
     outfile_wo_ext = os.path.splitext(outfile)[0]

@@ -147,6 +147,8 @@ class SimplePointWithLabelProducer(PointWithLabelProducer):
             raise ValueError(f'expected real_labels is tensor, got {real_labels}')
         if len(real_labels.shape) != 1:
             raise ValueError(f'expected real_labels has shape (num_samples), got {real_labels.shape}')
+        if real_labels.dtype == torch.uint8:
+            raise ValueError(f'labels is uint8 which is prone to issues, use int or long instead')
         if real_labels.dtype not in (torch.uint8, torch.int, torch.long):
             raise ValueError(f'expected real_labels has int-like dtype, got {real_labels.dtype}')
         if real_points.shape[0] != real_labels.shape[0]:
@@ -175,6 +177,7 @@ class SimplePointWithLabelProducer(PointWithLabelProducer):
             avail = int((self.real_labels == lbl).sum())
             if avail == 0:
                 raise ValueError(f'expected all of labels are in dataset, but there are none with lbl={lbl}')
+            print(f'there are {avail} points with label {lbl}')
             num_per_lbl = min(num_per_lbl, avail)
 
         result_points = torch.zeros((len(labels) * num_per_lbl, self.input_dim), dtype=self.real_points.dtype)
