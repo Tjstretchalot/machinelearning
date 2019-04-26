@@ -146,6 +146,11 @@ class FluentShape:
         padding_width, padding_height = padding
         _, height, width = self.dims
 
+        if kernel_height > height:
+            raise ValueError(f'kernel size cannot exceed height of {height} (got {kernel_height})')
+        if kernel_width > width:
+            raise ValueError(f'kernel size cannot exceed width of {width} (got {kernel_width})')
+
         out_height = int((height - kernel_height + 2 * padding_height)/stride_height) + 1
         out_width = int((width - kernel_width + 2 * padding_width)/stride_width) + 1
 
@@ -194,7 +199,7 @@ class FluentShape:
         if khei > height:
             raise ValueError(f'kernel size cannot exceed height of {height} (got {khei})')
         if kwid > width:
-            raise ValueError(f'kernel size cannot exceed width of {width} (got {width})')
+            raise ValueError(f'kernel size cannot exceed width of {width} (got {kwid})')
 
         out_depth = int((depth - kdep + 2 * pdep)/sdep) + 1
         out_height = int((height - khei + 2 * phei)/shei) + 1
@@ -235,6 +240,11 @@ class FluentShape:
         kernel_height, kernel_width = kernel_size
         stride_height, stride_width = stride
 
+        if kernel_height > height:
+            raise ValueError(f'kernel size cannot exceed height of {height} (got {kernel_height})')
+        if kernel_width > width:
+            raise ValueError(f'kernel size cannot exceed width of {width} (got {kernel_width})')
+
         out_height = int((height - kernel_height) / stride_height) + 1
         out_width = int((width - kernel_width) / stride_width) + 1
 
@@ -273,7 +283,7 @@ class FluentShape:
         if khei > height:
             raise ValueError(f'kernel size cannot exceed height of {height} (got {khei})')
         if kwid > width:
-            raise ValueError(f'kernel size cannot exceed width of {width} (got {width})')
+            raise ValueError(f'kernel size cannot exceed width of {width} (got {kwid})')
 
         out_depth = int((depth - kdep) / sdep) + 1
         out_height = int((height - khei) / shei) + 1
