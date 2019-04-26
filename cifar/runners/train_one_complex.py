@@ -79,6 +79,7 @@ def main():
     satur_training_dir = os.path.join(SAVEDIR, 'saturation')
     trained_net_dir = os.path.join(SAVEDIR, 'trained_model')
     pca_throughtrain_dir = os.path.join(SAVEDIR, 'pca_throughtrain')
+    logpath = os.path.join(SAVEDIR, 'log.txt')
     (trainer
      .reg(tnr.EpochsTracker())
      .reg(tnr.EpochsStopper(5))
@@ -103,6 +104,7 @@ def main():
      .reg(tnr.ZipDirOnFinish(svm_training_dir))
      .reg(tnr.ZipDirOnFinish(satur_training_dir))
      .reg(tnr.ZipDirOnFinish(trained_net_dir))
+     .reg(tnr.CopyLogOnFinish(logpath))
     )
 
     trainer.train(network)

@@ -8,6 +8,7 @@ import torch.optim
 import logging
 import math
 import os
+import shutil
 
 from shared.models.generic import Network
 from shared.events import Event
@@ -510,6 +511,27 @@ class ZipDirOnFinish:
         if os.path.exists(self.dirpath + '.zip'):
             os.remove(self.dirpath + '.zip')
         zipdir(self.dirpath)
+
+class CopyLogOnFinish:
+    """Copies log.txt to the output directory upon finishing
+
+    Attributes:
+        outpath (str): the path to where the logfile should be saved
+    """
+
+    def __init__(self, outpath: str):
+        if not isinstance(outpath, str):
+            raise ValueError(f'expected outpath is str, got {outpath} (type={type(outpath)})')
+        self.outpath = outpath
+
+    def finished(self, context: GenericTrainingContext, result: dict): # pylint: disable=unused-argument
+        """Copies the log file"""
+        if not os.path.exists('log.txt'):
+            context.logger.info('[CopyLogOnFinish] Skipping because log.txt does not exist')
+            return
+
+        shutil.copy('log.txt', self.outpath)
+
 
 def save_model(outpath: str):
     """A callable for EpochCaller and similar that saves the model to the given
