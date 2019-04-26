@@ -32,10 +32,18 @@ def measure_pr(hidden_acts: torch.tensor) -> float:
     if hidden_acts.dtype not in (torch.float, torch.double):
         raise ValueError(f'expected hidden_acts is float-like, but dtype is {hidden_acts.dtype}')
 
+    print(f'[PR] calculating hidden pcs of {tuple(hidden_acts.shape)} matrix (contiguous: {hidden_acts.is_contiguous()})')
+    starttime = time.time()
     eigs, _ = pca.get_hidden_pcs(hidden_acts, None)
+    duration = time.time() - starttime
+    print(f'[PR] took {duration:.3f}s to calculate hidden pcs of {tuple(hidden_acts.shape)} matrix (contguous: {hidden_acts.is_contiguous})')
 
+    print(f'[PR] calculating pr from pcs of {eigs.shape} eigs matrix (contiguous: {eigs.is_contiguous()})')
+    starttime = time.time()
     result = torch.pow(torch.sum(eigs), 2) / torch.sum(torch.pow(eigs, 2))
     result = result.item()
+    duration = time.time() - starttime
+    print(f'[PR] took {duration:.3f}s to calculate pr from pcs of {eigs.shape} eigs matrix (contiguous: {eigs.is_contiguous()})')
 
     if not isinstance(result, float):
         raise ValueError(f'expected participation_ratio is float, got {result} (type={type(result)})')
