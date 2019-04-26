@@ -32,18 +32,9 @@ def measure_pr(hidden_acts: torch.tensor) -> float:
     if hidden_acts.dtype not in (torch.float, torch.double):
         raise ValueError(f'expected hidden_acts is float-like, but dtype is {hidden_acts.dtype}')
 
-    print(f'[PR] calculating hidden pcs of {tuple(hidden_acts.shape)} matrix (contiguous: {hidden_acts.is_contiguous()})')
-    starttime = time.time()
     eigs = pca.get_hidden_pcs(hidden_acts, None, False)
-    duration = time.time() - starttime
-    print(f'[PR] took {duration:.3f}s to calculate hidden pcs of {tuple(hidden_acts.shape)} matrix (contiguous: {hidden_acts.is_contiguous()})')
-
-    print(f'[PR] calculating pr from pcs of {eigs.shape} eigs matrix (contiguous: {eigs.is_contiguous()})')
-    starttime = time.time()
     result = torch.pow(torch.sum(eigs), 2) / torch.sum(torch.pow(eigs, 2))
     result = result.item()
-    duration = time.time() - starttime
-    print(f'[PR] took {duration:.3f}s to calculate pr from pcs of {eigs.shape} eigs matrix (contiguous: {eigs.is_contiguous()})')
 
     if not isinstance(result, float):
         raise ValueError(f'expected participation_ratio is float, got {result} (type={type(result)})')
@@ -125,7 +116,7 @@ def plot_pr_trajectory(traj: PRTrajectory, savepath: str, exist_ok: bool = False
 
     if label_map is None:
         label_map = dict((lbl, str(lbl)) for lbl in range(len(traj.by_label)))
-    else:
+    elif traj.by_label is not None:
         if not isinstance(label_map, dict):
             raise ValueError(f'expected label_map is dict, got {label_map} (type={type(label_map)})')
         for lbl in range(len(traj.by_label)):
@@ -166,8 +157,9 @@ def plot_pr_trajectory(traj: PRTrajectory, savepath: str, exist_ok: bool = False
     axs.set_xlabel(x_label)
     axs.set_ylabel(y_label)
 
-    for lbl, y_vals in enumerate(traj.by_label):
-        axs.plot(x_vals, y_vals.numpy(), '--', label=label_map[lbl], alpha=0.6)
+    if traj.by_label is not None:
+        for lbl, y_vals in enumerate(traj.by_label):
+            axs.plot(x_vals, y_vals.numpy(), '--', label=label_map[lbl], alpha=0.6)
 
     axs.plot(x_vals, traj.overall.numpy(), label='Overall', alpha=1)
 
@@ -178,16 +170,17 @@ def plot_pr_trajectory(traj: PRTrajectory, savepath: str, exist_ok: bool = False
     fig.savefig(os.path.join(savepath_wo_ext, 'all.png'))
     plt.close(fig)
 
-    for lbl, y_vals in enumerate(traj.by_label):
-        fig, axs = plt.subplots()
-        axs.set_title(f'PR Through {through_str} ({label_map[lbl]})')
-        axs.set_xlabel(x_label)
-        axs.set_ylabel(y_label)
-        axs.plot(x_vals, y_vals.numpy())
-        axs.set_xticks(x_vals)
-        fig.tight_layout()
-        fig.savefig(os.path.join(savepath_wo_ext, f'{lbl}.png'))
-        plt.close(fig)
+    if traj.by_label is not None:
+        for lbl, y_vals in enumerate(traj.by_label):
+            fig, axs = plt.subplots()
+            axs.set_title(f'PR Through {through_str} ({label_map[lbl]})')
+            axs.set_xlabel(x_label)
+            axs.set_ylabel(y_label)
+            axs.plot(x_vals, y_vals.numpy())
+            axs.set_xticks(x_vals)
+            fig.tight_layout()
+            fig.savefig(os.path.join(savepath_wo_ext, f'{lbl}.png'))
+            plt.close(fig)
 
     if os.path.exists(savepath):
         os.remove(savepath)
@@ -196,11 +189,10 @@ def plot_pr_trajectory(traj: PRTrajectory, savepath: str, exist_ok: bool = False
 
 def digest_measure_and_plot_pr_ff(sample_points: np.ndarray, sample_labels: np.ndarray,
                         *all_hid_acts: typing.Tuple[np.ndarray],
-                        savepath: str = None):
+                        savepath: str = None, labels: bool = False):
     """An npmp digestable callable for measuring and plotting the participation ratio for
     a feedforward network"""
 
-    print('[PR] digest_measure_and_plot_pr_ff')
     sample_points = torch.from_numpy(sample_points)
     sample_labels = torch.from_numpy(sample_labels)
     hacts_cp = []
@@ -208,42 +200,24 @@ def digest_measure_and_plot_pr_ff(sample_points: np.ndarray, sample_labels: np.n
         hacts_cp.append(torch.from_numpy(hact))
     all_hid_acts = hacts_cp
 
-    print('[PR] got all hidacts')
+
     num_lyrs = len(all_hid_acts)
     output_dim = sample_labels.max().item()
     if not isinstance(output_dim, int):
         raise ValueError(f'expected output_dim is int, got {output_dim} (type={type(output_dim)})')
 
     pr_overall = torch.zeros(num_lyrs, dtype=torch.double)
-    pr_by_label = torch.zeros((output_dim, num_lyrs), dtype=torch.double)
+    if labels:
+        pr_by_label = torch.zeros((output_dim, num_lyrs), dtype=torch.double)
+        masks_by_lbl = [sample_labels == lbl for lbl in range(output_dim)]
 
-    print('[PR] calculating masks..')
-    starttime = time.time()
-    masks_by_lbl = [sample_labels == lbl for lbl in range(output_dim)]
-    duration = time.time() - starttime
-    print(f'[PR] took {duration:.3f}s to calculate masks')
-    print('[PR] calculating particip ratios')
-    starttime = time.time()
     for layer, hid_acts in enumerate(all_hid_acts):
-        print(f'[PR] calculating ratio for layer {layer} (all)')
-        lstarttime = time.time()
         pr_overall[layer] = measure_pr(hid_acts)
-        lduration = time.time() - lstarttime
-        print(f'[PR] took {lduration:.3f}s to calculation pr for layer {layer}')
-        for lbl in range(output_dim):
-            print(f'[PR] calculating ratio for layer {layer} and label {lbl}')
-            lstarttime = time.time()
-            pr_by_label[lbl, layer] = measure_pr(hid_acts[masks_by_lbl[lbl]])
-            lduration = time.time() - lstarttime
-            print(f'[PR] calculated pr for layer {layer} and label {lbl} in {lduration:.3f}s')
-    duration = time.time() - starttime
-    print(f'[PR] took {duration:.3f}s to calculate prs by label')
-    traj = PRTrajectory(overall=pr_overall, by_label=pr_by_label, layers=True)
-    print('[PR] plotting..')
-    starttime = time.time()
+        if labels:
+            for lbl in range(output_dim):
+                pr_by_label[lbl, layer] = measure_pr(hid_acts[masks_by_lbl[lbl]])
+    traj = PRTrajectory(overall=pr_overall, by_label=pr_by_label if labels else None, layers=True)
     plot_pr_trajectory(traj, savepath, False)
-    duration = time.time() - starttime
-    print(f'[PR] took {duration:.3f}s to plot')
 
 def during_training_ff(savepath: str, train: bool,
                        digestor: typing.Optional[npmp.NPDigestor] = None, **kwargs):
