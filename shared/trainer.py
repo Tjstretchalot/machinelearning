@@ -540,12 +540,15 @@ class EpochProgress:
         print_every (float): number of seconds between prints
         last_print (float): when we last printed progress
         last_epoch (float): the value of epochs the last time we printed
+
+        hint_end_epoch (int): the epoch we expect to stop at
     """
 
-    def __init__(self, print_every=15):
+    def __init__(self, print_every=15, hint_end_epoch=None):
         self.print_every = float(print_every)
         self.last_print = None
         self.last_epoch = None
+        self.hint_end_epoch = hint_end_epoch
 
     def print(self, context: GenericTrainingContext):
         """Prints out progress information"""
@@ -557,9 +560,13 @@ class EpochProgress:
         duration = thetime - self.last_print
 
         seconds_per_epoch = duration / progress
-        time_left_in_epoch = (epoch - int(epoch)) * seconds_per_epoch
+        time_left_in_epoch = (int(epoch+1) - epoch) * seconds_per_epoch
 
         context.logger.info(f'[EpochProgress] Epoch {epoch:.2f} ({progress:.2f} in last {duration:.2f}s, {seconds_per_epoch:.2f} secs/epoch, {time_left_in_epoch:.2f} secs rem in epoch)')
+        if self.hint_end_epoch is not None and epoch < self.hint_end_epoch:
+            epochs_left = (self.hint_end_epoch - epoch)
+            time_left = epochs_left * seconds_per_epoch
+            context.logger.info(f'[EpochProgress] {epochs_left} epochs / {time_left} secs until epoch {self.hint_end_epoch}')
 
     def pre_train(self, context: GenericTrainingContext):
         """Determines if we should print out progress"""
