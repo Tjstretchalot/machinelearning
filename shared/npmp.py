@@ -64,7 +64,11 @@ def _worker_target(identifier: str, worker_id: int, target_module: str, target_n
         kwargs[k] = v
 
     try:
+        starttime = time.time()
         target(*args, **kwargs)
+        duration = time.time() - starttime
+        if duration > 1:
+            print(f'[NPDigestor] finished long process {target_module}.{target_name} in {duration:.3f}s')
     except:
         print(f'[NPDigestor] Error while handling target {target_module}.{target_name}: ', file=sys.stderr)
         traceback.print_exc(file=sys.stderr)

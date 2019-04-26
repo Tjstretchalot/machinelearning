@@ -7,6 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import typing
 import os
+import time
 import shared.measures.pca as pca
 from shared.models.ff import FeedforwardNetwork, FFHiddenActivations
 from shared.pwl import PointWithLabelProducer
@@ -191,6 +192,7 @@ def digest_measure_and_plot_pr_ff(sample_points: np.ndarray, sample_labels: np.n
     """An npmp digestable callable for measuring and plotting the participation ratio for
     a feedforward network"""
 
+    print('[PR] digest_measure_and_plot_pr_ff')
     sample_points = torch.from_numpy(sample_points)
     sample_labels = torch.from_numpy(sample_labels)
     hacts_cp = []
@@ -198,6 +200,7 @@ def digest_measure_and_plot_pr_ff(sample_points: np.ndarray, sample_labels: np.n
         hacts_cp.append(torch.from_numpy(hact))
     all_hid_acts = hacts_cp
 
+    print('[PR] got all hidacts')
     num_lyrs = len(all_hid_acts)
     output_dim = sample_labels.max().item()
     if not isinstance(output_dim, int):
@@ -206,15 +209,25 @@ def digest_measure_and_plot_pr_ff(sample_points: np.ndarray, sample_labels: np.n
     pr_overall = torch.zeros(num_lyrs, dtype=torch.double)
     pr_by_label = torch.zeros((output_dim, num_lyrs), dtype=torch.double)
 
+    print('[PR] calculating masks..')
+    starttime = time.time()
     masks_by_lbl = [sample_labels == lbl for lbl in range(output_dim)]
-
+    duration = time.time() - starttime
+    print(f'[PR] took {duration:.3f}s to calculate masks')
+    print('[PR] calculating particip ratios')
+    starttime = time.time()
     for layer, hid_acts in enumerate(all_hid_acts):
         pr_overall[layer] = measure_pr(hid_acts)
         for lbl in range(output_dim):
             pr_by_label[lbl, layer] = measure_pr(hid_acts[masks_by_lbl[lbl]])
-
+    duration = time.time() - starttime
+    print(f'[PR] took {duration:.3f}s to calculate prs by label')
     traj = PRTrajectory(overall=pr_overall, by_label=pr_by_label, layers=True)
+    print('[PR] plotting..')
+    starttime = time.time()
     plot_pr_trajectory(traj, savepath, False)
+    duration = time.time() - starttime
+    print(f'[PR] took {duration:.3f}s to plot')
 
 def during_training_ff(savepath: str, train: bool,
                        digestor: typing.Optional[npmp.NPDigestor] = None, **kwargs):
