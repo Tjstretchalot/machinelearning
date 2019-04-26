@@ -189,6 +189,13 @@ class FluentShape:
 
         _, depth, width, height = self.dims
 
+        if kdep > depth:
+            raise ValueError(f'kernel size cannot exceed depth of {depth} (got {kdep})')
+        if khei > height:
+            raise ValueError(f'kernel size cannot exceed height of {height} (got {khei})')
+        if kwid > width:
+            raise ValueError(f'kernel size cannot exceed width of {width} (got {width})')
+
         out_depth = int((depth - kdep + 2 * pdep)/sdep) + 1
         out_height = int((height - khei + 2 * phei)/shei) + 1
         out_width = int((width - kwid + 2 * pwid)/swid) + 1
@@ -260,6 +267,13 @@ class FluentShape:
         channels, depth, height, width = self.dims
         kdep, khei, kwid = kernel_size
         sdep, shei, swid = stride
+
+        if kdep > depth:
+            raise ValueError(f'kernel size cannot exceed depth of {depth} (got {kdep})')
+        if khei > height:
+            raise ValueError(f'kernel size cannot exceed height of {height} (got {khei})')
+        if kwid > width:
+            raise ValueError(f'kernel size cannot exceed width of {width} (got {width})')
 
         out_depth = int((depth - kdep) / sdep) + 1
         out_height = int((height - khei) / shei) + 1
