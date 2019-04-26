@@ -199,7 +199,9 @@ def digest_measure_and_plot_pr_ff(sample_points: np.ndarray, sample_labels: np.n
     all_hid_acts = hacts_cp
 
     num_lyrs = len(all_hid_acts)
-    output_dim = all_hid_acts[-1].shape[1]
+    output_dim = sample_labels.max().item()
+    if not isinstance(output_dim, int):
+        raise ValueError(f'expected output_dim is int, got {output_dim} (type={type(output_dim)})')
 
     pr_overall = torch.zeros(num_lyrs, dtype=torch.double)
     pr_by_label = torch.zeros((output_dim, num_lyrs), dtype=torch.double)

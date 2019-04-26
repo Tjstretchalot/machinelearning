@@ -9,13 +9,13 @@ import logging
 import math
 import os
 import shutil
+import time
 
 from shared.models.generic import Network
 from shared.events import Event
 from shared.pwl import PointWithLabelProducer
 from shared.teachers import NetworkTeacher
 from shared.filetools import zipdir
-from shared.npmp import NPDigestor
 from shared.weight_inits import WeightInitializer
 
 class GenericTrainingContext(typing.NamedTuple):
@@ -531,6 +531,48 @@ class CopyLogOnFinish:
             return
 
         shutil.copy('log.txt', self.outpath)
+
+class EpochProgress:
+    """A more complicated version of epoch caller that will print out every 15 seconds
+    how far into the epoch we are. Helpful when epochs take a long time
+
+    Attributes:
+        print_every (float): number of seconds between prints
+        last_print (float): when we last printed progress
+        last_epoch (float): the value of epochs the last time we printed
+    """
+
+    def __init__(self, print_every=15):
+        self.print_every = float(print_every)
+        self.last_print = None
+        self.last_epoch = None
+
+    def print(self, context: GenericTrainingContext):
+        """Prints out progress information"""
+
+        epoch = context.shared['epochs'].epochs
+        thetime = time.time()
+
+        progress = epoch - self.last_epoch
+        duration = thetime - self.last_print
+
+        seconds_per_epoch = duration / progress
+        time_left_in_epoch = (epoch - int(epoch)) * seconds_per_epoch
+
+        context.logger.info(f'[EpochProgress] Epoch {epoch:.2f} ({progress:.2f} in last {duration:.2f}s, {seconds_per_epoch:.2f} secs/epoch, {time_left_in_epoch:.2f} secs rem in epoch)')
+
+    def pre_train(self, context: GenericTrainingContext):
+        """Determines if we should print out progress"""
+        printed = False
+        if self.last_print is None:
+            printed = True
+        elif time.time() - self.last_print > self.print_every:
+            self.print(context)
+            printed = True
+
+        if printed:
+            self.last_print = time.time()
+            self.last_epoch = context.shared['epochs'].epochs
 
 
 def save_model(outpath: str):
