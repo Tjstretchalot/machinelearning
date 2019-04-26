@@ -48,9 +48,6 @@ def main():
             nets.linear_(OUTPUT_DIM),
         ]
     )
-    exit()
-
-    #breakpoint()
 
     train_pwl = CIFARData.load_train().to_pwl().restrict_to(set(range(10))).rescale()
     test_pwl = CIFARData.load_test().to_pwl().restrict_to(set(range(10))).rescale()
