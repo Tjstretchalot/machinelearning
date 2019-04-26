@@ -40,6 +40,8 @@ class CIFARData:
         for idx, val in enumerate(classes):
             if not isinstance(val, str):
                 raise ValueError(f'expected classes[{idx}] is str, got {val} (type={type(val)})')
+        if len(classes) != 10:
+            raise ValueError(f'expected 10 classes, got {classes} (len={len(classes)})')
         self.data = data
         self.labels = labels
         self.classes = classes
