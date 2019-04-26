@@ -87,7 +87,7 @@ def main():
      .reg(tnr.EpochsStopper(STOP_EPOCH))
      .reg(tnr.DecayTracker())
      .reg(tnr.DecayStopper(8))
-     .reg(tnr.EpochProgress(hint_end_epoch=STOP_EPOCH))
+     .reg(tnr.EpochProgress(print_every=120, hint_end_epoch=STOP_EPOCH))
      .reg(tnr.LRMultiplicativeDecayer())
      .reg(tnr.DecayOnPlateau(patience=3))
      .reg(tnr.AccuracyTracker(5, 1000, True))
