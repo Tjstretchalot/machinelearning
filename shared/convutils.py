@@ -269,7 +269,7 @@ class FluentShape:
 
     def maxpool3_(self, kernel_size, stride=1):
         """In-place maxpool3 and return the complex layer to do it"""
-        newme = self.maxpool(kernel_size, stride)
+        newme = self.maxpool3(kernel_size, stride)
         lyr = ComplexLayer(
             style='layer', is_module=True, invokes_callback=False,
             action=torch.nn.MaxPool3d(kernel_size=kernel_size, stride=stride))
