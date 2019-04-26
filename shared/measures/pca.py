@@ -8,6 +8,7 @@ so that they can be displayed two-dimensionally.
 
 import torch
 import numpy as np
+import scipy.linalg
 import math
 
 from shared.models.rnn import NaturalRNN, RNNHiddenActivations
@@ -173,7 +174,7 @@ def get_hidden_pcs(hidden_acts: torch.tensor, num_pcs: typing.Optional[int]):
     cov = np.cov(hidden_acts_np.T)
     print(f'[PCA] took {(time.time() - starttime):.3f}s to calculate covariance')
     starttime = time.time()
-    eig, eig_vecs = np.linalg.eig(cov)
+    eig, eig_vecs = scipy.linalg.eig(cov)
     print(f'[PCA] took {(time.time() - starttime):.3f}s to calculate eigenvalues')
     starttime = time.time()
     eig = np.real(eig)
