@@ -11,6 +11,8 @@ import typing
 import json
 import importlib
 import time
+import traceback
+import sys
 from multiprocessing import Process
 import numpy as np
 from shared.filetools import zipdir
@@ -61,7 +63,12 @@ def _worker_target(identifier: str, worker_id: int, target_module: str, target_n
     for k, v in numpy_raw.items():
         kwargs[k] = v
 
-    target(*args, **kwargs)
+    try:
+        target(*args, **kwargs)
+    except:
+        print(f'[NPDigestor] Error while handling target {target_module}.{target_name}: ', file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
+        raise
 
 class NPDigestor:
     """The wrapper class that should be used instead of calling the function directly.
