@@ -109,7 +109,7 @@ class FluentShape:
         if len(self.dims) != 1:
             raise ValueError(f'cannot unflatten non-flat {self.dims}')
 
-        if self.dims[0] * channels*depth*width*height:
+        if self.dims[0] != channels*depth*width*height:
             raise ValueError(f'cannot unflatten {self.dims} to {channels}, {depth}, {width}, {height} (flattened that is {channels*depth*width*height})')
 
         return FluentShape((channels, depth, width, height), self.verbose)
