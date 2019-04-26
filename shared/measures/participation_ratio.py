@@ -36,7 +36,7 @@ def measure_pr(hidden_acts: torch.tensor) -> float:
     starttime = time.time()
     eigs, _ = pca.get_hidden_pcs(hidden_acts, None)
     duration = time.time() - starttime
-    print(f'[PR] took {duration:.3f}s to calculate hidden pcs of {tuple(hidden_acts.shape)} matrix (contguous: {hidden_acts.is_contiguous})')
+    print(f'[PR] took {duration:.3f}s to calculate hidden pcs of {tuple(hidden_acts.shape)} matrix (contiguous: {hidden_acts.is_contiguous()})')
 
     print(f'[PR] calculating pr from pcs of {eigs.shape} eigs matrix (contiguous: {eigs.is_contiguous()})')
     starttime = time.time()

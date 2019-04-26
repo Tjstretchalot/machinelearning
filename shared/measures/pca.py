@@ -163,22 +163,40 @@ def get_hidden_pcs(hidden_acts: torch.tensor, num_pcs: typing.Optional[int]):
     if num_pcs is not None and num_pcs < 1:
         raise ValueError(f'expected num_pcs is positive, got {num_pcs}')
 
+    starttime = time.time()
     hidden_acts_np = hidden_acts.numpy().copy()
+    print(f'[PCA] took {(time.time() - starttime):.3f}s to copy')
+    starttime = time.time()
     hidden_acts_np -= np.mean(hidden_acts_np, axis=0)
+    print(f'[PCA] took {(time.time() - starttime):.3f}s to subtract mean')
+    starttime = time.time()
     cov = np.cov(hidden_acts_np.T)
+    print(f'[PCA] took {(time.time() - starttime):.3f}s to calculate covariance')
+    starttime = time.time()
     eig, eig_vecs = np.linalg.eig(cov)
+    print(f'[PCA] took {(time.time() - starttime):.3f}s to calculate eigenvalues')
+    starttime = time.time()
     eig = np.real(eig)
+    print(f'[PCA] took {(time.time() - starttime):.3f}s to convert to real')
+    starttime = time.time()
     ind = np.argsort(np.abs(eig))[::-1]
     eig_vecs = np.real(eig_vecs[:, ind])
     eig = eig[ind]
+    print(f'[PCA] took {(time.time() - starttime):.3f}s to sort')
+    starttime = time.time()
 
     if num_pcs is not None:
         eig_vecs = eig_vecs[:, 0:num_pcs]
         eig = eig[0:num_pcs]
 
     eig_vecs = eig_vecs.transpose()
+    print(f'[PCA] took {(time.time() - starttime):.3f}s to transpose')
+    starttime = time.time()
 
     reig, reig_vecs = torch.tensor(eig, dtype=hidden_acts.dtype), torch.tensor(eig_vecs, dtype=hidden_acts.dtype)
+
+    print(f'[PCA] took {(time.time() - starttime):.3f}s to convert back to numpy')
+    starttime = time.time()
 
     if not torch.is_tensor(reig):
         raise ValueError(f'expected reig is torch.tensor, got {reig}')
@@ -198,6 +216,7 @@ def get_hidden_pcs(hidden_acts: torch.tensor, num_pcs: typing.Optional[int]):
         if abs(_reig) >= abs(last) + 1e-8: # small epsilon required
             raise ValueError(f'expected reig to be sorted, but got {reig} (_reig={_reig}, last={last})')
         last = abs(float(_reig))
+    print(f'[PCA] took {(time.time() - starttime):.3f}s to validate')
     return reig, reig_vecs
 
 def project_to_pcs(points, pcs, out) -> torch.tensor:
