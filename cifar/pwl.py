@@ -63,6 +63,6 @@ class CIFARData:
         reshaping to CxHxW and flattening"""
         return SimplePointWithLabelProducer(
             torch.from_numpy(self.data.transpose((0, 3, 1, 2)).reshape(-1, 32*32*3)).double(),
-            torch.from_numpy(self.labels).long(),
+            torch.from_numpy(self.labels).int(),
             len(self.classes)
         )

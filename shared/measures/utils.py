@@ -28,6 +28,8 @@ def verify_points_and_labels(sample_points: torch.tensor, sample_labels: torch.t
         raise ValueError(f'expected sample_labels is tensor, got {sample_labels} (type={type(sample_labels)})')
     if len(sample_labels.shape) != 1:
         raise ValueError(f'expected sample_labels has shape [num_pts] but has shape {sample_labels.shape}')
+    if sample_labels.dtype == torch.uint8:
+        raise ValueError(f'uint8 sample_labels is prone to issues with masking, convert to int or long')
     if sample_labels.dtype not in (torch.uint8, torch.int, torch.long):
         raise ValueError(f'expected sample_labels is int-like but has dtype={sample_labels.dtype}')
     if sample_points.shape[0] != sample_labels.shape[0]:
@@ -212,7 +214,7 @@ def get_hidacts_ff(network: FeedforwardNetwork, pwl: PointWithLabelProducer,
     num_points = min(num_points, pwl.epoch_size)
 
     sample_points = torch.zeros((num_points, pwl.input_dim), dtype=torch.double)
-    sample_labels = torch.zeros(num_points, dtype=torch.uint8)
+    sample_labels = torch.zeros(num_points, dtype=torch.int)
 
     pwl.mark()
     pwl.fill(sample_points, sample_labels)
@@ -269,7 +271,7 @@ def get_hidacts_rnn(network: NaturalRNN, pwl: PointWithLabelProducer,
         raise ValueError(f'expected num_points is int, got {num_points} (type={type(num_points)})')
 
     sample_points = torch.zeros((num_points, pwl.input_dim), dtype=torch.double)
-    sample_labels = torch.zeros(num_points, dtype=torch.uint8)
+    sample_labels = torch.zeros(num_points, dtype=torch.int)
 
     pwl.mark()
     pwl.fill(sample_points, sample_labels)
@@ -519,6 +521,8 @@ def verify_ndarray(arr: np.ndarray, arr_name: str,
             if arr.dtype not in (np.float, np.float32, np.float64):
                 raise ValueError(f'expected {arr_name}.dtype is float-like, got {arr.dtype}')
         elif dtype == 'int':
+            if arr.dtype == np.uint8:
+                raise ValueError(f'uint8 style arrays are prone to issues, use int32 or int64')
             if arr.dtype not in (np.uint8, np.int, np.int32, np.int64):
                 raise ValueError(f'expected {arr_name}.dtype is int-like, got {arr.dtype}')
         else:

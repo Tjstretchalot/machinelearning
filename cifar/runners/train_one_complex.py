@@ -66,10 +66,10 @@ def main():
     )
 
     pca3d_throughtrain.FRAMES_PER_TRAIN = 1
-    pca3d_throughtrain.SKIP_TRAINS = 0
+    pca3d_throughtrain.SKIP_TRAINS = 4
     pca3d_throughtrain.NUM_FRAME_WORKERS = 6
 
-    dig = npmp.NPDigestor('train_one_complex', 35)
+    dig = npmp.NPDigestor('train_one_complex', 6)
 
     dtt_training_dir = os.path.join(SAVEDIR, 'dtt')
     pca_training_dir = os.path.join(SAVEDIR, 'pca')
