@@ -217,11 +217,11 @@ class EpochsStopper:
     """Stops after a certain number of epochs. Requires an EpochsTracker
 
     Attributes:
-        stop_after (int): the number of epochs to stop after
+        stop_after (float): the number of epochs to stop after
     """
 
-    def __init__(self, stop_after: int):
-        self.stop_after = stop_after
+    def __init__(self, stop_after: float):
+        self.stop_after = float(stop_after)
 
     def stopper(self, context: GenericTrainingContext) -> bool:
         """Returns true if self.stop_after epochs have passed"""
@@ -530,7 +530,13 @@ class CopyLogOnFinish:
             context.logger.info('[CopyLogOnFinish] Skipping because log.txt does not exist')
             return
 
-        shutil.copy('log.txt', self.outpath)
+        context.logger.info('[CopyLogOnFinish] Copying logfile..')
+        start = time.time()
+        with open('log.txt', 'r') as infile:
+            with open(self.outpath, 'w') as outfile:
+                outfile.write(infile.read())
+        duration = time.time() - start
+        context.logger.info('[CopyLogOnFinish] finished in %s seconds', f'{duration:.3f}')
 
 class EpochProgress:
     """A more complicated version of epoch caller that will print out every 15 seconds

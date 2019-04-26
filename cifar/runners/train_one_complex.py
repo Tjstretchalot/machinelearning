@@ -27,7 +27,7 @@ SAVEDIR = shared.filetools.savepath()
 INPUT_DIM = 32*32*3 # not modifiable
 OUTPUT_DIM = 10
 
-STOP_EPOCH = 5
+STOP_EPOCH = 0.02
 
 def main():
     """Entry point"""
