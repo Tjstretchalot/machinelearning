@@ -173,3 +173,7 @@ class ZeroMQQueue:
         else:
             side = not self.is_output
         return (self.port, side)
+
+    def close(self):
+        """Explicitly closes this queue"""
+        self.connection.close()

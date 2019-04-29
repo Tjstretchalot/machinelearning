@@ -8,7 +8,6 @@ import matplotlib.pyplot as plt
 import typing
 import os
 import time
-import multiprocessing as mp
 import shared.measures.pca as pca
 from shared.models.ff import FeedforwardNetwork, FFHiddenActivations
 from shared.pwl import PointWithLabelProducer
@@ -16,6 +15,9 @@ from shared.filetools import zipdir
 from shared.trainer import GenericTrainingContext
 import shared.npmp as npmp
 import shared.measures.utils as mutils
+import shared.myqueue as myq
+
+import uuid
 
 def measure_pr(hidden_acts: torch.tensor) -> float:
     """Measures the participation ratio of the specified hidden acts, plotting
@@ -45,6 +47,23 @@ def measure_pr(hidden_acts: torch.tensor) -> float:
         raise ValueError(f'PR should always be <= M where M = eigs.shape[0] = {eigs.shape[0]} (got {result})')
 
     return result
+
+def measure_pr_np(hidden_acts: np.ndarray, iden: typing.Any, outqueue: typing.Any):
+    """Measure pr but set up to send the output through a zeromq queue
+
+    Args:
+        hidden_acts (np.ndarray): the hidden activations you want the participation ratio for
+        iden (any): sent as the first value in the tuple pushed to the outqueue
+        outqueue (any): deserialized with myqueue
+    """
+
+    if not isinstance(hidden_acts, np.ndarray):
+        raise ValueError(f'expected hidden_acts is numpy array, got {hidden_acts} (type={type(hidden_acts)})')
+
+    result = measure_pr(torch.from_numpy(hidden_acts))
+    outqueue = myq.ZeroMQQueue.deser(outqueue)
+    outqueue.put((iden, result))
+    outqueue.close()
 
 class PRTrajectory(typing.NamedTuple):
     """Describes the trajectory of participation ratio through time or layers
@@ -208,31 +227,33 @@ def digest_measure_and_plot_pr_ff(sample_points: np.ndarray, sample_labels: np.n
     if not isinstance(output_dim, int):
         raise ValueError(f'expected output_dim is int, got {output_dim} (type={type(output_dim)})')
 
-
-    pr_overall = []
     if labels:
-        pr_by_label = [[] for _ in range(output_dim)]
         masks_by_lbl = [sample_labels == lbl for lbl in range(output_dim)]
 
-    my_pool = mp.Pool(max_threads)
-    for hid_acts in all_hid_acts:
-        pr_overall.append(my_pool.apply_async(measure_pr, (hid_acts,)))
+    inqueue = myq.ZeroMQQueue.create_recieve()
+    inq_serd = inqueue.serd()
+    dig = npmp.NPDigestor(uuid.uuid4(), max_threads, 'participation_ratio', 'measure_pr_np')
+
+    exp_results = len(all_hid_acts)
+    if labels:
+        exp_results += len(all_hid_acts) * output_dim
+
+    for layer, hid_acts in enumerate(all_hid_acts):
+        dig(hid_acts, (layer, -1), inq_serd)
         if labels:
             for lbl in range(output_dim):
-                pr_by_label[lbl].append(my_pool.apply_async(measure_pr, (hid_acts[masks_by_lbl[lbl]],)))
-
-    my_pool.close()
-    my_pool.join()
+                dig(hid_acts[masks_by_lbl[lbl]], (layer, lbl), inq_serd)
 
     torch_pr_overall = torch.zeros(num_lyrs, dtype=torch.double)
-    for idx, asyncval in pr_overall:
-        torch_pr_overall[idx] = asyncval.get(timeout=1)
-
     if labels:
         torch_pr_by_label = torch.zeros((output_dim, num_lyrs), dtype=torch.double)
-        for label in range(output_dim):
-            for lyr in range(num_lyrs):
-                torch_pr_by_label[label, lyr] = pr_by_label[label][lyr].get(timeout=1)
+
+    for _ in range(exp_results):
+        (layer, lbl), prval = inqueue.get()
+        if lbl == -1:
+            torch_pr_overall[layer] = prval
+        else:
+            torch_pr_by_label[lbl, layer] = prval
 
     traj = PRTrajectory(overall=torch_pr_overall,
                         by_label=torch_pr_by_label if labels else None,
