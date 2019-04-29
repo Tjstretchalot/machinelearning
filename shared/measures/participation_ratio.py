@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import typing
 import os
 import time
+import multiprocessing as mp
 import shared.measures.pca as pca
 from shared.models.ff import FeedforwardNetwork, FFHiddenActivations
 from shared.pwl import PointWithLabelProducer
@@ -189,7 +190,8 @@ def plot_pr_trajectory(traj: PRTrajectory, savepath: str, exist_ok: bool = False
 
 def digest_measure_and_plot_pr_ff(sample_points: np.ndarray, sample_labels: np.ndarray,
                         *all_hid_acts: typing.Tuple[np.ndarray],
-                        savepath: str = None, labels: bool = False):
+                        savepath: str = None, labels: bool = False,
+                        max_threads: typing.Optional[int] = None):
     """An npmp digestable callable for measuring and plotting the participation ratio for
     a feedforward network"""
 
@@ -206,17 +208,35 @@ def digest_measure_and_plot_pr_ff(sample_points: np.ndarray, sample_labels: np.n
     if not isinstance(output_dim, int):
         raise ValueError(f'expected output_dim is int, got {output_dim} (type={type(output_dim)})')
 
-    pr_overall = torch.zeros(num_lyrs, dtype=torch.double)
+
+    pr_overall = []
     if labels:
-        pr_by_label = torch.zeros((output_dim, num_lyrs), dtype=torch.double)
+        pr_by_label = [[] for _ in range(output_dim)]
         masks_by_lbl = [sample_labels == lbl for lbl in range(output_dim)]
 
-    for layer, hid_acts in enumerate(all_hid_acts):
-        pr_overall[layer] = measure_pr(hid_acts)
+    my_pool = mp.Pool(max_threads)
+    for hid_acts in all_hid_acts:
+        pr_overall.append(my_pool.apply_async(measure_pr, (hid_acts,)))
         if labels:
             for lbl in range(output_dim):
-                pr_by_label[lbl, layer] = measure_pr(hid_acts[masks_by_lbl[lbl]])
-    traj = PRTrajectory(overall=pr_overall, by_label=pr_by_label if labels else None, layers=True)
+                pr_by_label[lbl].append(my_pool.apply_async(measure_pr, (hid_acts[masks_by_lbl[lbl]],)))
+
+    my_pool.close()
+    my_pool.join()
+
+    torch_pr_overall = torch.zeros(num_lyrs, dtype=torch.double)
+    for idx, asyncval in pr_overall:
+        torch_pr_overall[idx] = asyncval.get(timeout=1)
+
+    if labels:
+        torch_pr_by_label = torch.zeros((output_dim, num_lyrs), dtype=torch.double)
+        for label in range(output_dim):
+            for lyr in range(num_lyrs):
+                torch_pr_by_label[label, lyr] = pr_by_label[label][lyr].get(timeout=1)
+
+    traj = PRTrajectory(overall=torch_pr_overall,
+                        by_label=torch_pr_by_label if labels else None,
+                        layers=True)
     plot_pr_trajectory(traj, savepath, False)
 
 def during_training_ff(savepath: str, train: bool,
