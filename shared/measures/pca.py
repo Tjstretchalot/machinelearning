@@ -9,8 +9,13 @@ so that they can be displayed two-dimensionally.
 import torch
 import numpy as np
 import scipy.linalg
-import skcuda.linalg
-import pycuda.gpuarray
+try:
+    import skcuda.linalg
+    import pycuda.gpuarray
+    _have_cuda = True
+except:
+    _have_cuda = False
+
 import math
 
 from shared.models.rnn import NaturalRNN, RNNHiddenActivations
@@ -180,7 +185,7 @@ def get_hidden_pcs(hidden_acts: torch.tensor, num_pcs: typing.Optional[int], vec
         np.sort(eig)
         return torch.tensor(eig, dtype=hidden_acts.dtype)
 
-    if gpu_accel and (reduce(operator.mul, cov.shape) > 10000):
+    if _have_cuda and gpu_accel and (reduce(operator.mul, cov.shape) > 10000):
         # https://scikit-cuda.readthedocs.io/en/latest/generated/skcuda.linalg.eig.html
         gpu_cov = pycuda.gpuarray.to_gpu(cov)
         vr_gpu, w_gpu = skcuda.linalg.eig(gpu_cov, 'N', 'V', 'F')
