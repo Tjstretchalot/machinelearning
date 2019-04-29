@@ -60,10 +60,12 @@ def measure_pr_np(hidden_acts: np.ndarray, iden: typing.Any, outqueue: typing.An
     if not isinstance(hidden_acts, np.ndarray):
         raise ValueError(f'expected hidden_acts is numpy array, got {hidden_acts} (type={type(hidden_acts)})')
 
+    print(f'measure_pr_np with hidden_acts array size {hidden_acts.shape}')
     result = measure_pr(torch.from_numpy(hidden_acts))
     outqueue = myq.ZeroMQQueue.deser(outqueue)
     outqueue.put((iden, result))
     outqueue.close()
+    print(f'measure_pr_np finished with hidden_acts array_size {hidden_acts.shape}')
 
 class PRTrajectory(typing.NamedTuple):
     """Describes the trajectory of participation ratio through time or layers
