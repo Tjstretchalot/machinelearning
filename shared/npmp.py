@@ -242,7 +242,6 @@ class NPDigestor:
 
         proc = Process(target=_worker_target,
                        args=(self.identifier, worker_id, target_module, target_name))
-        proc.daemon = True
         proc.start()
         return proc
 
