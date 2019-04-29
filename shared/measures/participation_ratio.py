@@ -232,7 +232,7 @@ def digest_measure_and_plot_pr_ff(sample_points: np.ndarray, sample_labels: np.n
 
     inqueue = myq.ZeroMQQueue.create_recieve()
     inq_serd = inqueue.serd()
-    dig = npmp.NPDigestor(uuid.uuid4(), max_threads, 'participation_ratio', 'measure_pr_np')
+    dig = npmp.NPDigestor(uuid.uuid4().hex, max_threads, 'participation_ratio', 'measure_pr_np')
 
     exp_results = len(all_hid_acts)
     if labels:
