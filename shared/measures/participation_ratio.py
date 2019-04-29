@@ -191,7 +191,7 @@ def plot_pr_trajectory(traj: PRTrajectory, savepath: str, exist_ok: bool = False
 def digest_measure_and_plot_pr_ff(sample_points: np.ndarray, sample_labels: np.ndarray,
                         *all_hid_acts: typing.Tuple[np.ndarray],
                         savepath: str = None, labels: bool = False,
-                        max_threads: typing.Optional[int] = None):
+                        max_threads: typing.Optional[int] = 3):
     """An npmp digestable callable for measuring and plotting the participation ratio for
     a feedforward network"""
 
