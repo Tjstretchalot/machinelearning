@@ -9,6 +9,8 @@ so that they can be displayed two-dimensionally.
 import torch
 import numpy as np
 import scipy.linalg
+import skcuda.linalg
+import pycuda.gpuarray
 import math
 
 from shared.models.rnn import NaturalRNN, RNNHiddenActivations
@@ -20,6 +22,8 @@ import shutil
 import time
 import warnings
 import typing
+import operator
+from functools import reduce
 
 class PCTrajectory:
     """Describes the principal components of a recurrent network through time
@@ -140,7 +144,8 @@ class PCTrajectory:
         return (self.projected_samples[recur_time, sample_ind],
                 self.projected_sample_labels[recur_time, sample_ind])
 
-def get_hidden_pcs(hidden_acts: torch.tensor, num_pcs: typing.Optional[int], vecs=True):
+def get_hidden_pcs(hidden_acts: torch.tensor, num_pcs: typing.Optional[int], vecs=True,
+                   gpu_accel=True):
     """Fetches the principal component values and vectors corresponding with the given hidden
     activations.
 
@@ -151,6 +156,8 @@ def get_hidden_pcs(hidden_acts: torch.tensor, num_pcs: typing.Optional[int], vec
                 2. The second index tells you which hidden node
         num_pcs (int): The number of pcs to return (None for all)
         vecs (bool): if True, eigenvectors are returned. If false, only eigenvalues are returned
+        gpu_accel (bool): if False gpu acceleration is never used, if True it is used if it makes
+            sense
     Returns:
         eigs (torch.tensor[num_pcs]): the relative importance in sorted descending order for the pc vectors
         eig_vecs (torch.tensor[num_pcs x num_hidden]): the principal component vectors
@@ -172,9 +179,15 @@ def get_hidden_pcs(hidden_acts: torch.tensor, num_pcs: typing.Optional[int], vec
         eig = np.real(eig)
         np.sort(eig)
         return torch.tensor(eig, dtype=hidden_acts.dtype)
-    eig, eig_vecs = scipy.linalg.eig(cov)
-    # TODO switch to skcuda for gpu-accelerated eigenvalues for matrices bigger than 1000
-    # https://scikit-cuda.readthedocs.io/en/latest/generated/skcuda.linalg.eig.html
+
+    if gpu_accel and (reduce(operator.mul, cov.shape) > 10000):
+        # https://scikit-cuda.readthedocs.io/en/latest/generated/skcuda.linalg.eig.html
+        gpu_cov = pycuda.gpuarray.to_gpu(cov)
+        vr_gpu, w_gpu = skcuda.linalg.eig(gpu_cov, 'N', 'V', 'F')
+        eig = w_gpu.get()
+        eig_vecs = vr_gpu.get()
+    else:
+        eig, eig_vecs = scipy.linalg.eig(cov)
     eig = np.real(eig)
     ind = np.argsort(np.abs(eig))[::-1]
     eig_vecs = np.real(eig_vecs[:, ind])

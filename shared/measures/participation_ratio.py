@@ -61,13 +61,11 @@ def measure_pr_np(hidden_acts: np.ndarray, iden: typing.Any, outqueue: typing.An
     if not isinstance(hidden_acts, np.ndarray):
         raise ValueError(f'expected hidden_acts is numpy array, got {hidden_acts} (type={type(hidden_acts)})')
 
-    print(f'measure_pr_np with hidden_acts array size {hidden_acts.shape}')
     sys.stdout.flush()
     result = measure_pr(torch.from_numpy(hidden_acts))
     outqueue = myq.ZeroMQQueue.deser(outqueue)
     outqueue.put((iden, result))
     outqueue.close()
-    print(f'measure_pr_np finished with hidden_acts array_size {hidden_acts.shape}')
 
 class PRTrajectory(typing.NamedTuple):
     """Describes the trajectory of participation ratio through time or layers
@@ -243,11 +241,9 @@ def digest_measure_and_plot_pr_ff(sample_points: np.ndarray, sample_labels: np.n
         exp_results += len(all_hid_acts) * output_dim
 
     for layer, hid_acts in enumerate(all_hid_acts):
-        print(f'PR for layer {layer}')
         dig(hid_acts.numpy(), (layer, -1), inq_serd)
         if labels:
             for lbl in range(output_dim):
-                print(f'PR for layer {layer} label {lbl}')
                 dig(hid_acts[masks_by_lbl[lbl]].numpy(), (layer, lbl), inq_serd)
 
     torch_pr_overall = torch.zeros(num_lyrs, dtype=torch.double)
