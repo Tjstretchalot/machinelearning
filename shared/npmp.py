@@ -248,6 +248,7 @@ class NPDigestor:
     def _prune(self):
         for i in range(len(self.workers) - 1, -1, -1):
             if not self.workers[i].is_alive():
+                self.workers[i].join()
                 del self.workers[i]
 
     def _invoke_blocking(self, worker_id: int, target_module: str, target_name: str):
