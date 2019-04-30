@@ -136,7 +136,7 @@ def plot_pr_trajectory(traj: PRTrajectory, savepath: str, exist_ok: bool = False
     if not isinstance(exist_ok, bool):
         raise ValueError(f'expected exist_ok is bool, got {exist_ok} (type={type(exist_ok)})')
 
-    if label_map is None:
+    if label_map is None and traj.by_label is not None:
         label_map = dict((lbl, str(lbl)) for lbl in range(len(traj.by_label)))
     elif traj.by_label is not None:
         if not isinstance(label_map, dict):
