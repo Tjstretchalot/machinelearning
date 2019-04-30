@@ -213,7 +213,7 @@ def measure_dtt(model: NaturalRNN, pwl_prod: PointWithLabelProducer,
     np.savez(os.path.join(outfile_wo_ext, 'within.npz'), *tuple(wd.numpy() for wd in within_dists))
     np.savez(os.path.join(outfile_wo_ext, 'across.npz'), *tuple(ad.numpy() for ad in across_dists))
     np.savetxt(os.path.join(outfile_wo_ext, 'within_means.txt'), within_means.numpy())
-    np.savetxt(os.path.join(outfile_wo_ext, 'across_means.txt'), across_means.numpy()))
+    np.savetxt(os.path.join(outfile_wo_ext, 'across_means.txt'), across_means.numpy())
 
 
     if os.path.exists(outfile):
