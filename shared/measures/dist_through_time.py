@@ -70,6 +70,10 @@ def measure_instant(hid_acts: torch.tensor,
             pairwise_dists = sdist.cdist(hid_acts[labels == lbl].numpy(), hid_acts[labels == lbl2].numpy()).flatten()
             across_dists = np.concatenate([across_dists, pairwise_dists]) if across_dists is not None else pairwise_dists
 
+    if within_dists is None:
+        raise ValueError(f'expected within_dists is not None (there are {num_labels} labels!)')
+    if across_dists is None:
+        raise ValueError(f'expected across_dists is not None (there are {num_labels} labels!)')
     return torch.from_numpy(within_dists), torch.from_numpy(across_dists)
 
 
