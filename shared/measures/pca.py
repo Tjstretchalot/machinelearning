@@ -11,8 +11,8 @@ import numpy as np
 import scipy.linalg
 import matplotlib as mpl
 try:
-    import skcuda.linalg
-    import pycuda.gpuarray
+    import skcuda.linalg   # pylint: disable=import-error
+    import pycuda.gpuarray # pylint: disable=import-error
     _have_cuda = True
 except:
     _have_cuda = False

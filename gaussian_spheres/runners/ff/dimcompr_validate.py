@@ -44,7 +44,7 @@ def main():
         weights=wi.GaussianWeightInitializer(mean=0, vari=0.1, normalize_dim=1),
         biases=wi.ZerosWeightInitializer(),
         layer_sizes=layers,
-        nonlinearity='tanh',
+        nonlinearity='linear',
         train_readout_weights=False,
         train_readout_bias=False
     )
