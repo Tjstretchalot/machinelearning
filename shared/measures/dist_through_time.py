@@ -210,8 +210,11 @@ def measure_dtt(model: NaturalRNN, pwl_prod: PointWithLabelProducer,
         sample_labels=sample_labels.numpy(),
         hid_acts=hid_acts.numpy()
         )
-    np.savez(os.path.join(outfile_wo_ext, 'within.npz'), *within_dists)
-    np.savez(os.path.join(outfile_wo_ext, 'across.npz'), *across_dists)
+    np.savez(os.path.join(outfile_wo_ext, 'within.npz'), *tuple(wd.numpy() for wd in within_dists))
+    np.savez(os.path.join(outfile_wo_ext, 'across.npz'), *tuple(ad.numpy() for ad in across_dists))
+    np.savetxt(os.path.join(outfile_wo_ext, 'within_means.txt'), within_means.numpy())
+    np.savetxt(os.path.join(outfile_wo_ext, 'across_means.txt', across_means.numpy()))
+
 
     if os.path.exists(outfile):
         os.remove(outfile)
@@ -378,9 +381,19 @@ def _save_dtt_ff(sample_points, sample_labels, hid_acts,
         sample_points=sample_points.numpy(),
         sample_labels=sample_labels.numpy()
         )
-    np.savez(os.path.join(outfile_wo_ext, 'hid_acts.npz'), *hid_acts)
-    np.savez(os.path.join(outfile_wo_ext, 'within.npz'), *within_dists)
-    np.savez(os.path.join(outfile_wo_ext, 'across.npz'), *across_dists)
+    np.savez(os.path.join(outfile_wo_ext, 'hid_acts.npz'), *tuple(ha.numpy() for ha in hid_acts))
+    np.savez(os.path.join(outfile_wo_ext, 'within.npz'), *tuple(wd.numpy() for wd in within_dists))
+    np.savez(os.path.join(outfile_wo_ext, 'across.npz'), *tuple(ad.numpy() for ad in across_dists))
+
+    within_means = torch.zeros(num_layers+1, dtype=torch.double)
+    across_means = torch.zeros(num_layers+1, dtype=torch.double)
+
+    for i in range(num_layers+1):
+        within_means[i] = within_dists[i].mean()
+        across_means[i] = across_dists[i].mean()
+
+    np.savetxt(os.path.join(outfile_wo_ext, 'within_means.txt'), within_means)
+    np.savetxt(os.path.join(outfile_wo_ext, 'across_means.txt'), across_means)
 
 def _plot_dtt_ff(layers, within_means, within_stds, within_sems,
                  across_means, across_stds, across_sems,
