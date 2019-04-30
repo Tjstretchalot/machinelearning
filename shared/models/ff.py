@@ -199,7 +199,7 @@ class FeedforwardLarge(FeedforwardNetwork):
     @classmethod
     def create(cls, input_dim: int, output_dim: int, nonlinearity: typing.Union[typing.List[str], str],
                weights: wi.WeightInitializer, biases: wi.WeightInitializer,
-               layer_sizes: typing.Iterable[int]):
+               layer_sizes: typing.Iterable[int], train_readout_weights=True, train_readout_bias=True):
         """Creates a feedforward network of linear layers with the particular layer
         sizes. Uses a single weight initializer for all the weights and biases
 
@@ -210,9 +210,15 @@ class FeedforwardLarge(FeedforwardNetwork):
                 of equivalent length to layer_sizes
             weights (wi.WeightInitializer): the initializer for the weights between layesr
             biases (wi.WeightInitializer): the initializer for the biases of each layer
-            layer_sizes (typing.Iterable[int]): one int for the number of nodes in each layer.
+            layer_sizes (typing.Iterable[int]): one int or tuplefor the number of nodes in each layer.
                 a single number is similar to FeedforwardSmall with the special weight
-                initialization technique. May be empty for an svm
+                initialization technique. May be empty for an svm.
+
+                If it is a tuple for a particular item, it is interpreted as
+                (size: int, train_weight: bool, train_bias: bool) for that layer.
+
+            train_readout_weights (bool): if True the readout weights are trained, if False they are not
+            train_readout_bias (bool): if True the readout bias is trained, if False it is not
         """
 
         if not isinstance(input_dim, int):
@@ -231,19 +237,28 @@ class FeedforwardLarge(FeedforwardNetwork):
 
         layers = []
         last_dim = input_dim
-        for ind, layer_size in enumerate(layer_sizes):
-            if not isinstance(layer_size, int):
-                raise ValueError(f'expected layers[{ind}] is int, got {layer_size} (type={type(layer_size)})')
+        for ind, layer_settings in enumerate(layer_sizes):
+            if isinstance(layer_settings, int):
+                layer_settings = (layer_settings, True, True)
+            if not isinstance(layer_settings, (tuple, list)):
+                raise ValueError(f'expected layers[{ind}] is int or tuple, got {layer_settings} (type={type(layer_settings)})')
 
+            layer_size, train_weights, train_bias = layer_settings
             layer = torch.nn.Linear(last_dim, layer_size).double()
             wi.deser_or_noop(weights).initialize(layer.weight.data)
             wi.deser_or_noop(biases).initialize(layer.bias.data)
+
+            layer.weight.requires_grad = train_weights
+            layer.bias.requires_grad = train_bias
+
             layers.append(layer)
             last_dim = layer_size
 
         layer = torch.nn.Linear(last_dim, output_dim).double()
         wi.deser_or_noop(weights).initialize(layer.weight.data)
         wi.deser_or_noop(biases).initialize(layer.bias.data)
+        layer.weight.requires_grad = train_readout_weights
+        layer.bias.requires_grad = train_readout_bias
         layers.append(layer)
 
         _lookup = nonlins.LOOKUP

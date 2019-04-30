@@ -28,23 +28,26 @@ def main():
     """Entry point"""
     pwl = GaussianSpheresPWLP(
         epoch_size=100,
-        input_dim=2,
-        output_dim=2,
-        clusters=[PointWithLabel(point=torch.tensor((-1, 0), dtype=torch.double), label=0),
-                  PointWithLabel(point=torch.tensor((1, 0), dtype=torch.double), label=1)],
+        input_dim=3,
+        output_dim=3,
+        clusters=[PointWithLabel(point=torch.tensor((1, 0, 0), dtype=torch.double), label=0),
+                  PointWithLabel(point=torch.tensor((0, 1, 0), dtype=torch.double), label=1),
+                  PointWithLabel(point=torch.tensor((0, 0, 1), dtype=torch.double), label=2)],
         std_dev=0.5,
         mean=0
     )
 
-    layers = [50]
+    layers = [(50, True, False)]
     layer_names = ['input', 'hidden', 'output']
 
     network = FeedforwardLarge.create(
-        input_dim=2, output_dim=2,
-        weights=wi.GaussianWeightInitializer(mean=0, vari=0.3, normalize_dim=1),
+        input_dim=3, output_dim=3,
+        weights=wi.GaussianWeightInitializer(mean=0.2, vari=0.1, normalize_dim=1),
         biases=wi.ZerosWeightInitializer(),
         layer_sizes=layers,
-        nonlinearity='tanh'
+        nonlinearity='tanh',
+        train_readout_weights=False,
+        train_readout_bias=False
     )
 
     trainer = tnr.GenericTrainer(
@@ -72,7 +75,7 @@ def main():
     pca_throughtrain_dir = os.path.join(SAVEDIR, 'pca_throughtrain')
     (trainer
      .reg(tnr.EpochsTracker())
-     .reg(tnr.EpochsStopper(10))
+     .reg(tnr.EpochsStopper(100))
      .reg(tnr.DecayTracker())
      .reg(tnr.DecayStopper(8))
      .reg(tnr.LRMultiplicativeDecayer())
@@ -86,7 +89,7 @@ def main():
      .reg(tnr.OnEpochCaller.create_every(pca_ff.during_training(pca_training_dir, True, dig), skip=1000))
      .reg(tnr.OnEpochCaller.create_every(pr.during_training_ff(pr_training_dir, True, dig), skip=1000))
      .reg(tnr.OnEpochCaller.create_every(svm.during_training_ff(svm_training_dir, True, dig), skip=1000))
-     #.reg(pca3d_throughtrain.PCAThroughTrain(pca_throughtrain_dir, layer_names, True))
+     .reg(pca3d_throughtrain.PCAThroughTrain(pca_throughtrain_dir, layer_names, True))
      .reg(tnr.OnFinishCaller(lambda *args, **kwargs: dig.join()))
      .reg(tnr.ZipDirOnFinish(dtt_training_dir))
      .reg(tnr.ZipDirOnFinish(pca_training_dir))
