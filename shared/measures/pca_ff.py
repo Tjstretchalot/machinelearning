@@ -587,7 +587,8 @@ def digest_find_and_plot_traj(sample_points: np.ndarray, sample_labels: np.ndarr
     plot_trajectory(traj, savepath, False, **kwargs)
 
 
-def during_training(savepath: str, train: bool, digestor: typing.Optional[npmp.NPDigestor] = None):
+def during_training(savepath: str, train: bool, digestor: typing.Optional[npmp.NPDigestor] = None,
+                    **kwargs):
     """Fetches the on_step/on_epoch for things like OnEpochsCaller
     that saves into the given directory.
 
@@ -595,6 +596,7 @@ def during_training(savepath: str, train: bool, digestor: typing.Optional[npmp.N
         savepath (str): where to save
         train (bool): true to use training data, false to use validation data
         digestor (NPDigestor, optional): if specified, used for multiprocessing
+        kwargs: passed to the plot_trajectory call
     """
     if not isinstance(savepath, str):
         raise ValueError(f'expected savepath is str, got {savepath} (type={type(savepath)})')
@@ -616,11 +618,11 @@ def during_training(savepath: str, train: bool, digestor: typing.Optional[npmp.N
             hacts = mutils.get_hidacts_ff(context.model, pwl, num_samples).numpy()
             digestor(hacts.sample_points, hacts.sample_labels, *hacts.hid_acts, savepath=outfile,
                      target_module='shared.measures.pca_ff',
-                     target_name='digest_find_and_plot_traj')
+                     target_name='digest_find_and_plot_traj', **kwargs)
             return
 
         traj = find_trajectory(context.model, pwl, 2)
-        plot_trajectory(traj, outfile)
+        plot_trajectory(traj, outfile, **kwargs)
 
     return on_step
 
