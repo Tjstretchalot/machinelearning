@@ -9,6 +9,7 @@ so that they can be displayed two-dimensionally.
 import torch
 import numpy as np
 import scipy.linalg
+import matplotlib as mpl
 try:
     import skcuda.linalg
     import pycuda.gpuarray
