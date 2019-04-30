@@ -56,7 +56,7 @@ def main():
         batch_size=1,
         learning_rate=0.003,
         optimizer=torch.optim.Adam([p for p in network.parameters() if p.requires_grad], lr=0.003),
-        criterion=mycrits.create_meansqerr_regul(noise_strength=0.1)#torch.nn.CrossEntropyLoss()
+        criterion=mycrits.create_meansqerr_regul(noise_strength=0.5)#torch.nn.CrossEntropyLoss()
     )
 
     pca3d_throughtrain.FRAMES_PER_TRAIN = 1
