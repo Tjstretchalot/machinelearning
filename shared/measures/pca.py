@@ -388,7 +388,8 @@ def plot_snapshot(axis: plt.Axes, projected: torch.tensor, labels: torch.tensor,
         raise ValueError(f'expected alpha is float, got {alpha}')
 
     axis.scatter(projected[:, 0].numpy(), projected[:, 1].numpy(),
-                 s=1, alpha=alpha, c=labels.numpy())
+                 s=1, alpha=alpha, c=labels.numpy(),
+                 cmap=mpl.cm.get_cmap('Set1'))
 
     axis.set_xlim([min_x, max_x])
     axis.set_ylim([min_y, max_y])
