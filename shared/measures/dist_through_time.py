@@ -385,7 +385,7 @@ def _save_dtt_ff(sample_points, sample_labels, hid_acts,
     np.savez(os.path.join(outfile_wo_ext, 'within.npz'), *tuple(wd.numpy() for wd in within_dists))
     np.savez(os.path.join(outfile_wo_ext, 'across.npz'), *tuple(ad.numpy() for ad in across_dists))
 
-    num_layers = len(hid_acts)
+    num_layers = len(hid_acts) - 1
     within_means = torch.zeros(num_layers+1, dtype=torch.double)
     across_means = torch.zeros(num_layers+1, dtype=torch.double)
 
