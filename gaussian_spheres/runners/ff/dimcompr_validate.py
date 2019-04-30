@@ -27,7 +27,7 @@ SAVEDIR = shared.filetools.savepath()
 def main():
     """Entry point"""
     pwl = GaussianSpheresPWLP(
-        epoch_size=100,
+        epoch_size=1000,
         input_dim=2,
         output_dim=2,
         clusters=[PointWithLabel(point=torch.tensor((-1, 0), dtype=torch.double), label=0),
@@ -77,7 +77,7 @@ def main():
      .reg(tnr.EpochsStopper(100))
      .reg(tnr.DecayTracker())
      .reg(tnr.DecayStopper(8))
-     #.reg(tnr.LRMultiplicativeDecayer())
+     .reg(tnr.LRMultiplicativeDecayer())
      .reg(tnr.DecayOnPlateau())
      .reg(tnr.AccuracyTracker(5, 1000, True))
      #.reg(tnr.WeightNoiser(
