@@ -439,7 +439,7 @@ def _plot_dtt_ff(layers, within_means, within_stds, within_sems,
     plt.close(fig_mean_with_scatter)
 
 def digest_ff_activations(
-        sample_points: np.ndarray, sample_labels: np.ndarray,
+        sample_points: np.ndarray, sample_labels: np.ndarray, output_dim: int,
         *hid_acts: typing.List[np.ndarray], outfile: str, exist_ok: bool):
     """This is a digest targettable version of the measure_dtt_ff, which accepts the
     hidden activations in the layer and stores plots to the given outfile and exist_ok
@@ -451,6 +451,11 @@ def digest_ff_activations(
         outfile (str): where to store the plots and data
         exist_ok (bool): True to overwrite, False to error when file exists
     """
+    if exist_ok is None:
+        raise ValueError(f'expected exist_ok is bool, got {exist_ok} (are you missing some arguments?)')
+    if not isinstance(output_dim, int):
+        raise ValueError(f'expected output_dim is int, got {output_dim}')
+
     sample_points = torch.from_numpy(sample_points).double()
     sample_labels = torch.from_numpy(sample_labels).int()
     hid_acts = [torch.from_numpy(hid_act).double() for hid_act in hid_acts]
@@ -465,9 +470,6 @@ def digest_ff_activations(
         raise FileExistsError(f'outfile {outfile} already exists (use exist_ok=True) to overwrite')
 
     num_samples = sample_points.shape[0]
-    output_dim = sample_labels.max().item()
-    if not isinstance(output_dim, int):
-        raise ValueError(f'expected output_dim is int, got {output_dim}')
 
     within_dists = [] # each value corresponds to a torch tensor of within dists
     within_means = torch.zeros(len(hid_acts), dtype=torch.double)
@@ -535,7 +537,8 @@ def during_training_ff(savepath: str, train: bool,
         if digestor is not None:
             hid_acts = mutils.get_hidacts_ff(context.model, pwl).numpy()
 
-            digestor(hid_acts.sample_points, hid_acts.sample_labels, *hid_acts.hid_acts,
+            digestor(hid_acts.sample_points, hid_acts.sample_labels, pwl.output_dim,
+                     *hid_acts.hid_acts,
                      outfile=outfile, exist_ok=exist_ok,
                      target_module='shared.measures.dist_through_time',
                      target_name='digest_ff_activations')
