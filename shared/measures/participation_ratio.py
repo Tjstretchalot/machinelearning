@@ -210,11 +210,15 @@ def plot_pr_trajectory(traj: PRTrajectory, savepath: str, exist_ok: bool = False
     zipdir(savepath_wo_ext)
 
 def digest_measure_and_plot_pr_ff(sample_points: np.ndarray, sample_labels: np.ndarray,
+                        output_dim: int,
                         *all_hid_acts: typing.Tuple[np.ndarray],
                         savepath: str = None, labels: bool = False,
                         max_threads: typing.Optional[int] = 3):
     """An npmp digestable callable for measuring and plotting the participation ratio for
     a feedforward network"""
+
+    if not isinstance(output_dim, int):
+        raise ValueError(f'expected output_dim is int, got {output_dim} (type={type(output_dim)})')
 
     sample_points = torch.from_numpy(sample_points)
     sample_labels = torch.from_numpy(sample_labels)
@@ -225,10 +229,6 @@ def digest_measure_and_plot_pr_ff(sample_points: np.ndarray, sample_labels: np.n
 
 
     num_lyrs = len(all_hid_acts)
-    output_dim = sample_labels.max().item()
-    if not isinstance(output_dim, int):
-        raise ValueError(f'expected output_dim is int, got {output_dim} (type={type(output_dim)})')
-
     if labels:
         masks_by_lbl = [sample_labels == lbl for lbl in range(output_dim)]
 
@@ -290,7 +290,8 @@ def during_training_ff(savepath: str, train: bool,
 
         if digestor is not None:
             hacts = mutils.get_hidacts_ff(context.model, pwl).numpy()
-            digestor(hacts.sample_points, hacts.sample_labels, *hacts.hid_acts,
+            digestor(hacts.sample_points, hacts.sample_labels, pwl.output_dim,
+                     *hacts.hid_acts,
                      savepath=outfile,
                      target_module='shared.measures.participation_ratio',
                      target_name='digest_measure_and_plot_pr_ff',
