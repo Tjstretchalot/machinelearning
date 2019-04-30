@@ -178,17 +178,13 @@ def get_hidden_pcs(hidden_acts: torch.tensor, num_pcs: typing.Optional[int], vec
 
     hidden_acts_np = hidden_acts.numpy().copy()
     hidden_acts_np -= np.mean(hidden_acts_np, axis=0)
+    cov = np.cov(hidden_acts_np.T)
     if not vecs:
-        if hidden_acts_np.shape[0] < hidden_acts_np.shape[1]:
-            cov = np.cov(hidden_acts_np.T)
-        else:
-            cov = np.cov(hidden_acts_np)
         eig = scipy.linalg.eigvals(cov)
         eig = np.real(eig)
         np.sort(eig)
         return torch.tensor(eig, dtype=hidden_acts.dtype)
 
-    cov = np.cov(hidden_acts_np.T)
     if _have_cuda and gpu_accel and (reduce(operator.mul, cov.shape) > 10000):
         # https://scikit-cuda.readthedocs.io/en/latest/generated/skcuda.linalg.eig.html
         gpu_cov = pycuda.gpuarray.to_gpu(cov)
