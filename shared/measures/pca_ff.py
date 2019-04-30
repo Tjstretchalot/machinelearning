@@ -395,7 +395,8 @@ def find_trajectory(model: FeedforwardNetwork, pwl_prod: PointWithLabelProducer,
 
     return PCTrajectoryFF(snapshots)
 
-def plot_trajectory(traj: PCTrajectoryFF, filepath: str, exist_ok: bool = False, alpha=0.5):
+def plot_trajectory(traj: PCTrajectoryFF, filepath: str, exist_ok: bool = False, alpha=0.5,
+                    square=True):
     """Plots the given trajectory and saves it to the given filepath.
 
     Args:
@@ -403,6 +404,9 @@ def plot_trajectory(traj: PCTrajectoryFF, filepath: str, exist_ok: bool = False,
         filepath (str): where to save the images and data. should have extension 'zip' or no extension
         exist_ok (bool, default false): if true we will overwrite existing files rather than error
         alpha (float): alpha for the points
+        square (bool, default true): if true we use square axes, if false we use rectangular ones
+            (i.e. we fill 80% of the axes in either direction for rectangular, 80% of the
+            more dominant axes for square and match the edges on the other)
     """
     if not isinstance(traj, PCTrajectoryFF):
         raise ValueError(f'expected traj to be PCTrajectoryFF, got {traj} (type={type(traj)})')
@@ -453,6 +457,17 @@ def plot_trajectory(traj: PCTrajectoryFF, filepath: str, exist_ok: bool = False,
             if max_y - min_y < 1e-3:
                 min_y -= 5e-4
                 max_y += 5e-4
+            if square:
+                extents_x = max_x - min_x
+                extents_y = max_y - min_y
+                if extents_x > extents_y:
+                    upd = (extents_x - extents_y) / 2
+                    min_y -= upd
+                    max_y += upd
+                else:
+                    upd = (extents_y - extents_x) / 2
+                    min_x -= upd
+                    max_x += upd
             padding_x = (max_x - min_x) * .1
             padding_y = (max_y - min_y) * .1
 
