@@ -27,8 +27,22 @@ SAVEDIR = shared.filetools.savepath()
 INPUT_DIM = 32*32*3 # not modifiable
 OUTPUT_DIM = 10
 
-STOP_EPOCH = 0.02
+STOP_EPOCH = 200
 
+            # nets.unflatten_conv3_(1, 3, 32, 32),
+            # nets.conv3_(16, (3, 5, 5), stride=(3, 1, 1), padding=(0, 2, 2)),
+            # nets.relu(),
+            # nets.maxpool3_((1, 2, 2), stride=(1, 2, 2)),
+            # nets.conv3_(20, (1, 5, 5), stride=(1, 1, 1), padding=(0, 2, 2)),
+            # nets.relu(),
+            # nets.maxpool3_((1, 2, 2), stride=(1, 2, 2)),
+            # nets.conv3_(20, (1, 5, 5), stride=(1, 1, 1), padding=(0, 2, 2)),
+            # nets.relu(),
+            # nets.maxpool3_((1, 2, 2), stride=(1, 2, 2)),
+            # nets.flatten_(invokes_callback=True),
+            # nets.linear_(OUTPUT_DIM),
+    #layer_names = ('input', 'conv3d-relu', 'conv3-relu', 'conv3d-relu', 'output')
+    #plot_layers = (3,)
 def main():
     """Entry point"""
 
@@ -38,25 +52,33 @@ def main():
         [
             nets.unflatten_conv3_(1, 3, 32, 32),
             nets.conv3_(16, (3, 5, 5), stride=(3, 1, 1), padding=(0, 2, 2)),
-            nets.relu(),
-            nets.maxpool3_((1, 2, 2), stride=(1, 2, 2)),
-            nets.conv3_(20, (1, 5, 5), stride=(1, 1, 1), padding=(0, 2, 2)),
-            nets.relu(),
-            nets.maxpool3_((1, 2, 2), stride=(1, 2, 2)),
-            nets.conv3_(20, (1, 5, 5), stride=(1, 1, 1), padding=(0, 2, 2)),
-            nets.relu(),
+            nets.relu(invokes_callback=False),
             nets.maxpool3_((1, 2, 2), stride=(1, 2, 2)),
             nets.flatten_(invokes_callback=True),
+            nets.linear_(1000),
+            nets.tanh(),
+            nets.linear_(1000),
+            nets.tanh(),
+            nets.linear_(500),
+            nets.tanh(),
+            nets.linear_(250),
+            nets.tanh(),
+            nets.linear_(100),
+            nets.tanh(),
+            nets.linear_(100),
+            nets.tanh(),
+            nets.linear_(100),
+            nets.tanh(),
             nets.linear_(OUTPUT_DIM),
+            nets.tanh()
         ]
     )
 
     train_pwl = CIFARData.load_train().to_pwl().restrict_to(set(range(10))).rescale()
     test_pwl = CIFARData.load_test().to_pwl().restrict_to(set(range(10))).rescale()
 
-    layer_names = ('input', 'conv3d-relu', 'conv3-relu', 'conv3d-relu', 'output')
-    plot_layers = (3,)
-
+    layer_names = ('conv3+maxpool', 'FC -> 1000 (tanh)', 'FC -> 1000 (tanh)', 'FC -> 500 (tanh)', 'FC -> 250 (tanh)', 'FC -> 100 (tanh)', 'FC -> 100 (tanh)', 'FC -> 100 (tanh)', f'FC -> {OUTPUT_DIM} (tanh)')
+    plot_layers = tuple(i for i, _ in enumerate(layer_names))
     trainer = tnr.GenericTrainer(
         train_pwl=train_pwl,
         test_pwl=test_pwl,
@@ -67,9 +89,9 @@ def main():
         criterion=torch.nn.CrossEntropyLoss()
     )
 
-    pca3d_throughtrain.FRAMES_PER_TRAIN = 1
-    pca3d_throughtrain.SKIP_TRAINS = 4
-    pca3d_throughtrain.NUM_FRAME_WORKERS = 6
+    pca3d_throughtrain.FRAMES_PER_TRAIN = 2
+    pca3d_throughtrain.SKIP_TRAINS = 16
+    pca3d_throughtrain.NUM_FRAME_WORKERS = 3
 
     dig = npmp.NPDigestor('train_one_complex', 6)
 
@@ -91,14 +113,14 @@ def main():
      .reg(tnr.LRMultiplicativeDecayer())
      .reg(tnr.DecayOnPlateau(patience=3))
      .reg(tnr.AccuracyTracker(5, 1000, True))
-     #.reg(tnr.OnEpochCaller.create_every(dtt.during_training_ff(dtt_training_dir, True, dig), skip=100))
-     #.reg(tnr.OnEpochCaller.create_every(pca_3d.during_training(pca3d_training_dir, True, dig, plot_kwargs={'layer_names': layer_names}), skip=100))
-     #.reg(tnr.OnEpochCaller.create_every(pca_ff.during_training(pca_training_dir, True, dig), skip=100))
-     .reg(tnr.OnEpochCaller.create_every(pr.during_training_ff(pr_training_dir, True, dig, labels=True), start=100, skip=100))
-     #.reg(tnr.OnEpochCaller.create_every(svm.during_training_ff(svm_training_dir, True, dig), skip=100))
-     #.reg(tnr.OnEpochCaller.create_every(satur.during_training(satur_training_dir, True, dig), skip=100))
-     #.reg(tnr.OnEpochCaller.create_every(tnr.save_model(trained_net_dir), skip=100))
-     #.reg(pca3d_throughtrain.PCAThroughTrain(pca_throughtrain_dir, layer_names, True, layer_indices=plot_layers))
+     .reg(tnr.OnEpochCaller.create_every(dtt.during_training_ff(dtt_training_dir, True, dig), skip=100))
+     .reg(tnr.OnEpochCaller.create_every(pca_3d.during_training(pca3d_training_dir, True, dig, plot_kwargs={'layer_names': layer_names}), skip=100))
+     .reg(tnr.OnEpochCaller.create_every(pca_ff.during_training(pca_training_dir, True, dig), skip=100))
+     .reg(tnr.OnEpochCaller.create_every(pr.during_training_ff(pr_training_dir, True, dig, labels=True), skip=100))
+     .reg(tnr.OnEpochCaller.create_every(svm.during_training_ff(svm_training_dir, True, dig), skip=100))
+     .reg(tnr.OnEpochCaller.create_every(satur.during_training(satur_training_dir, True, dig), skip=100))
+     .reg(tnr.OnEpochCaller.create_every(tnr.save_model(trained_net_dir), skip=100))
+     .reg(pca3d_throughtrain.PCAThroughTrain(pca_throughtrain_dir, layer_names, True, layer_indices=plot_layers))
      .reg(tnr.OnFinishCaller(lambda *args, **kwargs: dig.join()))
      .reg(tnr.ZipDirOnFinish(dtt_training_dir))
      .reg(tnr.ZipDirOnFinish(pca_training_dir))
