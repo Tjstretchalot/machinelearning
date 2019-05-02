@@ -8,10 +8,10 @@ import torchvision # pylint: disable=import-error
 from shared.pwl import SimplePointWithLabelProducer
 
 DATA_FOLDER = os.path.join('data', 'cifar')
-CIFAR_CLASSES = (
+CIFAR_CLASSES = [
     'airplane', 'automobile', 'bird', 'cat', 'deer', 'dog',
     'frog', 'horse', 'ship', 'truck'
-)
+]
 
 class CIFARData:
     """Describes the cifar data as loaded from file. These use numpy arrays
