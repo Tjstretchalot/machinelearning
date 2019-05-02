@@ -71,7 +71,10 @@ def main():
     train_pwl = CIFARData.load_train().to_pwl().restrict_to(set(range(10))).rescale()
     test_pwl = CIFARData.load_test().to_pwl().restrict_to(set(range(10))).rescale()
 
-    layer_names = ('input', 'conv3+maxpool', 'FC -> 1000 (tanh)', 'FC -> 1000 (tanh)', 'FC -> 500 (tanh)', 'FC -> 250 (tanh)', 'FC -> 100 (tanh)', 'FC -> 100 (tanh)', 'FC -> 100 (tanh)', f'FC -> {OUTPUT_DIM} (tanh)')
+    layer_names = ('input', 'conv3+maxpool',
+                   'FC -> 250 (tanh)', 'FC -> 100 (tanh)',
+                   'FC -> 100 (tanh)', 'FC -> 100 (tanh)',
+                   f'FC -> {OUTPUT_DIM} (tanh)')
     plot_layers = tuple(i for i in range(1, len(layer_names)))
     trainer = tnr.GenericTrainer(
         train_pwl=train_pwl,
