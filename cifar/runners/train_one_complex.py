@@ -134,6 +134,9 @@ def main():
 
 if __name__ == '__main__':
     import multiprocessing as mp
-    mp.set_start_method('spawn')
+    try:
+        mp.set_start_method('spawn')
+    except RuntimeError:
+        print('failed to set multiprocessing spawn method; this happens on windows')
 
     main()
