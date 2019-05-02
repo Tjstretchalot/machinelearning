@@ -117,6 +117,6 @@ class MNISTData:
         perform any rescaling.
         """
         image_data = torch.from_numpy(self.raw_image_data).type(torch.double)
-        label_data = torch.from_numpy(self.raw_label_data)
+        label_data = torch.from_numpy(self.raw_label_data).type(torch.int32)
         return SimplePointWithLabelProducer(image_data, label_data, 10)
 
