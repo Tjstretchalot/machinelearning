@@ -75,7 +75,7 @@ def main():
                    'FC -> 250 (tanh)', 'FC -> 100 (tanh)',
                    'FC -> 100 (tanh)', 'FC -> 100 (tanh)',
                    f'FC -> {OUTPUT_DIM} (tanh)')
-    plot_layers = tuple(i for i in range(1, len(layer_names)))
+    plot_layers = tuple(i for i in range(2, len(layer_names) - 1))
     trainer = tnr.GenericTrainer(
         train_pwl=train_pwl,
         test_pwl=test_pwl,
@@ -86,11 +86,11 @@ def main():
         criterion=torch.nn.CrossEntropyLoss()
     )
 
-    pca3d_throughtrain.FRAMES_PER_TRAIN = 2
+    pca3d_throughtrain.FRAMES_PER_TRAIN = 1
     pca3d_throughtrain.SKIP_TRAINS = 16
-    pca3d_throughtrain.NUM_FRAME_WORKERS = 3
+    pca3d_throughtrain.NUM_FRAME_WORKERS = 1
 
-    dig = npmp.NPDigestor('train_one_complex', 6)
+    dig = npmp.NPDigestor('train_one_complex', 3)
 
     dtt_training_dir = os.path.join(SAVEDIR, 'dtt')
     pca_training_dir = os.path.join(SAVEDIR, 'pca')
@@ -113,7 +113,7 @@ def main():
      .reg(tnr.OnEpochCaller.create_every(dtt.during_training_ff(dtt_training_dir, True, dig), skip=100))
      .reg(tnr.OnEpochCaller.create_every(pca_3d.during_training(pca3d_training_dir, True, dig, plot_kwargs={'layer_names': layer_names}), skip=100))
      .reg(tnr.OnEpochCaller.create_every(pca_ff.during_training(pca_training_dir, True, dig), skip=100))
-     .reg(tnr.OnEpochCaller.create_every(pr.during_training_ff(pr_training_dir, True, dig, labels=True), skip=100))
+     .reg(tnr.OnEpochCaller.create_every(pr.during_training_ff(pr_training_dir, True, dig, labels=False), skip=100))
      .reg(tnr.OnEpochCaller.create_every(svm.during_training_ff(svm_training_dir, True, dig), skip=100))
      .reg(tnr.OnEpochCaller.create_every(satur.during_training(satur_training_dir, True, dig), skip=100))
      .reg(tnr.OnEpochCaller.create_every(tnr.save_model(trained_net_dir), skip=100))
