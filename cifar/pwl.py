@@ -8,6 +8,10 @@ import torchvision # pylint: disable=import-error
 from shared.pwl import SimplePointWithLabelProducer
 
 DATA_FOLDER = os.path.join('data', 'cifar')
+CIFAR_CLASSES = (
+    'airplane', 'automobile', 'bird', 'cat', 'deer', 'dog',
+    'frog', 'horse', 'ship', 'truck'
+)
 
 class CIFARData:
     """Describes the cifar data as loaded from file. These use numpy arrays
@@ -51,7 +55,7 @@ class CIFARData:
         """Downloads (if necessary) and loads the train data"""
         data = torchvision.datasets.CIFAR10(DATA_FOLDER, train=True, download=True)
         if hasattr(data, 'train_data'):
-            return cls(data.train_data, np.array(data.train_labels, dtype='uint8'), None)
+            return cls(data.train_data, np.array(data.train_labels, dtype='uint8'), CIFAR_CLASSES)
         else:
             return cls(data.data, np.array(data.targets, dtype='uint8'), data.classes)
 
@@ -60,7 +64,7 @@ class CIFARData:
         """Downloads (if necessary) and loads the test data"""
         data = torchvision.datasets.CIFAR10(DATA_FOLDER, train=False, download=True)
         if hasattr(data, 'test_data'):
-            return cls(data.test_data, np.array(data.test_labels, dtype='uint8'), None)
+            return cls(data.test_data, np.array(data.test_labels, dtype='uint8'), CIFAR_CLASSES)
         else:
             return cls(data.data, np.array(data.targets, dtype='uint8'), data.classes)
 
