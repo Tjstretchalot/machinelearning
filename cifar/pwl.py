@@ -50,13 +50,19 @@ class CIFARData:
     def load_train(cls):
         """Downloads (if necessary) and loads the train data"""
         data = torchvision.datasets.CIFAR10(DATA_FOLDER, train=True, download=True)
-        return cls(data.data, np.array(data.targets, dtype='uint8'), data.classes)
+        if hasattr(data, 'train_data'):
+            return cls(data.train_data, np.array(data.train_targets, dtype='uint8'), None)
+        else:
+            return cls(data.data, np.array(data.targets, dtype='uint8'), data.classes)
 
     @classmethod
     def load_test(cls):
         """Downloads (if necessary) and loads the test data"""
         data = torchvision.datasets.CIFAR10(DATA_FOLDER, train=False, download=True)
-        return cls(data.data, np.array(data.targets, dtype='uint8'), data.classes)
+        if hasattr(data, 'test_data'):
+            return cls(data.test_data, np.array(data.test_targets, dtype='uint8'), None)
+        else:
+            return cls(data.data, np.array(data.targets, dtype='uint8'), data.classes)
 
     def to_pwl(self):
         """Converts this to a point-with-label producer, which requires
