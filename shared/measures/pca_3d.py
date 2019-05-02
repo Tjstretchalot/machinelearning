@@ -131,9 +131,12 @@ def _plot_ff_real(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool,
         _scatter._offsets3d = (snapsh.projected_samples[:, 0].numpy(),
                                snapsh.projected_samples[:, 1].numpy(),
                                snapsh.projected_samples[:, 2].numpy())
-        ax.set_xlim(float(snapsh.projected_samples[:, 0].min()), float(snapsh.projected_samples[:, 0].max()))
-        ax.set_ylim(float(snapsh.projected_samples[:, 1].min()), float(snapsh.projected_samples[:, 1].max()))
-        ax.set_zlim(float(snapsh.projected_samples[:, 2].min()), float(snapsh.projected_samples[:, 2].max()))
+
+        minlim = float(snapsh.projected_samples.min())
+        maxlim = float(snapsh.projected_samples.max())
+        ax.set_xlim(minlim, maxlim)
+        ax.set_ylim(minlim, maxlim)
+        ax.set_zlim(minlim, maxlim)
 
         if layer_names is not None:
             return (ax, _scatter, _axtitle)
