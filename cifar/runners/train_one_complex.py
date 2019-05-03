@@ -56,11 +56,11 @@ def main():
             nets.linear_(32*32*6),
             nets.nonlin('isrlu'),
             nets.linear_(500),
-            nets.nonlin('isrlu'),
+            nets.nonlin('tanh'),
             nets.linear_(250),
-            nets.nonlin('isrlu'),
+            nets.nonlin('tanh'),
             nets.linear_(250),
-            nets.nonlin('isrlu'),
+            nets.nonlin('tanh'),
             nets.linear_(100),
             nets.tanh(),
             nets.linear_(100),
@@ -76,11 +76,11 @@ def main():
     test_pwl = CIFARData.load_test().to_pwl().restrict_to(set(range(10))).rescale()
 
     layer_names = ('input',
-                   'FC -> 32*32*6 (ISRLU)', 'FC -> 500 (ISRLU)',
-                   'FC -> 250 (ISRLU)', 'FC -> 250 (ISRLU)',
+                   'FC -> 32*32*6 (ISRLU)', 'FC -> 500 (tanh)',
+                   'FC -> 250 (tang)', 'FC -> 250 (tanh)',
                    'FC -> 100 (tanh)', 'FC -> 100 (tanh)',
                    'FC -> 100 (tanh)',
-                   f'FC -> {OUTPUT_DIM} (isrelu)')
+                   f'FC -> {OUTPUT_DIM} (ISRLU)')
     plot_layers = tuple(i for i in range(2, len(layer_names) - 1))
     trainer = tnr.GenericTrainer(
         train_pwl=train_pwl,
