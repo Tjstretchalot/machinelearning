@@ -28,9 +28,15 @@ class ISRLU(torch.autograd.Function):
     @staticmethod
     def forward(ctx, tensor, alpha=1): #pylint: disable=arguments-differ
         """Calculates the forward pass for an ISRLU unit"""
-        negatives = torch.min(tensor, torch.Tensor([0]))
+        negatives = torch.min(tensor, torch.tensor((0,), dtype=tensor.dtype))
         nisr = torch.rsqrt(1. + alpha * (negatives ** 2))
+        ctx.save_for_backward(nisr)
         return tensor * nisr
+
+    @staticmethod
+    def backward(ctx, *args): # pylint: disable=unused-argument
+        nisr, = ctx.saved_tensors
+        return nisr ** 3
 
 LOOKUP = {
     'relu': torch.relu,
