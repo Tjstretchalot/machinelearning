@@ -3,7 +3,7 @@
 
 import shared.setup_torch #pylint: disable=unused-import
 from shared.models.ff import FeedforwardComplex, FFTeacher
-from shared.models.ff import ComplexLayer as CL
+import shared.weight_inits as wi
 import shared.trainer as tnr
 import shared.measures.dist_through_time as dtt
 import shared.measures.pca_ff as pca_ff
@@ -46,17 +46,25 @@ STOP_EPOCH = 200
 def main():
     """Entry point"""
 
+    cu.DEFAULT_LINEAR_BIAS_INIT = wi.ZerosWeightInitializer()
+    cu.DEFAULT_LINEAR_WEIGHT_INIT = wi.GaussianWeightInitializer(mean=0.3)
+
     nets = cu.FluentShape(32*32*3).verbose()
     network = FeedforwardComplex(
         INPUT_DIM, OUTPUT_DIM,
         [
-            nets.unflatten_conv3_(1, 3, 32, 32),
-            nets.conv3_(10, (3, 5, 5), stride=(3, 1, 1), padding=(0, 2, 2)),
-            nets.relu(invokes_callback=False),
-            nets.maxpool3_((1, 2, 2), stride=(1, 2, 2)),
-            nets.flatten_(invokes_callback=True),
+            nets.linear_(32*32*6, weights_init=wi.GaussianWeightInitializer(mean=5, vari=1)),
+            nets.nonlin('cube'),
+            nets.linear_(500),
+            nets.relu(),
             nets.linear_(250),
-            nets.tanh(),
+            nets.nonlin('cube'),
+            nets.linear_(250),
+            nets.relu(),
+            nets.linear_(250),
+            nets.nonlin('cube'),
+            nets.linear_(250),
+            nets.relu(),
             nets.linear_(100),
             nets.tanh(),
             nets.linear_(100),
@@ -71,9 +79,12 @@ def main():
     train_pwl = CIFARData.load_train().to_pwl().restrict_to(set(range(10))).rescale()
     test_pwl = CIFARData.load_test().to_pwl().restrict_to(set(range(10))).rescale()
 
-    layer_names = ('input', 'conv3+maxpool',
-                   'FC -> 250 (tanh)', 'FC -> 100 (tanh)',
+    layer_names = ('input',
+                   'FC -> 32*32*6 (cube)', 'FC -> 500 (relu)',
+                   'FC -> 250 (cube)', 'FC -> 250 (relu)',
+                   'FC -> 250 (cube)', 'FC -> 250 (relu)',
                    'FC -> 100 (tanh)', 'FC -> 100 (tanh)',
+                   'FC -> 100 (tanh)',
                    f'FC -> {OUTPUT_DIM} (tanh)')
     plot_layers = tuple(i for i in range(2, len(layer_names) - 1))
     trainer = tnr.GenericTrainer(
@@ -109,7 +120,7 @@ def main():
      .reg(tnr.EpochProgress(print_every=120, hint_end_epoch=STOP_EPOCH))
      .reg(tnr.LRMultiplicativeDecayer())
      .reg(tnr.DecayOnPlateau(patience=3))
-     .reg(tnr.AccuracyTracker(5, 1000, True))
+     .reg(tnr.AccuracyTracker(1, 1000, True))
      .reg(tnr.OnEpochCaller.create_every(dtt.during_training_ff(dtt_training_dir, True, dig), skip=5))
      .reg(tnr.OnEpochCaller.create_every(pca_3d.during_training(pca3d_training_dir, True, dig, plot_kwargs={'layer_names': layer_names}), start=10, skip=100))
      .reg(tnr.OnEpochCaller.create_every(pca_ff.during_training(pca_training_dir, True, dig), skip=5))

@@ -5,6 +5,8 @@ import torch.nn
 from functools import reduce
 import operator
 from shared.models.ff import ComplexLayer
+import shared.nonlinearities as snonlins
+import shared.weight_inits as wi
 
 class Reshape(torch.nn.Module):
     """Simple reshaping layer"""
@@ -23,6 +25,9 @@ def flatten_after_maxpool(hidacts):
 def unflatten_to(*args):
     """Calls reshape on the hidacts with the given args"""
     return Reshape(*args)
+
+DEFAULT_LINEAR_WEIGHT_INIT = None
+DEFAULT_LINEAR_BIAS_INIT = None
 
 class FluentShape:
     """a fluent api for reshaping from maxpooling
@@ -322,12 +327,32 @@ class FluentShape:
         self.copy_(newme)
         return lyr
 
-    def linear_(self, output_dim, invokes_callback=False):
+    def linear_(self, output_dim, invokes_callback=False, weights_init=None,
+                bias_init=None, train_weights=True, train_bias=True):
         """Inplace linear layer to output dim and return appropriate ComplexLayer"""
         if not isinstance(output_dim, int):
             raise ValueError(f'expected output_dim is int, got {output_dim} (type={type(output_dim)})')
         if len(self.dims) != 1:
             raise ValueError(f'cannot do all-to-all when not flat (have dims {self.dims})')
+
+        if weights_init is None:
+            weights_init = DEFAULT_LINEAR_WEIGHT_INIT
+
+        if bias_init is None:
+            bias_init = DEFAULT_LINEAR_BIAS_INIT
+
+        linlyr = torch.nn.Linear(self.dims[0], output_dim)
+        linlyr.weight.requires_grad = train_weights
+        if weights_init is not None:
+            weights_init = wi.deser_or_noop(weights_init)
+            linlyr.weight.data[:] = 0
+            weights_init.initialize(linlyr.weight.data)
+
+        linlyr.bias.requires_grad = train_bias
+        if bias_init is not None:
+            bias_init = wi.deser_or_noop(bias_init)
+            linlyr.bias.data[:] = 0
+            bias_init.initialize(linlyr.bias.data)
 
         lyr = ComplexLayer(style='layer', is_module=True, invokes_callback=invokes_callback,
                action=torch.nn.Linear(self.dims[0], output_dim))
@@ -338,22 +363,21 @@ class FluentShape:
 
         return lyr
 
-    def tanh(self, invokes_callback=True):
-        """Convenience function that produces a tanh nonlinearity complex layer"""
+    def nonlin(self, name: str, invokes_callback=True):
+        """Convenience function to invoke a given nonlinearity by name;
+        the nonlinearity names are defined in shared.nonlinearities"""
         if self._verbose:
-            print(f'tanh(invokes_callback={invokes_callback}) -> {self.dims}')
+            print(f'{name}(invokes_callback={invokes_callback}) -> {self.dims}')
 
         return ComplexLayer(
             style='nonlinearity', is_module=False,
-            invokes_callback=invokes_callback,
-            action=torch.tanh)
+            invokes_callback=False,
+            action=snonlins.LOOKUP[name]
+        )
+    def tanh(self, invokes_callback=True):
+        """Convenience function that produces a tanh nonlinearity complex layer"""
+        return self.nonlin('tanh', invokes_callback)
 
     def relu(self, invokes_callback=True):
         """Convenience function that produces a relu nonlinearity complex layer"""
-        if self._verbose:
-            print(f'relu(invokes_callback={invokes_callback}) -> {self.dims}')
-
-        return ComplexLayer(
-            style='nonlinearity', is_module=False,
-            invokes_callback=invokes_callback,
-            action=torch.relu)
+        return self.nonlin('relu', invokes_callback)
