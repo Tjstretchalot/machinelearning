@@ -34,16 +34,29 @@ class ISRLU(torch.autograd.Function):
         return tensor * nisr
 
     @staticmethod
-    def backward(ctx, *args): # pylint: disable=unused-argument
+    def backward(ctx, grad_output):
         nisr, = ctx.saved_tensors
-        return nisr ** 3
+        return grad_output * (nisr.clone() ** 3)
+
+class MyRELU(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, tensor):
+        ctx.save_for_backward(tensor)
+        return torch.max(tensor, torch.tensor((0,), dtype=tensor.dtype))
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        tensor, = ctx.saved_tensors
+        res = grad_output.clone()
+        res[tensor < 0] = 0
+        return res
 
 LOOKUP = {
-    'relu': torch.relu,
+    'relu': MyRELU.apply,#torch.relu,
     'tanh': torch.tanh,
     'tanh_recip': tanh_recip,
     'none': linear,
     'linear': linear,
     'cube': cube,
-    'isrlu': ISRLU.apply
+    'isrlu': ISRLU.apply,
 }

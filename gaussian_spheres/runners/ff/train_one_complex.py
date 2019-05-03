@@ -11,6 +11,8 @@ import shared.measures.pca_ff as pca_ff
 import shared.measures.pca_3d as pca_3d
 import shared.measures.participation_ratio as pr
 import shared.measures.svm as svm
+import shared.measures.saturation as satur
+import shared.convutils as cu
 import shared.filetools
 import shared.npmp as npmp
 import torch
@@ -20,40 +22,27 @@ import operator
 
 from gaussian_spheres.pwl import GaussianSpheresPWLP
 import os
+import sys
 
 
 SAVEDIR = shared.filetools.savepath()
 
-INPUT_DIM = 28*28 # not modifiable
+INPUT_DIM = 200
 OUTPUT_DIM = 3
 
 def main():
     """Entry point"""
     pwl = GaussianSpheresPWLP.create(
         epoch_size=2700, input_dim=INPUT_DIM, output_dim=OUTPUT_DIM, cube_half_side_len=2,
-        num_clusters=90, std_dev=0.04, mean=0, min_sep=0.1
+        num_clusters=10, std_dev=0.04, mean=0, min_sep=0.1
     )
 
+    nets = cu.FluentShape(INPUT_DIM).verbose()
     network = FeedforwardComplex(INPUT_DIM, OUTPUT_DIM,
         [
-            CL(style='other', is_module=False, invokes_callback=False,
-               action=lambda x: x.reshape(-1, 1, 28, 28)),
-            CL(style='layer', is_module=True, invokes_callback=False,
-               action=torch.nn.Conv2d(in_channels=1, out_channels=5, kernel_size=5)),
-            CL(style='nonlinearity', is_module=False, invokes_callback=True,
-               action=torch.relu),
-            CL(style='layer', is_module=True, invokes_callback=True,
-               action=torch.nn.MaxPool2d(kernel_size=2, stride=1)),
-            CL(style='other', is_module=False, invokes_callback=False,
-               action=lambda x: x.reshape(-1, reduce(operator.mul, x.shape[1:]))),
-            CL(style='layer', is_module=True, invokes_callback=False,
-               action=torch.nn.Linear(2645, 200)),
-            CL(style='nonlinearity', is_module=False, invokes_callback=True,
-               action=torch.tanh),
-            CL(style='layer', is_module=True, invokes_callback=False,
-               action=torch.nn.Linear(200, OUTPUT_DIM)),
-            CL(style='nonlinearity', is_module=False, invokes_callback=True,
-               action=torch.tanh)
+            nets.linear_(90),
+            nets.nonlin('isrlu'),
+            nets.linear_(OUTPUT_DIM),
         ]
     )
 
@@ -75,22 +64,25 @@ def main():
     pca_training_dir = os.path.join(SAVEDIR, 'pca')
     pr_training_dir = os.path.join(SAVEDIR, 'pr')
     svm_training_dir = os.path.join(SAVEDIR, 'svm')
+    satur_training_dir = os.path.join(SAVEDIR, 'saturation')
     (trainer
      .reg(tnr.EpochsTracker())
      .reg(tnr.EpochsStopper(150))
      .reg(tnr.DecayTracker())
-     .reg(tnr.DecayStopper(8))
+     .reg(tnr.DecayStopper(3))
      .reg(tnr.LRMultiplicativeDecayer())
      .reg(tnr.DecayOnPlateau())
      .reg(tnr.AccuracyTracker(5, 1000, True))
      .reg(tnr.OnEpochCaller.create_every(dtt.during_training_ff(dtt_training_dir, True), skip=1000))
-     .reg(tnr.OnEpochCaller.create_every(pca_ff.during_training(pca_training_dir, True), skip=1000))
+     #.reg(tnr.OnEpochCaller.create_every(pca_ff.during_training(pca_training_dir, True), skip=1000))
      .reg(tnr.OnEpochCaller.create_every(pr.during_training_ff(pr_training_dir, True), skip=1000))
      .reg(tnr.OnEpochCaller.create_every(svm.during_training_ff(svm_training_dir, True), skip=1000))
+     .reg(tnr.OnEpochCaller.create_every(satur.during_training(satur_training_dir, True), skip=1000))
      .reg(tnr.ZipDirOnFinish(dtt_training_dir))
      .reg(tnr.ZipDirOnFinish(pca_training_dir))
      .reg(tnr.ZipDirOnFinish(pr_training_dir))
      .reg(tnr.ZipDirOnFinish(svm_training_dir))
+     .reg(tnr.ZipDirOnFinish(satur_training_dir))
     )
     trainer.train(network)
     torch.save(network.state_dict(), os.path.join(SAVEDIR, 'trained_network.pt'))
@@ -98,4 +90,9 @@ def main():
     #dig3d.archive_raw_inputs(os.path.join(SAVEDIR, 'pca_3d_raw.zip'))
 
 if __name__ == '__main__':
-    main()
+   should_clean = '--clean' in sys.argv
+   print(f'should_clean = {should_clean} ; sys.argv = {sys.argv}')
+   if should_clean:
+      import shutil
+      shutil.rmtree(SAVEDIR)
+   main()
