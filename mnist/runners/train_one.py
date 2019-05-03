@@ -28,10 +28,14 @@ def main():
     test_pwl = MNISTData.load_test().to_pwl().restrict_to(set(range(10))).rescale()
 
     layers_and_nonlins = (
-        (28*28, 'relu'),
-        (28*28, 'tanh'),
-        (28*28, 'tanh'),
-        (28*28, 'tanh'),
+        (200, 'relu'),
+        (90, 'tanh'),
+        (90, 'tanh'),
+        (90, 'tanh'),
+        (90, 'tanh'),
+        (90, 'tanh'),
+        (90, 'tanh'),
+        (90, 'tanh'),
     )
 
     layers = [lyr[0] for lyr in layers_and_nonlins]
@@ -72,15 +76,15 @@ def main():
     pca_throughtrain_dir = os.path.join(SAVEDIR, 'pca_throughtrain')
     (trainer
      .reg(tnr.EpochsTracker())
-     .reg(tnr.EpochsStopper(3))
+     .reg(tnr.EpochsStopper(300))
      .reg(tnr.DecayTracker())
      .reg(tnr.DecayStopper(8))
      .reg(tnr.LRMultiplicativeDecayer())
      .reg(tnr.DecayOnPlateau())
      .reg(tnr.AccuracyTracker(5, 1000, True))
      .reg(tnr.OnEpochCaller.create_every(dtt.during_training_ff(dtt_training_dir, True, dig), skip=100))
-     #.reg(tnr.OnEpochCaller.create_every(pca_3d.during_training(pca3d_training_dir, True, dig, plot_kwargs={'layer_names': layer_names}), skip=100))
-     #.reg(tnr.OnEpochCaller.create_every(pca_ff.during_training(pca_training_dir, True, dig), skip=100))
+     .reg(tnr.OnEpochCaller.create_every(pca_3d.during_training(pca3d_training_dir, True, dig, plot_kwargs={'layer_names': layer_names}), skip=100))
+     .reg(tnr.OnEpochCaller.create_every(pca_ff.during_training(pca_training_dir, True, dig), skip=100))
      .reg(tnr.OnEpochCaller.create_every(pr.during_training_ff(pr_training_dir, True, dig), skip=100))
      .reg(tnr.OnEpochCaller.create_every(svm.during_training_ff(svm_training_dir, True, dig), skip=100))
      .reg(tnr.OnEpochCaller.create_every(satur.during_training(satur_training_dir, True, dig), skip=100))
