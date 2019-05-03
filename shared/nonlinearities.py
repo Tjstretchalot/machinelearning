@@ -26,7 +26,8 @@ class ISRLU(torch.autograd.Function):
     """
 
     @staticmethod
-    def forward(ctx, tensor, alpha=1):
+    def forward(ctx, tensor, alpha=1): #pylint: disable=arguments-differ
+        """Calculates the forward pass for an ISRLU unit"""
         negatives = torch.min(tensor, torch.Tensor([0]))
         nisr = torch.rsqrt(1. + alpha * (negatives ** 2))
         return tensor * nisr
@@ -38,5 +39,5 @@ LOOKUP = {
     'none': linear,
     'linear': linear,
     'cube': cube,
-    'isrlu': ISRLU
+    'isrlu': ISRLU.apply
 }
