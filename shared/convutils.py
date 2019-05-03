@@ -371,9 +371,10 @@ class FluentShape:
 
         return ComplexLayer(
             style='nonlinearity', is_module=False,
-            invokes_callback=False,
+            invokes_callback=invokes_callback,
             action=snonlins.LOOKUP[name]
         )
+
     def tanh(self, invokes_callback=True):
         """Convenience function that produces a tanh nonlinearity complex layer"""
         return self.nonlin('tanh', invokes_callback)

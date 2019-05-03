@@ -71,10 +71,10 @@ def _plot_boxplot(traj: SaturationTrajectory, outfile: str, xlabel: str):
     plt.close(fig)
 
 def _plot_hist(traj: SaturationTrajectory, outfile: str, xlabel: str, technique: str):
-    fig, axs = plt.subplots(nrows=1, ncols=len(traj.flattened), figsize=(len(traj.flattened)*7, 4.8))
+    fig, axs = plt.subplots(nrows=1, ncols=len(traj.flattened), figsize=(len(traj.flattened)*7, 4.8), squeeze=False)
 
     for idx, hid_acts in enumerate(traj.flattened):
-        ax = axs[idx]
+        ax = axs[1][idx]
         rng = (min(hid_acts[0], 0), max(hid_acts[-1], 1))
         ax.hist(hid_acts, bins=technique, density=1, range=rng)
         ax.set_ylabel('Probability Density')
