@@ -47,13 +47,13 @@ def main():
     """Entry point"""
 
     cu.DEFAULT_LINEAR_BIAS_INIT = wi.ZerosWeightInitializer()
-    cu.DEFAULT_LINEAR_WEIGHT_INIT = wi.GaussianWeightInitializer(mean=0.3)
+    cu.DEFAULT_LINEAR_WEIGHT_INIT = wi.GaussianWeightInitializer(mean=0, vari=0.3, normalize_dim=0)
 
     nets = cu.FluentShape(32*32*3).verbose()
     network = FeedforwardComplex(
         INPUT_DIM, OUTPUT_DIM,
         [
-            nets.linear_(32*32*6, weights_init=wi.GaussianWeightInitializer(mean=5, vari=1)),
+            nets.linear_(32*32*6),
             nets.nonlin('isrlu'),
             nets.linear_(500),
             nets.nonlin('isrlu'),
