@@ -1,6 +1,7 @@
 """Contains some additional nonlinearity like callables"""
 
 import torch
+import torch.autograd
 
 def linear(acts: torch.tensor):
     """Does nothing"""
@@ -16,6 +17,19 @@ def tanh_recip(acts: torch.tensor):
     """
     return torch.tanh(torch.reciprocal(acts))
 
+class ISRLU(torch.autograd.Function):
+    """Inverse square root linear unit: https://arxiv.org/abs/1710.09967
+
+    Improving Deep Learning by Inverse Square Root Linear Units (ISRLUs)
+    Brad Carlile, Guy Delamarter, Paul Kinney, Akiko Marti, Brian Whitney
+    (2017)
+    """
+
+    @staticmethod
+    def forward(ctx, tensor, alpha=1):
+        negatives = torch.min(tensor, torch.Tensor([0]))
+        nisr = torch.rsqrt(1. + alpha * (negatives ** 2))
+        return tensor * nisr
 
 LOOKUP = {
     'relu': torch.relu,
@@ -23,5 +37,6 @@ LOOKUP = {
     'tanh_recip': tanh_recip,
     'none': linear,
     'linear': linear,
-    'cube': cube
+    'cube': cube,
+    'isrlu': ISRLU
 }

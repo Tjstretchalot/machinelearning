@@ -54,17 +54,13 @@ def main():
         INPUT_DIM, OUTPUT_DIM,
         [
             nets.linear_(32*32*6, weights_init=wi.GaussianWeightInitializer(mean=5, vari=1)),
-            nets.nonlin('cube'),
+            nets.nonlin('isrlu'),
             nets.linear_(500),
-            nets.relu(),
+            nets.nonlin('isrlu'),
             nets.linear_(250),
-            nets.nonlin('cube'),
+            nets.nonlin('isrlu'),
             nets.linear_(250),
-            nets.relu(),
-            nets.linear_(250),
-            nets.nonlin('cube'),
-            nets.linear_(250),
-            nets.relu(),
+            nets.nonlin('isrlu'),
             nets.linear_(100),
             nets.tanh(),
             nets.linear_(100),
@@ -72,7 +68,7 @@ def main():
             nets.linear_(100),
             nets.tanh(),
             nets.linear_(OUTPUT_DIM),
-            nets.tanh()
+            nets.nonlin('isrlu'),
         ]
     )
 
@@ -80,12 +76,11 @@ def main():
     test_pwl = CIFARData.load_test().to_pwl().restrict_to(set(range(10))).rescale()
 
     layer_names = ('input',
-                   'FC -> 32*32*6 (cube)', 'FC -> 500 (relu)',
-                   'FC -> 250 (cube)', 'FC -> 250 (relu)',
-                   'FC -> 250 (cube)', 'FC -> 250 (relu)',
+                   'FC -> 32*32*6 (ISRLU)', 'FC -> 500 (ISRLU)',
+                   'FC -> 250 (ISRLU)', 'FC -> 250 (ISRLU)',
                    'FC -> 100 (tanh)', 'FC -> 100 (tanh)',
                    'FC -> 100 (tanh)',
-                   f'FC -> {OUTPUT_DIM} (tanh)')
+                   f'FC -> {OUTPUT_DIM} (isrelu)')
     plot_layers = tuple(i for i in range(2, len(layer_names) - 1))
     trainer = tnr.GenericTrainer(
         train_pwl=train_pwl,
@@ -101,7 +96,7 @@ def main():
     pca3d_throughtrain.SKIP_TRAINS = 16
     pca3d_throughtrain.NUM_FRAME_WORKERS = 1
 
-    dig = npmp.NPDigestor('train_one_complex', 3)
+    dig = npmp.NPDigestor('train_one_complex', 5)
 
     dtt_training_dir = os.path.join(SAVEDIR, 'dtt')
     pca_training_dir = os.path.join(SAVEDIR, 'pca')
