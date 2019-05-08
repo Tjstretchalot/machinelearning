@@ -28,11 +28,6 @@ def main():
     test_pwl = MNISTData.load_test().to_pwl().restrict_to(set(range(10))).rescale()
 
     layers_and_nonlins = (
-        (200, 'relu'),
-        (90, 'tanh'),
-        (90, 'tanh'),
-        (90, 'tanh'),
-        (90, 'tanh'),
         (90, 'tanh'),
         (90, 'tanh'),
         (90, 'tanh'),
@@ -41,7 +36,7 @@ def main():
     layers = [lyr[0] for lyr in layers_and_nonlins]
     nonlins = [lyr[1] for lyr in layers_and_nonlins]
     nonlins.append('linear') # output
-    layer_names = [f'{lyr[1]} ({idx})' for idx, lyr in enumerate(layers_and_nonlins)]
+    layer_names = [f'{lyr[1]} (layer {idx})' for idx, lyr in enumerate(layers_and_nonlins)]
     layer_names.insert(0, 'input')
     layer_names.append('output')
 
@@ -89,7 +84,7 @@ def main():
      .reg(tnr.OnEpochCaller.create_every(svm.during_training_ff(svm_training_dir, True, dig), skip=100))
      .reg(tnr.OnEpochCaller.create_every(satur.during_training(satur_training_dir, True, dig), skip=100))
      .reg(tnr.OnEpochCaller.create_every(tnr.save_model(trained_net_dir), skip=100))
-     #.reg(pca3d_throughtrain.PCAThroughTrain(pca_throughtrain_dir, layer_names, True))
+     .reg(pca3d_throughtrain.PCAThroughTrain(pca_throughtrain_dir, layer_names, True))
      .reg(tnr.OnFinishCaller(lambda *args, **kwargs: dig.join()))
      .reg(tnr.ZipDirOnFinish(dtt_training_dir))
      .reg(tnr.ZipDirOnFinish(pca_training_dir))

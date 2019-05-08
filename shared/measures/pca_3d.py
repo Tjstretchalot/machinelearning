@@ -17,6 +17,9 @@ from shared.filetools import zipdir
 from shared.npmp import NPDigestor
 from shared.trainer import GenericTrainingContext
 
+FRAME_SIZE = (19.2, 10.8) # oh baby
+DPI = 200 # oh my
+
 def _plot_npmp(projected_sample_labels: np.ndarray, *args, outfile: str = None, exist_ok=False,
                frame_time: float = 16.67, layer_names: typing.Optional[typing.List[str]] = None):
     """Structured to be npmp friendly, however not very friendly to use compared
@@ -87,7 +90,7 @@ def _plot_ff_real(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool,
 
     os.makedirs(outfile_wo_ext, exist_ok=exist_ok)
 
-    fig = plt.figure()
+    fig = plt.figure(figsize=FRAME_SIZE)
     ax = fig.add_subplot(111, projection='3d')
 
     _visible_layer = None
@@ -179,11 +182,11 @@ def _plot_ff_real(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool,
     movetime(0)
 
     anim = FuncAnimation(fig, update, frames=np.arange(0, total_time+1, frame_time), interval=frame_time)
-    anim.save(os.path.join(outfile_wo_ext, 'out.mp4'), dpi=100, writer='ffmpeg')
+    anim.save(os.path.join(outfile_wo_ext, 'out.mp4'), dpi=DPI, writer='ffmpeg')
 
     plt.close(fig)
 
-    fig = plt.figure()
+    fig = plt.figure(figsize=FRAME_SIZE)
     ax = fig.add_subplot(111, projection='3d')
     _visible_layer = None # force redraw
     _scatter = None
@@ -195,7 +198,7 @@ def _plot_ff_real(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool,
         for angle in (15, 0, -15, 90, 180, 270):
             movetime(0, force=lyr, norotate=True)
             rotate_xz(0, angle)
-            fig.savefig(os.path.join(snapshotdir, f'snapshot_{angle+45}_{lyr}.png'))
+            fig.savefig(os.path.join(snapshotdir, f'snapshot_{angle+45}_{lyr}.png'), dpi=DPI)
 
     plt.close(fig)
 
