@@ -59,6 +59,10 @@ def main():
         criterion=torch.nn.CrossEntropyLoss()#_meansqerr_criterion
     )
 
+    #pca3d_throughtrain.FRAMES_PER_TRAIN = 4
+    #pca3d_throughtrain.SKIP_TRAINS = 0
+    #pca3d_throughtrain.NUM_FRAME_WORKERS = 6
+
     dig = npmp.NPDigestor('train_one', 35)
 
     dtt_training_dir = os.path.join(SAVEDIR, 'dtt')
@@ -84,7 +88,7 @@ def main():
      .reg(tnr.OnEpochCaller.create_every(svm.during_training_ff(svm_training_dir, True, dig), skip=100))
      .reg(tnr.OnEpochCaller.create_every(satur.during_training(satur_training_dir, True, dig), skip=100))
      .reg(tnr.OnEpochCaller.create_every(tnr.save_model(trained_net_dir), skip=100))
-     .reg(pca3d_throughtrain.PCAThroughTrain(pca_throughtrain_dir, layer_names, True))
+     #.reg(pca3d_throughtrain.PCAThroughTrain(pca_throughtrain_dir, layer_names, True))
      .reg(tnr.OnFinishCaller(lambda *args, **kwargs: dig.join()))
      .reg(tnr.ZipDirOnFinish(dtt_training_dir))
      .reg(tnr.ZipDirOnFinish(pca_training_dir))

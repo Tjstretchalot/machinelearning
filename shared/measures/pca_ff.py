@@ -355,6 +355,9 @@ def to_trajectory(sample_labels: torch.tensor, all_hid_acts: typing.List[torch.t
 
     return PCTrajectoryFF(snapshots)
 
+FRAME_SIZE = (19.2, 10.8) # oh baby
+DPI = 200 # oh my
+
 def find_trajectory(model: FeedforwardNetwork, pwl_prod: PointWithLabelProducer,
                     num_pcs: int) -> PCTrajectoryFF:
     """Finds the pc trajectory for the given feed-forward model. Gets only the top
@@ -434,7 +437,7 @@ def plot_trajectory(traj: PCTrajectoryFF, filepath: str, exist_ok: bool = False,
     closest_square: int = int(np.ceil(np.sqrt(traj.num_layers)))
     num_cols: int = int(math.ceil(traj.num_layers / closest_square))
 
-    local_fig, local_axs = plt.subplots(num_cols, closest_square, squeeze=False)
+    local_fig, local_axs = plt.subplots(num_cols, closest_square, squeeze=False, figsize=FRAME_SIZE)
 
     layer: int = 0
     for x in range(num_cols):
