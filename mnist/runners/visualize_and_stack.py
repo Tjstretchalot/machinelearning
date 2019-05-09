@@ -25,6 +25,7 @@ CMAP[2:, 2] = CMAP[2:, 0]
 CMAP[2:, 3] = 1
 CMAP[1] = CMAP[2]
 CMAP = mpl.colors.ListedColormap(CMAP)
+
 def plot_img(ax, points, noticks=False):
     """Plots the image represented by the given flattened torch tensor
 
@@ -45,6 +46,9 @@ def plot_img(ax, points, noticks=False):
         ax.set_xticklabels(tickvals)
         ax.set_yticks(ticklocs)
         ax.set_yticklabels(tickvals)
+    else:
+        ax.set_xticks([])
+        ax.set_yticks([])
     return res
 
 def plot_img_stacked(ax, points):
@@ -63,6 +67,33 @@ def plot_img_stacked(ax, points):
     ax.set_xticks((0,))
     ax.set_xticklabels(('1',))
     return res
+
+def plot_nums_stacked(fig, ax, points):
+    """Plots the numbers in the specified flattened torch vector
+
+    Args:
+        fig (Figure): the figure we are plotting on (used for text sizes)
+        ax (Axes): the axes to plot onto
+        points (torch.tensor[N]): the N points to draw
+    """
+
+    numpied = points.numpy()
+    fontsize = 32
+
+    ax.set_xlim(0, fontsize * 3)
+    ax.set_ylim(0, fontsize * points.shape[0] * 2)
+    ax.spines['left'].set_color('none')
+    ax.spines['bottom'].set_color('none')
+    ax.spines['right'].set_color('none')
+    ax.spines['top'].set_color('none')
+
+    fig.set_figheight((fontsize * 2 * points.shape[0]) / 100)
+    fig.set_dpi(100)
+    for i, pt in enumerate(numpied):
+        ax.text(0, i * fontsize*2, str(pt), fontsize=fontsize, color='white')
+
+
+
 
 
 def plot_img_spread(ax, points, spacing=4):
@@ -94,6 +125,24 @@ def plot_img_spread(ax, points, spacing=4):
     ax.set_yticks(yticklocs)
     ax.set_yticklabels(ytickvals)
     return res
+
+def plot_by_label(label, pwl=None, out=None):
+    if pwl is None:
+        pwl = mnist.pwl.MNISTData.load_test().to_pwl()
+    if out is None:
+        out = 'plot_by_label.png'
+
+    pwl = pwl.restrict_to({label})
+    points = torch.zeros((1, 28*28), dtype=torch.double)
+    labels = torch.zeros((1,), dtype=torch.int)
+
+    pwl.fill(points, labels)
+
+    fig, ax = plt.subplots()
+    plot_img(ax, points[0], noticks=True)
+    fig.savefig(pjoin(SAVEDIR, out), transparent=True, dpi=400)
+    plt.close(fig)
+    crop(pjoin(SAVEDIR, out))
 
 
 def main():
@@ -180,9 +229,7 @@ def plot_one_of_each():
     fig, axs = plt.subplots(1, 10)
 
     for i, ax in enumerate(np.array(axs).flatten()):
-        ax.set_xticks([])
-        ax.set_yticks([])
-        plot_img(ax, points[i], True)
+        plot_img(ax, points[i], noticks=True)
 
     os.makedirs(SAVEDIR, exist_ok=True)
     fig.savefig(pjoin(SAVEDIR, 'fig15.png'), transparent=True, dpi=200)
@@ -191,6 +238,13 @@ def plot_one_of_each():
 
     crop(pjoin(SAVEDIR, 'fig15.png'))
 
+def plot_nums():
+    fig, ax = plt.subplots()
+    ax.set_xticks([])
+    ax.set_yticks([])
+    plot_nums_stacked(fig, ax, torch.tensor([0, 0, 6, 12, 100, 200, 255, 200, 80, 0, 0]))
+    fig.savefig(pjoin(SAVEDIR, 'fig16.png'), dpi=400, transparent=True)
+    crop(pjoin(SAVEDIR, 'fig16.png'))
 
 if __name__ == '__main__':
-    plot_one_of_each()
+    plot_by_label(3)

@@ -29,14 +29,15 @@ def main():
 
     layers_and_nonlins = (
         (90, 'tanh'),
-        (90, 'tanh'),
+        (20, 'tanh'),
         (90, 'tanh'),
     )
 
     layers = [lyr[0] for lyr in layers_and_nonlins]
     nonlins = [lyr[1] for lyr in layers_and_nonlins]
     nonlins.append('linear') # output
-    layer_names = [f'{lyr[1]} (layer {idx})' for idx, lyr in enumerate(layers_and_nonlins)]
+    #layer_names = [f'{lyr[1]} (layer {idx})' for idx, lyr in enumerate(layers_and_nonlins)]
+    layer_names = [f'Layer {idx}' for idx, lyr in enumerate(layers_and_nonlins)]
     layer_names.insert(0, 'input')
     layer_names.append('output')
 
@@ -75,7 +76,7 @@ def main():
     pca_throughtrain_dir = os.path.join(SAVEDIR, 'pca_throughtrain')
     (trainer
      .reg(tnr.EpochsTracker())
-     .reg(tnr.EpochsStopper(300))
+     .reg(tnr.EpochsStopper(0.1))
      .reg(tnr.DecayTracker())
      .reg(tnr.DecayStopper(8))
      .reg(tnr.LRMultiplicativeDecayer())

@@ -126,6 +126,7 @@ def _plot_ff_real(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool,
 
             if layer_names is not None:
                 _axtitle = ax.set_title(layer_names[target_layer])
+                _axtitle.set_fontsize(64)
             return (ax, _scatter)
 
         if layer_names is not None:
@@ -158,14 +159,15 @@ def _plot_ff_real(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool,
         return True, target(easing(progress))
 
     actions = [
-        (2000 * traj.num_layers, (pytweening.linear, movetime)),
-        (2000 * traj.num_layers, (lambda x: 1-x, movetime)),
-        (5000, (pytweening.easeInOutSine, rotate_xz))
+        #(2000 * traj.num_layers, (pytweening.linear, movetime)),
+        #(2000 * traj.num_layers, (lambda x: 1-x, movetime)),
+        #(5000, (pytweening.easeInOutSine, rotate_xz))
     ]
 
-    def reglyr(lyr):
-        actions.append((5000, (pytweening.easeInOutSine, rotate_xz, lambda: movetime(0, lyr))))
+    def reglyr(lyr, time=10000):
+        actions.append((time, (pytweening.easeInOutSine, rotate_xz, lambda: movetime(0, lyr))))
 
+    reglyr(0, 20000)
     for lyr in range(1, traj.num_layers):
         reglyr(lyr)
 
