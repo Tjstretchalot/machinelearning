@@ -124,6 +124,12 @@ def _plot_ff_real(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool,
             if not norotate:
                 ax.view_init(30, 45)
 
+            minlim = float(snapsh.projected_samples.min())
+            maxlim = float(snapsh.projected_samples.max())
+            ax.set_xlim(minlim, maxlim)
+            ax.set_ylim(minlim, maxlim)
+            ax.set_zlim(minlim, maxlim)
+
             if layer_names is not None:
                 _axtitle = ax.set_title(layer_names[target_layer])
                 _axtitle.set_fontsize(80)
