@@ -18,7 +18,7 @@ from shared.npmp import NPDigestor
 from shared.trainer import GenericTrainingContext
 
 FRAME_SIZE = (19.2, 10.8) # oh baby
-DPI = 200 # oh my
+DPI = 100 # 100 -> 2k, 200 -> 4k
 
 def _plot_npmp(projected_sample_labels: np.ndarray, *args, outfile: str = None, exist_ok=False,
                frame_time: float = 16.67, layer_names: typing.Optional[typing.List[str]] = None):
@@ -118,7 +118,7 @@ def _plot_ff_real(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool,
             _scatter = ax.scatter(snapsh.projected_samples[:, 0].numpy(),
                                   snapsh.projected_samples[:, 1].numpy(),
                                   snapsh.projected_samples[:, 2].numpy(),
-                                  s=1,
+                                  s=3,
                                   c=snapsh.projected_sample_labels.numpy(),
                                   cmap=mpl.cm.get_cmap('Set1'))
             if not norotate:
@@ -126,7 +126,7 @@ def _plot_ff_real(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool,
 
             if layer_names is not None:
                 _axtitle = ax.set_title(layer_names[target_layer])
-                _axtitle.set_fontsize(64)
+                _axtitle.set_fontsize(80)
             return (ax, _scatter)
 
         if layer_names is not None:

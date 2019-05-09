@@ -29,7 +29,7 @@ def main():
 
     layers_and_nonlins = (
         (90, 'tanh'),
-        (20, 'tanh'),
+        (90, 'tanh'),
         (90, 'tanh'),
     )
 
@@ -37,7 +37,7 @@ def main():
     nonlins = [lyr[1] for lyr in layers_and_nonlins]
     nonlins.append('linear') # output
     #layer_names = [f'{lyr[1]} (layer {idx})' for idx, lyr in enumerate(layers_and_nonlins)]
-    layer_names = [f'Layer {idx}' for idx, lyr in enumerate(layers_and_nonlins)]
+    layer_names = [f'Layer {idx+1}' for idx, lyr in enumerate(layers_and_nonlins)]
     layer_names.insert(0, 'input')
     layer_names.append('output')
 
@@ -83,7 +83,7 @@ def main():
      .reg(tnr.DecayOnPlateau())
      .reg(tnr.AccuracyTracker(5, 1000, True))
      .reg(tnr.OnEpochCaller.create_every(dtt.during_training_ff(dtt_training_dir, True, dig), skip=100))
-     .reg(tnr.OnEpochCaller.create_every(pca_3d.during_training(pca3d_training_dir, True, dig, plot_kwargs={'layer_names': layer_names}), skip=100))
+     .reg(tnr.OnEpochCaller.create_every(pca_3d.during_training(pca3d_training_dir, True, dig, plot_kwargs={'layer_names': layer_names}), start=5, skip=100))
      .reg(tnr.OnEpochCaller.create_every(pca_ff.during_training(pca_training_dir, True, dig), skip=100))
      .reg(tnr.OnEpochCaller.create_every(pr.during_training_ff(pr_training_dir, True, dig), skip=100))
      .reg(tnr.OnEpochCaller.create_every(svm.during_training_ff(svm_training_dir, True, dig), skip=100))
