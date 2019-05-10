@@ -225,7 +225,7 @@ class FrameWorker:
         """Initializes the figure, axes, title, and scatter plot"""
         fig = plt.figure(figsize=self.frame_size)
         ax = fig.add_subplot(111, projection='3d')
-        axtitle = ax.set_title(' ')
+        axtitle = ax.set_title('Title')
         axtitle.set_fontsize(80)
 
         data = self.traj.snapshots[0].projected_samples[:, :3].numpy()
@@ -289,7 +289,9 @@ class FrameWorker:
             self.mpl_data.figure.set_size_inches(*self.frame_size)
             self.mpl_data.figure.savefig(hndl, format='rgba', dpi=self.dpi)
 
-            self.img_queue.put((frame_num, hndl.getvalue()))
+            rawimg = hndl.getvalue()
+            self.img_queue.put((frame_num, rawimg))
+            del hndl
 
         self.finish_scenes()
 
