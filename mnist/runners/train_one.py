@@ -63,6 +63,7 @@ def main():
     #pca3d_throughtrain.FRAMES_PER_TRAIN = 4
     #pca3d_throughtrain.SKIP_TRAINS = 0
     #pca3d_throughtrain.NUM_FRAME_WORKERS = 6
+    pca_3d.DPI = 10 # test
 
     dig = npmp.NPDigestor('train_one', 35)
 
@@ -76,7 +77,7 @@ def main():
     pca_throughtrain_dir = os.path.join(SAVEDIR, 'pca_throughtrain')
     (trainer
      .reg(tnr.EpochsTracker())
-     .reg(tnr.EpochsStopper(300))
+     .reg(tnr.EpochsStopper(0.2))
      .reg(tnr.DecayTracker())
      .reg(tnr.DecayStopper(8))
      .reg(tnr.LRMultiplicativeDecayer())

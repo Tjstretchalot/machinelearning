@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D # pylint: disable=unused-import
 from matplotlib.animation import FuncAnimation
 import pytweening
+import shared.mytweening as mytweening
 from shared.filetools import zipdir
 from shared.npmp import NPDigestor
 from shared.trainer import GenericTrainingContext
@@ -101,6 +102,43 @@ def _plot_ff_real(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool,
         ax.view_init(30, angle)
         return ax
 
+    def interp(from_lyr, to_lyr):
+        from_snapsh = traj.snapshots[from_lyr]
+        to_snapsh = traj.snapshots[to_lyr]
+        start_np = from_snapsh.projected_samples[:, 3].numpy()
+        end_np = to_snapsh.projected_samples[:, 3].numpy()
+        diff_np = end_np - start_np
+
+        minlim = min(float(start_np.min()), float(end_np.min()))
+        maxlim = max(float(start_np.max()), float(end_np.max()))
+
+        def _interp(perc, force=None):
+            cur_pos = start_np + diff_np*perc
+            _scatter._offsets3d = (cur_pos[:, 0], cur_pos[:, 1], cur_pos[:, 2]) # pylint: disable=protected-access
+            ax.set_xlim(minlim, maxlim)
+            ax.set_ylim(minlim, maxlim)
+            ax.set_zlim(minlim, maxlim)
+            return ax
+
+        return _interp
+
+    def rescale_act(act, easing):
+        def result(perc, *args, **kwargs):
+            perc = easing(perc)
+            return act(perc, *args, **kwargs)
+        return result
+
+    def combine_acts(*acts):
+        def result(*args, **kwargs):
+            results = []
+            for act in acts:
+                res = act(*args, **kwargs)
+                for val in res:
+                    if val not in results:
+                        results.append(val)
+            return results
+        return result
+
     def movetime(perc, force=None, norotate=False):
         nonlocal _visible_layer, _scatter, _axtitle
 
@@ -173,8 +211,16 @@ def _plot_ff_real(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool,
     def reglyr(lyr, time=10000):
         actions.append((time, (pytweening.easeInOutSine, rotate_xz, lambda: movetime(0, lyr))))
 
+    def interplyr(flyr, tlyr, time=5000):
+        actions.append((time, (
+            pytweening.linear,
+            combine_acts(
+                rescale_act(rotate_xz, pytweening.easeInOutSine),
+                rescale_act(interp(flyr, tlyr), pytweening.easeOutBack)
+            )), None))
     reglyr(0, 20000)
     for lyr in range(1, traj.num_layers):
+        interplyr(lyr - 1, lyr)
         reglyr(lyr)
 
     total_time = sum(act[0] for act in actions)

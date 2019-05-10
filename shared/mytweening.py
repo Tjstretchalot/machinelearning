@@ -1,6 +1,13 @@
 """Additional tweening functions not in pytweening
 """
 
+def doublespeed(n): # pylint: disable=invalid-name
+    """A non-symmetric easing which moves linearly from 0 to 1 in first 0.5
+    and then stays constant for last 0.5
+    """
+
+    return n * 2 if n < 0.5 else 1
+
 def smoothstep(n): # pylint: disable=invalid-name
     """A symmetric easing that starts and ends with first derivative 0
 
