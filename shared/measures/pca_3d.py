@@ -499,7 +499,7 @@ def _plot_ff_real(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool,
         RotationScene(INPUT_SPIN_TIME, layer_names[0] if layer_names is not None else '', 0)
     ]
 
-    for i in range(traj.num_layers):
+    for i in range(1, traj.num_layers):
         scenes.append(InterpScene(
             INTERP_SPIN_TIME,
             f'{layer_names[i - 1]} -> {layer_names[i]}' if layer_names is not None else '',

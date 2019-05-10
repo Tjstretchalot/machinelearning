@@ -67,7 +67,7 @@ def main():
     pca_3d.INPUT_SPIN_TIME = 1000
     pca_3d.OTHER_SPIN_TIME = 1000
     pca_3d.INTERP_SPIN_TIME = 5000
-    pca_3d.NUM_WORKERS = 8
+    pca_3d.NUM_WORKERS = 12
 
     dig = npmp.NPDigestor('train_one', 35)
 
