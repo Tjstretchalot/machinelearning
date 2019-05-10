@@ -505,7 +505,7 @@ def _plot_ff_real(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool,
     sum_time = sum((scene.duration for scene in scenes), 0)
     num_frames = sum_time // frame_time
 
-    animator = saa.MPAnimation(DPI, FRAME_SIZE, fps, os.path.join(outfile_wo_ext, 'out.png'),
+    animator = saa.MPAnimation(DPI, FRAME_SIZE, fps, os.path.join(outfile_wo_ext, 'out.mp4'),
                                os.path.join(outfile_wo_ext, 'mp_anim.log'))
 
     workers = []
