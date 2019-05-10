@@ -137,7 +137,10 @@ class RotationScene(Scene):
             mpl_data.axes.set_zlim(minlim, maxlim)
             mpl_data.current_snapsh_idx = self.snapshot_idx
 
-        perc = pytweening.easeInOutSine(time_ms / self.duration)
+        prog = time_ms / self.duration
+        if prog < 0 or prog > 1:
+            raise ValueError(f'time_ms={time_ms}, duration={self.duration}, prog={prog}')
+        perc = pytweening.easeInOutSine(prog)
         rot = 45 + 360 * perc
         mpl_data.axes.view_init(30, rot)
 
@@ -159,6 +162,8 @@ class InterpScene(Scene):
         super().apply(traj, mpl_data, time_ms)
 
         prog = time_ms / self.duration
+        if prog < 0 or prog > 1:
+            raise ValueError(f'time_ms={time_ms}, duration={self.duration}, prog={prog}')
         rot_perc = pytweening.easeInOutSine(prog)
         interp_perc = pytweening.easeInOutBack(prog)
 
