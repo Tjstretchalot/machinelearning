@@ -26,8 +26,8 @@ from multiprocessing import Process
 import queue
 
 PROGRESS_INFO_EVERY = 10
-FRAME_SIZE = (19.2, 10.8) # oh baby
-DPI = 100 # 100 -> 2k, 200 -> 4k
+FRAME_SIZE = (192, 108) # oh baby
+DPI = 10 # 10 -> 2k, 20 -> 4k
 
 INPUT_SPIN_TIME = 20000
 OTHER_SPIN_TIME = 10000
