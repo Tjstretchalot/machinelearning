@@ -7,6 +7,8 @@ import shared.measures.pca_ff as pca_ff
 import numpy as np
 import torch
 import os
+import traceback
+import io
 import typing
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -17,7 +19,11 @@ import shared.mytweening as mytweening
 from shared.filetools import zipdir
 from shared.npmp import NPDigestor
 from shared.trainer import GenericTrainingContext
+import shared.myqueue as myq
+import shared.async_anim as saa
 import time as time_
+from multiprocessing import Process
+import queue
 
 PROGRESS_INFO_EVERY = 10
 FRAME_SIZE = (19.2, 10.8) # oh baby
@@ -27,6 +33,8 @@ INPUT_SPIN_TIME = 20000
 OTHER_SPIN_TIME = 10000
 INTERP_SPIN_TIME = 5000
 
+NUM_WORKERS = 3
+FRAMES_PER_SYNC = 10
 
 def _plot_npmp(projected_sample_labels: np.ndarray, *args, outfile: str = None, exist_ok=False,
                frame_time: float = 16.67, layer_names: typing.Optional[typing.List[str]] = None):
@@ -66,6 +74,305 @@ def _plot_npmp(projected_sample_labels: np.ndarray, *args, outfile: str = None, 
     traj = pca_ff.PCTrajectoryFF(snapshots)
     _plot_ff_real(traj, outfile, exist_ok, frame_time=frame_time, layer_names=layer_names)
 
+class MPLData:
+    """MPL references for the videos
+
+    Attributes:
+        figure (mpl.figure.Figure): the figure
+        axes (mpl.axes.Axes): the 3D axes
+        title (mpl.text.Text): the text object for the title
+        scatter (?): the 3d scatter reference
+
+        current_snapsh_idx (int): the snapshot index that is currently visible
+    """
+
+    def __init__(self, figure, axes, title, scatter, current_snapsh_idx):
+        self.figure = figure
+        self.axes = axes
+        self.title = title
+        self.scatter = scatter
+        self.current_snapsh_idx = current_snapsh_idx
+
+class Scene:
+    """Describes a scene which takes some time to perform
+
+    Attributes:
+        duration (int); the number of milliseconds the scene lasts
+        title (str): the title for this scene
+    """
+
+    def __init__(self, duration: int, title: str):
+        self.duration = duration
+        self.title = title
+
+    def start(self, traj, mpl_data):
+        """Called before any frames start rendering"""
+        pass
+
+    def apply(self, traj, mpl_data, time_ms):
+        """Applies this scene to the matplotlib figure
+        """
+        mpl_data.title.set_text(self.title)
+
+    def finish(self, traj, mpl_data):
+        """Called after all frames have finished rendering"""
+        pass
+
+class RotationScene(Scene):
+    """Scene which rotates around the y axis"""
+    def __init__(self, duration, title, snapshot_idx):
+        super().__init__(duration, title)
+        self.snapshot_idx = snapshot_idx
+
+    def apply(self, traj, mpl_data, time_ms):
+        super().apply(traj, mpl_data, time_ms)
+
+        if mpl_data.current_snapsh_idx != self.snapshot_idx:
+            data = traj.snapshots[self.snapshot_idx].projected_samples[:, :3].numpy()
+            mpl_data.scatter._offsets3d = (data[:, 0], data[:, 1], data[:, 2]) # pylint: disable=protected-access
+            minlim, maxlim = float(data.min()), float(data.max())
+            mpl_data.axes.set_xlim(minlim, maxlim)
+            mpl_data.axes.set_ylim(minlim, maxlim)
+            mpl_data.axes.set_zlim(minlim, maxlim)
+            mpl_data.current_snapsh_idx = self.snapshot_idx
+
+        perc = pytweening.easeInOutSine(time_ms / self.duration)
+        rot = 45 + 360 * perc
+        mpl_data.axes.view_init(30, rot)
+
+class InterpScene(Scene):
+    """Scene which interpolates between two snapshots while spinning"""
+    def __init__(self, duration, title, from_snapshot_idx, to_snapshot_idx):
+        super().__init__(duration, title)
+        self.from_snapshot_idx = from_snapshot_idx
+        self.to_snapshot_idx = to_snapshot_idx
+        self.start_np = None
+        self.delta_np = None
+
+    def start(self, traj, mpl_data):
+        self.start_np = traj.snapshots[self.from_snapshot_idx].projected_samples[:, :3].numpy()
+        end_np = traj.snapshots[self.to_snapshot_idx].projected_samples[:, :3].numpy()
+        self.delta_np = end_np - self.start_np
+
+    def apply(self, traj, mpl_data, time_ms):
+        super().apply(traj, mpl_data, time_ms)
+
+        prog = time_ms / self.duration
+        rot_perc = pytweening.easeInOutSine(prog)
+        interp_perc = pytweening.easeInOutBack(prog)
+
+        data = self.start_np + self.delta_np * interp_perc
+        mpl_data.current_snapsh_idx = -1
+        mpl_data.scatter._offsets3d = (data[:, 0], data[:, 1], data[:, 2]) # pylint: disable=protected-access
+        minlim, maxlim = float(data.min()), float(data.max())
+        mpl_data.axes.set_xlim(minlim, maxlim)
+        mpl_data.axes.set_ylim(minlim, maxlim)
+        mpl_data.axes.set_zlim(minlim, maxlim)
+
+        rot = 45 + 360 * rot_perc
+        mpl_data.axes.view_init(30, rot)
+
+    def finish(self, traj, mpl_data):
+        self.start_np = None
+        self.delta_np = None
+
+
+class FrameWorker:
+    """Describes a frame worker. They are initialized each with enough information to make
+    any frame of the video. They are then told which frames to send by the main thread.
+    Using frame workers can ensure we are bottlenecked only by ffmpeg's ability to save
+    to file
+
+    Attributes:
+        img_queue (Queue): the queue we push images to
+        rec_queue (Queue): the queue we receive messages from
+            image message: ('img', <frame number>)
+            sync message: ('sync', time.time())
+            finish message: ('finish',)
+        send_queue (Queue): the queue we can inform the main thread with
+            sync message: ('sync', time.time())
+
+        ms_per_frame (float): the number of milliseconds per frame
+        frame_size (tuple[float, float]): size of the frame in inches
+        dpi (int): number of pixels per inch
+        scenes (list[Scene]): the scenes which this worker has
+
+        traj (pca_ff.PCTrajectoryFF): the trajectory we are plotting
+
+        mpl_data (MPLData): the actual mpl data we have
+    """
+
+    def __init__(self, img_queue, rec_queue, send_queue, ms_per_frame,
+                 frame_size, dpi, scenes, traj):
+        self.img_queue = img_queue
+        self.rec_queue = rec_queue
+        self.send_queue = send_queue
+        self.ms_per_frame = ms_per_frame
+        self.frame_size = frame_size
+        self.dpi = dpi
+        self.scenes = scenes
+        self.traj = traj
+
+        self.mpl_data = None
+
+    def init_mpl(self):
+        """Initializes the figure, axes, title, and scatter plot"""
+        fig = plt.figure(figsize=self.frame_size)
+        ax = fig.add_subplot(111, projection='3d')
+        axtitle = ax.set_title(' ')
+        axtitle.set_fontsize(80)
+
+        data = self.traj.snapshots[0].projected_samples[:, :3].numpy()
+        labels = self.traj.snapshots[0].projected_sample_labels.numpy()
+        scatter = ax.scatter(data[:, 0], data[:, 1], data[:, 2],
+                             s=3, c=labels, cmap=mpl.cm.get_cmap('Set1'))
+        ax.view_init(30, 45)
+
+        minlim = float(data.min())
+        maxlim = float(data.max())
+        ax.set_xlim(minlim, maxlim)
+        ax.set_ylim(minlim, maxlim)
+        ax.set_zlim(minlim, maxlim)
+
+        self.mpl_data = MPLData(fig, ax, axtitle, scatter, 0)
+
+    def start_scenes(self):
+        """Starts all the scenes"""
+        for scene in self.scenes:
+            scene.start(self.traj, self.mpl_data)
+
+    def finish_scenes(self):
+        """Finishes all the scenes"""
+        for scene in self.scenes:
+            scene.finish(self.traj, self.mpl_data)
+
+    def get_scene_and_time(self, frame_num):
+        """Determines the which scene and when in the scene the given frame is"""
+        millis = frame_num * self.ms_per_frame
+
+        for scene in self.scenes:
+            if millis < scene.duration:
+                return scene, millis
+            millis -= scene.duration
+
+        raise ValueError(f'there is no frame {frame_num}')
+
+    def do_all(self):
+        """This is meant to be the function that is invoked immediately after initialization,
+        which finishes preparing and then reads from the main thread performing actions until
+        completion"""
+
+        self.init_mpl()
+        self.start_scenes()
+
+        while True:
+            msg = self.rec_queue.get()
+            if msg[0] == 'sync':
+                self.send_queue.put(('sync', time_.time()))
+                continue
+            if msg[0] == 'finish':
+                break
+            if msg[0] != 'img':
+                raise ValueError(f'unexpected message: {msg}')
+
+            frame_num = msg[1]
+            scene, time = self.get_scene_and_time(frame_num)
+            scene.apply(self.traj, self.mpl_data, time)
+            hndl = io.BytesIO()
+            self.mpl_data.figure.set_size_inches(*self.frame_size)
+            self.mpl_data.figure.savefig(hndl, format='rgba', dpi=self.dpi)
+            self.img_queue.put((frame_num, hndl.getvalue()))
+
+        self.finish_scenes()
+
+        self.img_queue.close()
+        self.send_queue.close()
+        self.rec_queue.close()
+
+def _frame_worker_target(img_queue, rec_queue, send_queue, ms_per_frame, frame_size, dpi,
+                         scenes, traj, logfile):
+    worker = FrameWorker(
+        myq.ZeroMQQueue.deser(img_queue), myq.ZeroMQQueue.deser(rec_queue),
+        myq.ZeroMQQueue.deser(send_queue), ms_per_frame, frame_size, dpi, scenes, traj)
+
+    try:
+        worker.do_all()
+    except:
+        traceback.print_exc()
+        with open(logfile, 'r') as infile:
+            traceback.print_exc(file=infile)
+        raise
+
+class FrameWorkerConnection:
+    """An instance in the main thread that describes a connection with a frame worker
+
+    Attributes:
+        proc (Process): the actual child process
+        send_queue (queue): the queue we send the frame worker messages with
+        ack_queue (queue): the queue we receive messages from the frame worker from
+        awaiting_sync (bool): True if we are awaiting a sync message, false otherwise
+    """
+
+    def __init__(self, proc: Process, send_queue, ack_queue):
+        self.proc = proc
+        self.send_queue = send_queue
+        self.ack_queue = ack_queue
+        self.awaiting_sync = False
+
+    def start_sync(self):
+        """Starts the syncing process"""
+        self.send_queue.put(('sync', time_.time()))
+        self.awaiting_sync = True
+
+    def check_sync(self):
+        """Checks if the syncing process is complete"""
+        if not self.awaiting_sync:
+            return True
+        try:
+            ack = self.ack_queue.get_nowait()
+            if ack[0] != 'sync':
+                raise ValueError(f'expected sync response, got {ack}')
+            sync_time = time_.time() - ack[1]
+            if sync_time > 1:
+                print(f'[FrameWorkerConnection] took a long time to sync ({sync_time:.3f} s)')
+            self.awaiting_sync = False
+            return True
+        except queue.Empty:
+            return False
+
+    def sync(self):
+        """Waits for this worker to catch up"""
+        self.start_sync()
+        resp = self.ack_queue.get()
+        self.awaiting_sync = False
+        if resp[0] != 'sync':
+            raise ValueError(f'expected sync response, got {resp}')
+        sync_time = time_.time() - resp[1]
+        if sync_time > 1:
+            print(f'[FrameWorkerConnection] took a long time to sync ({sync_time:.3f} s)')
+        return sync_time
+
+    def start_finish(self):
+        """Starts the finish process"""
+        self.send_queue.put(('finish',))
+
+    def check_finish(self):
+        """Checks if the worker has shutdown yet"""
+        return self.proc.is_alive()
+
+    def wait_finish(self):
+        """Waits for finish process to complete"""
+        self.proc.join()
+
+    def finish(self):
+        """Cleanly shutdowns the worker"""
+        self.start_finish()
+        self.wait_finish()
+
+    def send(self, frame_num):
+        """Notifies this worker that it should render the specified frame number"""
+        self.send_queue.put(('img', frame_num))
+
 def _plot_ff_real(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool,
                   frame_time: float = 16.67, layer_names: typing.Optional[typing.List] = None):
     """Plots the given feed-forward pc trajectory
@@ -98,9 +405,8 @@ def _plot_ff_real(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool,
 
     os.makedirs(outfile_wo_ext, exist_ok=exist_ok)
 
-    fig = plt.figure(figsize=FRAME_SIZE)
-    ax = fig.add_subplot(111, projection='3d')
-
+    fig = None
+    ax = None
     _visible_layer = None
     _scatter = None
     _axtitle = None
@@ -108,45 +414,6 @@ def _plot_ff_real(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool,
         angle = 45 + 360 * perc if force is None else 45 + force
         ax.view_init(30, angle)
         return ax
-
-    def interp(from_lyr, to_lyr):
-        from_snapsh = traj.snapshots[from_lyr]
-        to_snapsh = traj.snapshots[to_lyr]
-        start_np = from_snapsh.projected_samples[:, :3].numpy()
-        end_np = to_snapsh.projected_samples[:, :3].numpy()
-        diff_np = end_np - start_np
-
-        minlim = min(float(start_np.min()), float(end_np.min()))
-        maxlim = max(float(start_np.max()), float(end_np.max()))
-
-        def _interp(perc, force=None):
-            cur_pos = start_np + diff_np*perc
-            _scatter._offsets3d = (cur_pos[:, 0], cur_pos[:, 1], cur_pos[:, 2]) # pylint: disable=protected-access
-            ax.set_xlim(minlim, maxlim)
-            ax.set_ylim(minlim, maxlim)
-            ax.set_zlim(minlim, maxlim)
-            return ax
-
-        return _interp
-
-    def rescale_act(act, easing):
-        def result(perc, *args, **kwargs):
-            perc = easing(perc)
-            return act(perc, *args, **kwargs)
-        return result
-
-    def combine_acts(*acts):
-        def result(*args, **kwargs):
-            results = []
-            for act in acts:
-                res = act(*args, **kwargs)
-                res = res if isinstance(res, tuple) else (res,)
-
-                for val in res:
-                    if val not in results:
-                        results.append(val)
-            return results
-        return result
 
     def movetime(perc, force=None, norotate=False):
         nonlocal _visible_layer, _scatter, _axtitle
@@ -199,61 +466,6 @@ def _plot_ff_real(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool,
             return (ax, _scatter, _axtitle)
         return (ax, _scatter)
 
-    def _updater(time_ms: float, start_ms: int, end_ms: int, easing, target, on_first=None):
-        if time_ms < start_ms:
-            return False, None
-        if time_ms > end_ms:
-            return False, None
-        progress = (time_ms - start_ms) / (end_ms - start_ms)
-        first = time_ms - frame_time <= start_ms
-        if first and on_first:
-            on_first()
-
-        return True, target(easing(progress))
-
-    actions = [
-        #(2000 * traj.num_layers, (pytweening.linear, movetime)),
-        #(2000 * traj.num_layers, (lambda x: 1-x, movetime)),
-        #(5000, (pytweening.easeInOutSine, rotate_xz))
-    ]
-
-    def reglyr(lyr, time=OTHER_SPIN_TIME):
-        actions.append((time, (pytweening.easeInOutSine, rotate_xz, lambda: movetime(0, lyr))))
-
-    def interplyr(flyr, tlyr, time=INTERP_SPIN_TIME):
-        actions.append((time, (
-            pytweening.linear,
-            combine_acts(
-                rescale_act(rotate_xz, pytweening.easeInOutSine),
-                rescale_act(interp(flyr, tlyr), pytweening.easeOutBack)
-            )), None))
-    reglyr(0, INPUT_SPIN_TIME)
-    for lyr in range(1, traj.num_layers):
-        interplyr(lyr - 1, lyr)
-        reglyr(lyr)
-
-    total_time = sum(act[0] for act in actions)
-    last_dbg = time_.time()
-    def update(time_ms: float):
-        nonlocal last_dbg
-        if time_.time() - last_dbg > PROGRESS_INFO_EVERY:
-            print(f'[PCA3D] {time_ms:.0f}/{total_time:.0f} ms processed ({(time_ms/total_time):.2f}%)')
-            last_dbg = time_.time()
-        start = 0
-        for act in actions:
-            succ, res = _updater(time_ms, start, act[0] + start, *act[1])
-            if succ:
-                return res
-            start += act[0]
-        return tuple()
-
-    movetime(0)
-
-    anim = FuncAnimation(fig, update, frames=np.arange(0, total_time+1, frame_time), interval=frame_time)
-    anim.save(os.path.join(outfile_wo_ext, 'out.mp4'), dpi=DPI, writer='ffmpeg')
-
-    plt.close(fig)
-
     fig = plt.figure(figsize=FRAME_SIZE)
     ax = fig.add_subplot(111, projection='3d')
     _visible_layer = None # force redraw
@@ -269,6 +481,73 @@ def _plot_ff_real(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool,
             fig.savefig(os.path.join(snapshotdir, f'snapshot_{angle+45}_{lyr}.png'), dpi=DPI)
 
     plt.close(fig)
+
+    scenes = [
+        RotationScene(INPUT_SPIN_TIME, layer_names[0] if layer_names is not None else '', 0)
+    ]
+
+    for i in range(traj.num_layers):
+        scenes.append(InterpScene(
+            INTERP_SPIN_TIME,
+            f'{layer_names[i - 1]} -> {layer_names[i]}' if layer_names is not None else '',
+            i - 1,
+            i,
+        ))
+        scenes.append(RotationScene(
+            OTHER_SPIN_TIME,
+            layer_names[i] if layer_names is not None else '',
+            i
+        ))
+
+    sum_time = sum((scene.duration for scene in scenes), 0)
+    num_frames = sum_time // frame_time
+
+    animator = saa.MPAnimation(DPI, FRAME_SIZE, 1000/frame_time, os.path.join(outfile_wo_ext, 'out.png'),
+                               os.path.join(outfile_wo_ext, 'mp_anim.log'))
+
+    workers = []
+    img_queue = myq.ZeroMQQueue.create_recieve()
+    for i in range(NUM_WORKERS):
+        wlog = os.path.join(outfile_wo_ext, f'worker_{i}_error.log')
+        send_queue = myq.ZeroMQQueue.create_send()
+        ack_queue = myq.ZeroMQQueue.create_recieve()
+        proc = Process(target=_frame_worker_target,
+                       args=(img_queue.serd(), send_queue.serd(), ack_queue.serd(), frame_time,
+                             FRAME_SIZE, DPI, scenes, traj, wlog))
+        proc.start()
+        workers.append(FrameWorkerConnection(proc, send_queue, ack_queue))
+
+    animator.register_queue(img_queue)
+
+    for i in range(0, num_frames, len(workers)):
+        sync_reqd = (i % FRAMES_PER_SYNC) == 0
+        if sync_reqd:
+            for worker in workers:
+                worker.start_sync()
+
+            while True:
+                animator.do_work()
+
+                worker_not_done = False
+                for worker in workers:
+                    if not worker.check_sync():
+                        worker_not_done = True
+                        break
+                if not worker_not_done:
+                    break
+
+        for worker_ind, worker in enumerate(workers):
+            if i + worker_ind < num_frames:
+                worker.send(i + worker_ind)
+
+        animator.do_work()
+        while len(animator.ooo_frames) > 100:
+            animator.do_work() # getting behind
+
+    for worker in workers():
+        worker.finish()
+
+    animator.finish()
 
     if os.path.exists(outfile):
         os.remove(outfile)
