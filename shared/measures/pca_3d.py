@@ -27,13 +27,13 @@ import queue
 
 PROGRESS_INFO_EVERY = 10
 FRAME_SIZE = (19.2, 10.8) # oh baby
-DPI = 100 # 100 -> 2k, 200 -> 4k
+DPI = 10 # 100 -> 2k, 200 -> 4k
 
-INPUT_SPIN_TIME = 20000
-OTHER_SPIN_TIME = 10000
-INTERP_SPIN_TIME = 5000
+INPUT_SPIN_TIME = 1000#20000
+OTHER_SPIN_TIME = 1000#10000
+INTERP_SPIN_TIME = 1000#5000
 
-NUM_WORKERS = 3
+NUM_WORKERS = 5#3
 FRAMES_PER_SYNC = 10
 
 def _plot_npmp(projected_sample_labels: np.ndarray, *args, outfile: str = None, exist_ok=False,
