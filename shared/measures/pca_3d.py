@@ -26,8 +26,8 @@ from multiprocessing import Process
 import queue
 
 PROGRESS_INFO_EVERY = 10
-FRAME_SIZE = (192, 108) # oh baby
-DPI = 10 # 10 -> 2k, 20 -> 4k
+FRAME_SIZE = (19.2, 10.8) # oh baby
+DPI = 100 # 100 -> 2k, 200 -> 4k
 
 INPUT_SPIN_TIME = 20000
 OTHER_SPIN_TIME = 10000
@@ -282,7 +282,6 @@ class FrameWorker:
             self.mpl_data.figure.set_size_inches(*self.frame_size)
             self.mpl_data.figure.savefig(hndl, format='rgba', dpi=self.dpi)
 
-            print(f'rendered at frame size {self.frame_size} with dpi {self.dpi}')
             self.img_queue.put((frame_num, hndl.getvalue()))
 
         self.finish_scenes()
@@ -507,7 +506,8 @@ def _plot_ff_real(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool,
     sum_time = sum((scene.duration for scene in scenes), 0)
     num_frames = int(sum_time / frame_time)
 
-    animator = saa.MPAnimation(DPI, FRAME_SIZE, fps, os.path.join(outfile_wo_ext, 'out.mp4'),
+    animator = saa.MPAnimation(DPI, (FRAME_SIZE[0] * DPI, FRAME_SIZE[1] * DPI), fps,
+                               os.path.join(outfile_wo_ext, 'out.mp4'),
                                os.path.join(outfile_wo_ext, 'mp_anim.log'))
 
     workers = []
