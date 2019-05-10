@@ -521,6 +521,7 @@ def _plot_ff_real(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool,
         workers.append(FrameWorkerConnection(proc, send_queue, ack_queue))
 
     animator.register_queue(img_queue)
+    animator.start()
 
     for i in range(0, num_frames, len(workers)):
         sync_reqd = (i % FRAMES_PER_SYNC) == 0
