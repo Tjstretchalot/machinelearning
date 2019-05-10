@@ -112,7 +112,8 @@ class Scene:
     def apply(self, traj, mpl_data, time_ms):
         """Applies this scene to the matplotlib figure
         """
-        mpl_data.title.set_text(self.title)
+        if mpl_data.title.get_text() != self.title:
+            mpl_data.title.set_text(self.title)
 
     def finish(self, traj, mpl_data):
         """Called after all frames have finished rendering"""
