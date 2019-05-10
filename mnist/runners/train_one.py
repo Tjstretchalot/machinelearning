@@ -64,8 +64,9 @@ def main():
     #pca3d_throughtrain.SKIP_TRAINS = 0
     #pca3d_throughtrain.NUM_FRAME_WORKERS = 6
     pca_3d.DPI = 10 # test
+    pca_3d.INPUT_SPIN_TIME = 1000
     pca_3d.OTHER_SPIN_TIME = 1000
-    pca_3d.INTERP_SPIN_TIME = 1000
+    pca_3d.INTERP_SPIN_TIME = 5000
 
     dig = npmp.NPDigestor('train_one', 35)
 
