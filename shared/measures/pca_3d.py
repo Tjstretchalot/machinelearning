@@ -17,9 +17,16 @@ import shared.mytweening as mytweening
 from shared.filetools import zipdir
 from shared.npmp import NPDigestor
 from shared.trainer import GenericTrainingContext
+import time as time_
 
+PROGRESS_INFO_EVERY = 10
 FRAME_SIZE = (19.2, 10.8) # oh baby
 DPI = 100 # 100 -> 2k, 200 -> 4k
+
+INPUT_SPIN_TIME = 20000
+OTHER_SPIN_TIME = 10000
+INTERP_SPIN_TIME = 5000
+
 
 def _plot_npmp(projected_sample_labels: np.ndarray, *args, outfile: str = None, exist_ok=False,
                frame_time: float = 16.67, layer_names: typing.Optional[typing.List[str]] = None):
@@ -133,6 +140,8 @@ def _plot_ff_real(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool,
             results = []
             for act in acts:
                 res = act(*args, **kwargs)
+                res = res if isinstance(res, tuple) else (res,)
+
                 for val in res:
                     if val not in results:
                         results.append(val)
@@ -208,23 +217,28 @@ def _plot_ff_real(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool,
         #(5000, (pytweening.easeInOutSine, rotate_xz))
     ]
 
-    def reglyr(lyr, time=10000):
+    def reglyr(lyr, time=OTHER_SPIN_TIME):
         actions.append((time, (pytweening.easeInOutSine, rotate_xz, lambda: movetime(0, lyr))))
 
-    def interplyr(flyr, tlyr, time=5000):
+    def interplyr(flyr, tlyr, time=INTERP_SPIN_TIME):
         actions.append((time, (
             pytweening.linear,
             combine_acts(
                 rescale_act(rotate_xz, pytweening.easeInOutSine),
                 rescale_act(interp(flyr, tlyr), pytweening.easeOutBack)
             )), None))
-    reglyr(0, 20000)
+    reglyr(0, INPUT_SPIN_TIME)
     for lyr in range(1, traj.num_layers):
         interplyr(lyr - 1, lyr)
         reglyr(lyr)
 
     total_time = sum(act[0] for act in actions)
+    last_dbg = time_.time()
     def update(time_ms: float):
+        nonlocal last_dbg
+        if time_.time() - last_dbg > PROGRESS_INFO_EVERY:
+            print(f'[PCA3D] {time_ms:.0f}/{total_time:.0f} ms processed ({(time_ms/total_time):.2f}%)')
+            last_dbg = time_.time()
         start = 0
         for act in actions:
             succ, res = _updater(time_ms, start, act[0] + start, *act[1])
