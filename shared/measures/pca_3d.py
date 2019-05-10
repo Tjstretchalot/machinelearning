@@ -105,8 +105,8 @@ def _plot_ff_real(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool,
     def interp(from_lyr, to_lyr):
         from_snapsh = traj.snapshots[from_lyr]
         to_snapsh = traj.snapshots[to_lyr]
-        start_np = from_snapsh.projected_samples[:, 3].numpy()
-        end_np = to_snapsh.projected_samples[:, 3].numpy()
+        start_np = from_snapsh.projected_samples[:, :3].numpy()
+        end_np = to_snapsh.projected_samples[:, :3].numpy()
         diff_np = end_np - start_np
 
         minlim = min(float(start_np.min()), float(end_np.min()))
