@@ -251,8 +251,10 @@ class FrameWorker:
         """Determines the which scene and when in the scene the given frame is"""
         millis = frame_num * self.ms_per_frame
 
-        for scene in self.scenes:
+        ogmillis = millis
+        for i, scene in enumerate(self.scenes):
             if millis < scene.duration:
+                print(f'frame {frame_num} - time {ogmillis} (scene {i} @ {millis})')
                 return scene, millis
             millis -= scene.duration
 
