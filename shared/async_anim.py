@@ -203,6 +203,7 @@ class MPAnimation:
 
         self.dpi = dpi
         self.fps = fps
+        print(f'expected frame size {frame_size} with dpi {dpi}')
         self.outfile = outfile
         self.logfile = logfile
 
