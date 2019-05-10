@@ -259,7 +259,6 @@ class FrameWorker:
         ogmillis = millis
         for i, scene in enumerate(self.scenes):
             if millis < scene.duration:
-                print(f'frame {frame_num} - time {ogmillis} (scene {i} @ {millis})')
                 return scene, millis
             millis -= scene.duration
 
@@ -317,13 +316,15 @@ class FrameWorkerConnection:
 
     Attributes:
         proc (Process): the actual child process
+        img_queue (queue): the queue the frame worker sends images to us with
         send_queue (queue): the queue we send the frame worker messages with
         ack_queue (queue): the queue we receive messages from the frame worker from
         awaiting_sync (bool): True if we are awaiting a sync message, false otherwise
     """
 
-    def __init__(self, proc: Process, send_queue, ack_queue):
+    def __init__(self, proc: Process, img_queue, send_queue, ack_queue):
         self.proc = proc
+        self.img_queue = img_queue
         self.send_queue = send_queue
         self.ack_queue = ack_queue
         self.awaiting_sync = False
@@ -519,18 +520,18 @@ def _plot_ff_real(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool,
                                os.path.join(outfile_wo_ext, 'mp_anim.log'))
 
     workers = []
-    img_queue = myq.ZeroMQQueue.create_recieve()
     for i in range(NUM_WORKERS):
         wlog = os.path.join(outfile_wo_ext, f'worker_{i}_error.log')
+        img_queue = myq.ZeroMQQueue.create_recieve()
         send_queue = myq.ZeroMQQueue.create_send()
         ack_queue = myq.ZeroMQQueue.create_recieve()
         proc = Process(target=_frame_worker_target,
                        args=(img_queue.serd(), send_queue.serd(), ack_queue.serd(), frame_time,
                              FRAME_SIZE, DPI, scenes, traj, wlog))
         proc.start()
-        workers.append(FrameWorkerConnection(proc, send_queue, ack_queue))
+        workers.append(FrameWorkerConnection(proc, img_queue, send_queue, ack_queue))
+        animator.register_queue(img_queue)
 
-    animator.register_queue(img_queue)
     animator.start()
 
     for i in range(0, num_frames, len(workers)):
