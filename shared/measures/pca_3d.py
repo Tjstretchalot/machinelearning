@@ -394,6 +394,9 @@ def _plot_ff_real(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool,
         if len(layer_names) != traj.num_layers:
             raise ValueError(f'expected len(layer_names) = traj.num_layers = {traj.num_layers}, got {len(layer_names)}')
 
+    fps = int(round(1000 / frame_time))
+    frame_time = 1000 / fps
+
     outfile_wo_ext = os.path.splitext(outfile)[0]
     if outfile == outfile_wo_ext:
         outfile += '.zip'
@@ -502,7 +505,7 @@ def _plot_ff_real(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool,
     sum_time = sum((scene.duration for scene in scenes), 0)
     num_frames = sum_time // frame_time
 
-    animator = saa.MPAnimation(DPI, FRAME_SIZE, 1000/frame_time, os.path.join(outfile_wo_ext, 'out.png'),
+    animator = saa.MPAnimation(DPI, FRAME_SIZE, fps, os.path.join(outfile_wo_ext, 'out.png'),
                                os.path.join(outfile_wo_ext, 'mp_anim.log'))
 
     workers = []
