@@ -550,7 +550,7 @@ def _plot_ff_real(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool,
         while len(animator.ooo_frames) > 100:
             animator.do_work() # getting behind
 
-    for worker in workers():
+    for worker in workers:
         worker.finish()
 
     animator.finish()
