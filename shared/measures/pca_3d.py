@@ -281,6 +281,8 @@ class FrameWorker:
             hndl = io.BytesIO()
             self.mpl_data.figure.set_size_inches(*self.frame_size)
             self.mpl_data.figure.savefig(hndl, format='rgba', dpi=self.dpi)
+
+            print(f'rendered at frame size {self.frame_size} with dpi {self.dpi}')
             self.img_queue.put((frame_num, hndl.getvalue()))
 
         self.finish_scenes()
