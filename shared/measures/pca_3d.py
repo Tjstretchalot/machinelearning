@@ -25,15 +25,14 @@ import time as time_
 from multiprocessing import Process
 import queue
 
-PROGRESS_INFO_EVERY = 10
 FRAME_SIZE = (19.2, 10.8) # oh baby
-DPI = 10 # 100 -> 2k, 200 -> 4k
+DPI = 100 # 100 -> 2k, 200 -> 4k
 
-INPUT_SPIN_TIME = 1000#20000
-OTHER_SPIN_TIME = 1000#10000
-INTERP_SPIN_TIME = 1000#5000
+INPUT_SPIN_TIME = 20000
+OTHER_SPIN_TIME = 10000
+INTERP_SPIN_TIME = 6000
 
-NUM_WORKERS = 5#3
+NUM_WORKERS = 6#3
 FRAMES_PER_SYNC = 10
 
 def _plot_npmp(projected_sample_labels: np.ndarray, *args, outfile: str = None, exist_ok=False,
@@ -165,7 +164,7 @@ class InterpScene(Scene):
         if prog < 0 or prog > 1:
             raise ValueError(f'time_ms={time_ms}, duration={self.duration}, prog={prog}')
         rot_perc = pytweening.easeInOutSine(prog)
-        interp_perc = pytweening.easeInOutBack(prog)
+        interp_perc = pytweening.easeOutBounce(prog)
 
         data = self.start_np + self.delta_np * interp_perc
         mpl_data.current_snapsh_idx = -1
