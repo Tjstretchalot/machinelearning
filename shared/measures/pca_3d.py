@@ -29,7 +29,7 @@ import queue
 FRAME_SIZE = (19.2, 10.8) # oh baby
 DPI = 100 # 100 -> 2k, 200 -> 4k
 
-INPUT_SPIN_TIME = 20000
+INPUT_SPIN_TIME = 12500
 OTHER_SPIN_TIME = 10000
 INTERP_SPIN_TIME = 6000
 ZOOM_TIME = 2000
@@ -203,8 +203,8 @@ class InterpScene(Scene):
         prog = time_ms / self.duration
         if prog < 0 or prog > 1:
             raise ValueError(f'time_ms={time_ms}, duration={self.duration}, prog={prog}')
-        rot_perc = pytweening.easeInOutSine(mytweening.squeeze(prog, 0.2))
-        interp_perc = pytweening.easeOutBounce(prog)
+        rot_perc = pytweening.easeInOutSine(mytweening.squeeze(prog, 0.1))
+        interp_perc = pytweening.easeInOutCirc(prog)
 
         data = self.start_np + self.delta_np * interp_perc
         mpl_data.current_snapsh_idx = -1
