@@ -9,6 +9,7 @@ import torch
 import os
 import traceback
 import io
+import sys
 import typing
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -545,7 +546,7 @@ def _plot_ff_real(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool,
 
         newdat = traj.snapshots[i].projected_samples.numpy()
         newlim = (float(newdat.min()), float(newdat.max()))
-        interplim = (min(curlim[0], newlim[0]), min(curlim[1], newlim[1]))
+        interplim = (min(curlim[0], newlim[0]), max(curlim[1], newlim[1]))
         if interplim[0] != curlim[0] or interplim[1] != curlim[1]:
             scenes.append(ZoomScene(ZOOM_TIME, interptitle, curlim, interplim, i-1))
         scenes.append(InterpScene(
@@ -617,6 +618,7 @@ def _plot_ff_real(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool,
             last_frame = i
             frames_per_second = delframes / deltime
             print(f'[PCA3D] {i}/{num_frames} ({(i/num_frames)*100:.2f}%) Did {delframes} in last {deltime:.1f}s ({frames_per_second:.1f} frames/sec)')
+            sys.stdout.flush()
 
         animator.do_work()
         while len(animator.ooo_frames) > 100:

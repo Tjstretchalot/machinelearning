@@ -47,7 +47,6 @@ def main():
     pca_3d.plot_ff(traj, pca3d_dir, False, 16.67, dig, layer_names=layer_names)
 
     dig.join()
-    shared.filetools.zipdir(pca3d_dir)
 
 if __name__ == '__main__':
     import multiprocessing as mp
