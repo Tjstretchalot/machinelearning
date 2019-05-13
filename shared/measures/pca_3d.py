@@ -203,7 +203,7 @@ class InterpScene(Scene):
         prog = time_ms / self.duration
         if prog < 0 or prog > 1:
             raise ValueError(f'time_ms={time_ms}, duration={self.duration}, prog={prog}')
-        rot_perc = pytweening.easeInOutSine(prog)
+        rot_perc = pytweening.easeInOutSine(mytweening.squeeze(prog, 0.2))
         interp_perc = pytweening.easeOutBounce(prog)
 
         data = self.start_np + self.delta_np * interp_perc
