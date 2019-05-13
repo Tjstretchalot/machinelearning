@@ -37,7 +37,7 @@ ZOOM_TIME = 2000
 NUM_WORKERS = 6#3
 FRAMES_PER_SYNC = 10
 
-PRINT_EVERY = 60
+PRINT_EVERY = 15
 
 def _plot_npmp(projected_sample_labels: np.ndarray, *args, outfile: str = None, exist_ok=False,
                frame_time: float = 16.67, layer_names: typing.Optional[typing.List[str]] = None):
@@ -617,7 +617,9 @@ def _plot_ff_real(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool,
             delframes = i - last_frame
             last_frame = i
             frames_per_second = delframes / deltime
-            print(f'[PCA3D] {i}/{num_frames} ({(i/num_frames)*100:.2f}%) Did {delframes} in last {deltime:.1f}s ({frames_per_second:.1f} frames/sec)')
+            framesleft = num_frames - i
+            timeremaining = framesleft / frames_per_second
+            print(f'[PCA3D] {(i/num_frames)*100:.2f}% ({timeremaining:.0f}s rem) ({i}/{num_frames}) Did {delframes} in last {deltime:.1f}s ({frames_per_second:.1f} frames/sec)')
             sys.stdout.flush()
 
         animator.do_work()
