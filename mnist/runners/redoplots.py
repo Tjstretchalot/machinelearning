@@ -50,4 +50,9 @@ def main():
     shared.filetools.zipdir(pca3d_dir)
 
 if __name__ == '__main__':
+    import multiprocessing as mp
+    try:
+        mp.set_start_method('spawn')
+    except RuntimeError:
+        print('failed to set multiprocessing spawn method; this happens on windows')
     main()

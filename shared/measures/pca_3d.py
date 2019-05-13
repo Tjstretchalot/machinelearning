@@ -36,6 +36,8 @@ ZOOM_TIME = 1500
 NUM_WORKERS = 6#3
 FRAMES_PER_SYNC = 10
 
+PRINT_EVERY = 60
+
 def _plot_npmp(projected_sample_labels: np.ndarray, *args, outfile: str = None, exist_ok=False,
                frame_time: float = 16.67, layer_names: typing.Optional[typing.List[str]] = None):
     """Structured to be npmp friendly, however not very friendly to use compared
@@ -585,6 +587,8 @@ def _plot_ff_real(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool,
 
     animator.start()
 
+    last_print = time_.time()
+    last_frame = 0
     for i in range(0, num_frames, len(workers)):
         sync_reqd = (i % FRAMES_PER_SYNC) == 0
         if sync_reqd:
@@ -605,6 +609,14 @@ def _plot_ff_real(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool,
         for worker_ind, worker in enumerate(workers):
             if i + worker_ind < num_frames:
                 worker.send(i + worker_ind)
+
+        if time_.time() - last_print > PRINT_EVERY:
+            deltime = time_.time() - last_print
+            last_print = time_.time()
+            delframes = i - last_frame
+            last_frame = i
+            frames_per_second = delframes / deltime
+            print(f'[PCA3D] {i}/{num_frames} ({(i/num_frames)*100:.2f}%) Did {delframes} in last {deltime:.1f}s ({frames_per_second:.1f} frames/sec)')
 
         animator.do_work()
         while len(animator.ooo_frames) > 100:
