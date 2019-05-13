@@ -31,6 +31,7 @@ DPI = 100 # 100 -> 2k, 200 -> 4k
 INPUT_SPIN_TIME = 20000
 OTHER_SPIN_TIME = 10000
 INTERP_SPIN_TIME = 6000
+ZOOM_TIME = 1500
 
 NUM_WORKERS = 6#3
 FRAMES_PER_SYNC = 10
@@ -118,6 +119,37 @@ class Scene:
         """Called after all frames have finished rendering"""
         pass
 
+class ZoomScene(Scene):
+    """Scene which changes the zoom
+
+    Attributes:
+        start_zoom (tuple[float, float]): the min/max we start at
+        end_zoom (tuple[float, float]): the min/max we end at
+        snapshot_idx (int): the snapshot that should be visible
+    """
+
+    def __init__(self, duration, title, start_zoom, end_zoom, snapshot_idx):
+        super().__init__(duration, title)
+        self.start_zoom = start_zoom
+        self.end_zoom = end_zoom
+        self.snapshot_idx = snapshot_idx
+
+    def apply(self, traj, mpl_data, time_ms):
+        if mpl_data.current_snapsh_idx != self.snapshot_idx:
+            data = traj.snapshots[self.snapshot_idx].projected_samples[:, :3].numpy()
+            mpl_data.scatter._offsets3d = (data[:, 0], data[:, 1], data[:, 2]) # pylint: disable=protected-access
+            mpl_data.current_snapsh_idx = self.snapshot_idx
+
+        prog = time_ms / self.duration
+        perc = mytweening.smoothstep(mytweening.squeeze(prog, 0.1))
+
+        delzoom = (self.end_zoom[0] - self.start_zoom[0], self.end_zoom[1] - self.start_zoom[1])
+        newzoom = (self.start_zoom[0] + delzoom[0] * perc, self.start_zoom[1] + delzoom[1] * perc)
+
+        mpl_data.axes.set_xlim(*newzoom)
+        mpl_data.axes.set_ylim(*newzoom)
+        mpl_data.axes.set_zlim(*newzoom)
+
 class RotationScene(Scene):
     """Scene which rotates around the y axis"""
     def __init__(self, duration, title, snapshot_idx):
@@ -151,11 +183,16 @@ class InterpScene(Scene):
         self.to_snapshot_idx = to_snapshot_idx
         self.start_np = None
         self.delta_np = None
+        self.lims = None
 
     def start(self, traj, mpl_data):
         self.start_np = traj.snapshots[self.from_snapshot_idx].projected_samples[:, :3].numpy()
         end_np = traj.snapshots[self.to_snapshot_idx].projected_samples[:, :3].numpy()
         self.delta_np = end_np - self.start_np
+        minlim = min(float(self.start_np.min()), float(end_np.min()))
+        maxlim = max(float(self.start_np.max()), float(end_np.max()))
+        self.lims = (minlim, maxlim)
+
 
     def apply(self, traj, mpl_data, time_ms):
         super().apply(traj, mpl_data, time_ms)
@@ -169,10 +206,9 @@ class InterpScene(Scene):
         data = self.start_np + self.delta_np * interp_perc
         mpl_data.current_snapsh_idx = -1
         mpl_data.scatter._offsets3d = (data[:, 0], data[:, 1], data[:, 2]) # pylint: disable=protected-access
-        minlim, maxlim = float(data.min()), float(data.max())
-        mpl_data.axes.set_xlim(minlim, maxlim)
-        mpl_data.axes.set_ylim(minlim, maxlim)
-        mpl_data.axes.set_zlim(minlim, maxlim)
+        mpl_data.axes.set_xlim(*self.lims)
+        mpl_data.axes.set_ylim(*self.lims)
+        mpl_data.axes.set_zlim(*self.lims)
 
         rot = 45 + 360 * rot_perc
         mpl_data.axes.view_init(30, rot)
@@ -500,18 +536,32 @@ def _plot_ff_real(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool,
         RotationScene(INPUT_SPIN_TIME, layer_names[0] if layer_names is not None else '', 0)
     ]
 
+    curdat = traj.snapshots[0].projected_samples.numpy()
+    curlim = (float(curdat.min()), float(curdat.max()))
     for i in range(1, traj.num_layers):
+        interptitle = f'{layer_names[i - 1]} -> {layer_names[i]}' if layer_names is not None else ''
+
+        newdat = traj.snapshots[i].projected_samples.numpy()
+        newlim = (float(newdat.min()), float(newdat.max()))
+        interplim = (min(curlim[0], newlim[0]), min(curlim[1], newlim[1]))
+        if interplim[0] != curlim[0] or interplim[1] != curlim[1]:
+            scenes.append(ZoomScene(ZOOM_TIME, interptitle, curlim, interplim, i-1))
         scenes.append(InterpScene(
             INTERP_SPIN_TIME,
-            f'{layer_names[i - 1]} -> {layer_names[i]}' if layer_names is not None else '',
+            interptitle,
             i - 1,
             i,
         ))
+        if interplim[0] != newlim[0] or interplim[1] != newlim[1]:
+            scenes.append(ZoomScene(ZOOM_TIME, interptitle, interplim, newlim, i))
+
         scenes.append(RotationScene(
             OTHER_SPIN_TIME,
             layer_names[i] if layer_names is not None else '',
             i
         ))
+        curlim = newlim
+        curdat = newdat
 
     sum_time = sum((scene.duration for scene in scenes), 0)
     num_frames = int(sum_time / frame_time)

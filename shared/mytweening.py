@@ -1,6 +1,16 @@
 """Additional tweening functions not in pytweening
 """
 
+def squeeze(n, amt=0.2):
+    """Squeezes the n so that instead of going from 0 to 1 in unit time, it goes
+    to 0 to 1 in (1-amt) time with padding on both sides
+    """
+    if n < amt:
+        return 0
+    if n >= 1 - amt:
+        return 1
+    return (n - amt) / (1 - amt)
+
 def doublespeed(n): # pylint: disable=invalid-name
     """A non-symmetric easing which moves linearly from 0 to 1 in first 0.5
     and then stays constant for last 0.5
