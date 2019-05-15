@@ -480,7 +480,7 @@ class WeightNoiser:
     """
 
     def __init__(self, noise: WeightInitializer, tensor_fetcher: typing.Callable, noise_strat='add',
-                 on_weight_decay: None):
+                 on_weight_decay: typing.Callable = None):
         if not isinstance(noise, WeightInitializer):
             raise ValueError(f'expected noise is WeightInitializer, got {noise} (type={type(noise)})')
         if not callable(tensor_fetcher):
