@@ -463,6 +463,7 @@ class AccuracyTracker:
         """Remeasures and stores accuracy"""
         self.measure(context)
         result['accuracy'] = self.accuracy
+
 class WeightNoiser:
     """Adds some noise to the last->output weights during training
 
