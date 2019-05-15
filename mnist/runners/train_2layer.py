@@ -56,7 +56,7 @@ def main():
         batch_size=45,
         learning_rate=0.001,
         optimizer=torch.optim.Adam([p for p in network.parameters() if p.requires_grad], lr=0.001),
-        criterion=mycrits.create_meansqerr_regul(0.1)#torch.nn.CrossEntropyLoss()
+        criterion=mycrits.meansqerr#torch.nn.CrossEntropyLoss()
     )
 
     dig = npmp.NPDigestor('train_one_complex', 35)
@@ -78,7 +78,7 @@ def main():
      .reg(tnr.LRMultiplicativeDecayer())
      .reg(tnr.DecayOnPlateau())
      .reg(tnr.AccuracyTracker(5, 1000, True))
-     .reg(tnr.WeightNoiser(wi.GaussianWeightInitializer(mean=0, vari=0.1), (lambda ctx: ctx.model.layers[0].action.weight.data.detach()), 'add', (lambda noise: wi.GaussianWeightInitializer(0, noise.vari * 0.5))))
+     .reg(tnr.WeightNoiser(wi.GaussianWeightInitializer(mean=0, vari=0.1), (lambda ctx: ctx.model.layers[0].action.weight.data.detach()), 'scale', (lambda noise: wi.GaussianWeightInitializer(0, noise.vari * 0.5))))
      .reg(tnr.OnEpochCaller.create_every(dtt.during_training_ff(dtt_training_dir, True, dig), skip=1))
      .reg(tnr.OnEpochCaller.create_every(pca_3d.during_training(pca3d_training_dir, True, dig, plot_kwargs={'layer_names': layer_names}), start=1000, skip=1000))
      .reg(tnr.OnEpochCaller.create_every(pca_ff.during_training(pca_training_dir, True, dig), skip=100))
