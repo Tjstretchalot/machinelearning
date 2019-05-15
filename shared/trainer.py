@@ -470,14 +470,34 @@ class WeightNoiser:
         noise (WeightInitializer): the noise initialization
         tensor_fetcher (callable): a function that accepts the GenericTrainingContext
             and returns the tensor to noise
+        noise_strat (str): one of the following:
+            'add': just add the noise to the weights; H = H + N
+            'scale': scale the weights by nosie; H = (I + N) * H
+        on_weight_decay (callable): a function that accepts the noise and
+            returns the new noise when the weight is decayed.
         current_noise (torch.tensor [like tensor_fetcher result]):
             the underlying noise tensor we store noise in during training
     """
 
-    def __init__(self, noise: WeightInitializer, tensor_fetcher: typing.Callable):
+    def __init__(self, noise: WeightInitializer, tensor_fetcher: typing.Callable, noise_strat='add',
+                 on_weight_decay: None):
+        if not isinstance(noise, WeightInitializer):
+            raise ValueError(f'expected noise is WeightInitializer, got {noise} (type={type(noise)})')
+        if not callable(tensor_fetcher):
+            raise ValueError(f'expected tensor_fetcher is callable, got {tensor_fetcher} (type={type(tensor_fetcher)})')
+        if noise_strat not in {'add', 'scale'}:
+            raise ValueError(f'expected noise_strat is one of \'add\' and \'scale\', got {noise_strat} (type={type(noise_strat)})')
+
+        if on_weight_decay is None:
+            on_weight_decay = lambda x: x
+        elif not callable(on_weight_decay):
+            raise ValueError(f'expected on_weight_decay is callable, got {on_weight_decay} (type={type(on_weight_decay)})')
+
         self.noise = noise
         self.tensor_fetcher = tensor_fetcher
+        self.noise_strat = noise_strat
         self.current_noise = None
+        self.on_weight_decay = on_weight_decay
 
     def setup(self, context: GenericTrainingContext, **kwargs) -> None:
         """Initializes the noise tensor like the tensor_fetcher"""
@@ -488,7 +508,16 @@ class WeightNoiser:
         """Updates the current noise and applies it"""
         self.current_noise[:] = 0
         self.noise.initialize(self.current_noise)
-        self.tensor_fetcher(context)[:] += self.current_noise
+        if self.noise_strat == 'add':
+            self.tensor_fetcher(context)[:] += self.current_noise
+        elif self.noise_strat == 'scale':
+            tens = self.tensor_fetcher(context)
+            tens[:] = tens + tens * self.current_noise
+
+    def decay(self, context: GenericTrainingContext) -> GenericTrainingContext:
+        """Decays the noise term"""
+        self.noise = self.on_weight_decay(self.noise)
+        return context
 
 class ZipDirOnFinish:
     """Zips a particular directory to directory + .zip when finished. Deletes the

@@ -90,14 +90,14 @@ def _plotting_in_higher_dims3(dpi=80, **kwargs):
     if 'fig7' in kwargs and kwargs['fig7']:
         fig.savefig(pjoin(SAVEDIR, 'fig7.png'), dpi=dpi)
 
-    ax.text(-1, 1, 1, '$\\langle -\\frac{1}{2}, \\frac{1}{2}, -1 \\rangle$', color=DOTCOL, fontsize=48)
-    #ax.text(-1, 1, 1, '$\\langle -x_1, x_2, x_3 \\rangle$', color=DOTCOL, fontsize=48)
+    #ax.text(-1, 1, 1, '$\\langle -\\frac{1}{2}, \\frac{1}{2}, -1 \\rangle$', color=DOTCOL, fontsize=48)
+    ax.text(-1, 1, 1, '$\\langle x_1, x_2, x_3 \\rangle$', color=DOTCOL, fontsize=48)
 
     if 'fig8' in kwargs and kwargs['fig8']:
         fig.savefig(pjoin(SAVEDIR, 'fig8.png'), dpi=dpi)
 
-    ax.scatter([-0.5], [0.5], [-1], c=DOTCOL, s=40)
-    #ax.scatter([0.3], [0.5], [0.7], c=DOTCOL, s=160)
+    #ax.scatter([-0.5], [0.5], [-1], c=DOTCOL, s=40)
+    ax.scatter([0.3], [0.5], [0.7], c=DOTCOL, s=160)
 
     if 'fig9' in kwargs and kwargs['fig9']:
         fig.savefig(pjoin(SAVEDIR, 'fig9.png'), dpi=dpi)
@@ -121,5 +121,5 @@ def _all(dpi=80):
 if __name__ == '__main__':
     mpl.rc('text', usetex=True)
     os.makedirs(SAVEDIR, exist_ok=True)
-    #_plotting_in_higher_dims3(fig9=True, dpi=400)
-    _all(dpi=400)
+    _plotting_in_higher_dims3(fig9=True, dpi=400)
+    #_all(dpi=400)

@@ -399,7 +399,7 @@ def find_trajectory(model: FeedforwardNetwork, pwl_prod: PointWithLabelProducer,
     return PCTrajectoryFF(snapshots)
 
 def plot_trajectory(traj: PCTrajectoryFF, filepath: str, exist_ok: bool = False, alpha=0.5,
-                    square=True):
+                    square=True, transparent=True, s=1, cmap='Set1'):
     """Plots the given trajectory and saves it to the given filepath.
 
     Args:
@@ -475,12 +475,12 @@ def plot_trajectory(traj: PCTrajectoryFF, filepath: str, exist_ok: bool = False,
             padding_y = (max_y - min_y) * .1
 
             plot_snapshot(local_axs[x][y], projected, projected_lbls, min_x - padding_x, max_x + padding_x,
-                          min_y - padding_y, max_y + padding_y, alpha=alpha)
+                          min_y - padding_y, max_y + padding_y, alpha=alpha, s=s, cmap=cmap)
             layer += 1
 
     local_path = os.path.join(filepath_wo_ext, 'local.png')
     local_fig.tight_layout()
-    local_fig.savefig(local_path, transparent=True)
+    local_fig.savefig(local_path, transparent=transparent)
 
     np.savez(os.path.join(filepath_wo_ext, 'principal_vectors.npz'), *[snapshot.principal_vectors for snapshot in traj])
     np.savez(os.path.join(filepath_wo_ext, 'principal_values.npz'), *[snapshot.principal_values for snapshot in traj])

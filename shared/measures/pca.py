@@ -347,7 +347,7 @@ def find_trajectory(model: NaturalRNN, pwl_prod: PointWithLabelProducer,
 
 def plot_snapshot(axis: plt.Axes, projected: torch.tensor, labels: torch.tensor,
                   min_x: float, max_x: float, min_y: float, max_y: float,
-                  alpha: float = 0.5) -> None:
+                  alpha: float = 0.5, s: int = 1, cmap='Set1') -> None:
     """Plots the given projected points to the given matplotlib axis.
 
     Args:
@@ -389,8 +389,8 @@ def plot_snapshot(axis: plt.Axes, projected: torch.tensor, labels: torch.tensor,
         raise ValueError(f'expected alpha is float, got {alpha}')
 
     axis.scatter(projected[:, 0].numpy(), projected[:, 1].numpy(),
-                 s=1, alpha=alpha, c=labels.numpy(),
-                 cmap=mpl.cm.get_cmap('Set1'))
+                 s=s, alpha=alpha, c=labels.numpy(),
+                 cmap=mpl.cm.get_cmap(cmap))
 
     axis.set_xlim([min_x, max_x])
     axis.set_ylim([min_y, max_y])

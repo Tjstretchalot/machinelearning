@@ -46,6 +46,12 @@ def plot_img(ax, points, noticks=False):
         ax.set_xticklabels(tickvals)
         ax.set_yticks(ticklocs)
         ax.set_yticklabels(tickvals)
+        for ticklbl in ax.xaxis.get_ticklabels():
+            ticklbl.set_color('white')
+            ticklbl.set_fontsize(16)
+        for ticklbl in ax.yaxis.get_ticklabels():
+            ticklbl.set_color('white')
+            ticklbl.set_fontsize(16)
     else:
         ax.set_xticks([])
         ax.set_yticks([])
@@ -124,6 +130,12 @@ def plot_img_spread(ax, points, spacing=4):
     ax.set_xticklabels(xtickvals)
     ax.set_yticks(yticklocs)
     ax.set_yticklabels(ytickvals)
+    for ticklbl in ax.xaxis.get_ticklabels():
+        ticklbl.set_color('white')
+        ticklbl.set_fontsize(16)
+    for ticklbl in ax.yaxis.get_ticklabels():
+        ticklbl.set_color('white')
+        ticklbl.set_fontsize(16)
     return res
 
 def plot_by_label(label, pwl=None, out=None):
@@ -247,4 +259,4 @@ def plot_nums():
     crop(pjoin(SAVEDIR, 'fig16.png'))
 
 if __name__ == '__main__':
-    plot_by_label(3)
+    main()

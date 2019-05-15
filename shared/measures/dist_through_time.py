@@ -399,16 +399,17 @@ def _save_dtt_ff(sample_points, sample_labels, hid_acts,
 def _plot_dtt_ff(layers, within_means, within_stds, within_sems,
                  across_means, across_stds, across_sems,
                  within_dists, across_dists, outfile_wo_ext,
-                 verbose, logger):
+                 verbose, logger, title_fontsize=18,
+                 label_fontsize=16, legend_fontsize=14):
     within_col, across_col, ratio_col = 'tab:cyan', 'r', 'k'
 
     fig_mean_with_stddev, ax_mean_with_stddev = plt.subplots()
     fig_mean_with_sem, ax_mean_with_sem = plt.subplots()
     fig_mean_with_scatter, ax_mean_with_scatter = plt.subplots()
 
-    ax_mean_with_stddev.set_title('Distances Through Layers (error: 1.96 std dev)')
-    ax_mean_with_sem.set_title('Distances Through Layers (error: 1.96 sem)')
-    ax_mean_with_scatter.set_title('Distances Through Layers')
+    ax_mean_with_stddev.set_title('Distances Through Layers (error: 1.96 std dev)').set_fontsize(title_fontsize)
+    ax_mean_with_sem.set_title('Distances Through Layers (error: 1.96 sem)').set_fontsize(title_fontsize)
+    ax_mean_with_scatter.set_title('Distances Through Layers').set_fontsize(title_fontsize)
 
     _dbg(verbose, logger, 'plotting mean_with_stddev')
     ax_mean_with_stddev.errorbar(layers, within_means.numpy(), within_stds.numpy() * 1.96, color=within_col, label='Within')
@@ -431,11 +432,11 @@ def _plot_dtt_ff(layers, within_means, within_stds, within_sems,
     for ax in (ax_mean_with_stddev, ax_mean_with_sem, ax_mean_with_scatter):
         twinned = ax.twinx()
         twinned.plot(layers, ratios.numpy(), linestyle='dashed', color=ratio_col, label='Within/Across', alpha=0.8)
-        twinned.legend(loc=2)
-        twinned.set_ylabel('Within / Across (ratio)')
-        ax.set_ylabel('Distances (Euclidean)')
-        ax.set_xlabel('Layer')
-        ax.legend(loc=1)
+        twinned.legend(loc='lower left', fontsize=legend_fontsize)
+        twinned.set_ylabel('Within / Across (ratio)').set_fontsize(label_fontsize)
+        ax.set_ylabel('Distances (Euclidean)').set_fontsize(label_fontsize)
+        ax.set_xlabel('Layer').set_fontsize(label_fontsize)
+        ax.legend(loc=1, fontsize=legend_fontsize)
         ax.set_xticks(layers)
 
     _dbg(verbose, logger, 'saving and cleaning up')
