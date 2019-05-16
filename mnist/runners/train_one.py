@@ -59,7 +59,7 @@ def main():
         batch_size=30,
         learning_rate=0.003,
         optimizer=torch.optim.Adam([p for p in network.parameters() if p.requires_grad], lr=0.003),
-        criterion=mycrits.meansqerr#torch.nn.CrossEntropyLoss()#
+        criterion=torch.nn.CrossEntropyLoss()#mycrits.meansqerr#torch.nn.CrossEntropyLoss()#
     )
 
     #pca3d_throughtrain.FRAMES_PER_TRAIN = 4
@@ -87,7 +87,7 @@ def main():
      .reg(tnr.DecayEvery(5))
      .reg(tnr.AccuracyTracker(5, 1000, True))
      .reg(tnr.OnEpochCaller.create_every(dtt.during_training_ff(dtt_training_dir, True, dig), skip=100))
-     .reg(tnr.OnEpochCaller.create_every(pca_3d.during_training(pca3d_training_dir, True, dig, plot_kwargs={'layer_names': layer_names}), start=500, skip=100))
+     #.reg(tnr.OnEpochCaller.create_every(pca_3d.during_training(pca3d_training_dir, True, dig, plot_kwargs={'layer_names': layer_names}), start=500, skip=100))
      .reg(tnr.OnEpochCaller.create_every(pca_ff.during_training(pca_training_dir, True, dig), skip=100))
      .reg(tnr.OnEpochCaller.create_every(pr.during_training_ff(pr_training_dir, True, dig), skip=100))
      .reg(tnr.OnEpochCaller.create_every(svm.during_training_ff(svm_training_dir, True, dig), skip=100))
