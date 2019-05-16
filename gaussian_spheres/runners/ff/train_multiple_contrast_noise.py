@@ -21,7 +21,7 @@ from gaussian_spheres.pwl import GaussianSpheresPWLP
 import os
 
 SAVEDIR = shared.filetools.savepath()
-DIM = 128
+DIM = 32
 
 def train_with_noise(vari, rep, ignoreme): # pylint: disable=unused-argument
     """Entry point"""
@@ -32,6 +32,9 @@ def train_with_noise(vari, rep, ignoreme): # pylint: disable=unused-argument
     test_pwl = train_pwl
 
     layers_and_nonlins = (
+        (DIM, 'isrlu'),
+        (DIM, 'isrlu'),
+        (DIM, 'isrlu'),
         (DIM, 'isrlu'),
         (DIM, 'isrlu'),
         (DIM, 'isrlu'),
