@@ -74,7 +74,7 @@ def main():
     logpath = os.path.join(SAVEDIR, 'log.txt')
     (trainer
      .reg(tnr.EpochsTracker())
-     .reg(tnr.EpochsStopper(300))
+     .reg(tnr.EpochsStopper(3))
      .reg(tnr.DecayTracker())
      .reg(tnr.DecayStopper(8))
      .reg(tnr.LRMultiplicativeDecayer())

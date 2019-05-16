@@ -16,4 +16,4 @@ try:
     mp.set_start_method('spawn')
     print('successfully set start method for threads to new process')
 except RuntimeError:
-    print('failed to set multiprocessing spawn method; this happens on windows')
+    pass
