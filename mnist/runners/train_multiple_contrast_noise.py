@@ -154,6 +154,7 @@ def plot_merged(variances):
             first = avail_data is None
             if first:
                 avail_data = set()
+                missing_data = set()
             else:
                 missing_data = avail_data.copy()
 
