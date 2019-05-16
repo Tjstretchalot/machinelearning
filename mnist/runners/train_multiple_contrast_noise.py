@@ -81,12 +81,12 @@ def train_with_noise(vari, rep, ignoreme): # pylint: disable=unused-argument
     logpath = os.path.join(savedir, 'log.txt')
     (trainer
      .reg(tnr.EpochsTracker())
-     .reg(tnr.EpochsStopper(300))
+     .reg(tnr.EpochsStopper(5))
      .reg(tnr.DecayTracker())
      .reg(tnr.DecayStopper(5))
      .reg(tnr.LRMultiplicativeDecayer())
      #.reg(tnr.DecayOnPlateau())
-     .reg(tnr.DecayEvery(5))
+     #.reg(tnr.DecayEvery(5))
      .reg(tnr.AccuracyTracker(5, 1000, True))
      .reg(tnr.WeightNoiser(wi.GaussianWeightInitializer(mean=0, vari=vari), (lambda ctx: ctx.model.layers[-1].weight.data.detach()), 'scale', (lambda noise: wi.GaussianWeightInitializer(0, noise.vari * 0.5))))
      #.reg(tnr.OnEpochCaller.create_every(dtt.during_training_ff(dtt_training_dir, True, dig), skip=100))
@@ -188,7 +188,7 @@ def main():
     """Main function"""
     #variances = [0, 0.07, 0.14, 0.2]
     #num_repeats = 10
-    variances = [0, 0.1]
+    variances = [0, 0.1, 0.2]
     num_repeats = 2
     reuse_repeats = 0
     train(variances, reuse_repeats, num_repeats)
