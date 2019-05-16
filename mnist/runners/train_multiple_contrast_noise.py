@@ -82,7 +82,7 @@ def train_with_noise(vari, ignoreme): # pylint: disable=unused-argument
     logpath = os.path.join(savedir, 'log.txt')
     (trainer
      .reg(tnr.EpochsTracker())
-     .reg(tnr.EpochsStopper(3))
+     .reg(tnr.EpochsStopper(300))
      .reg(tnr.DecayTracker())
      .reg(tnr.DecayStopper(5))
      .reg(tnr.LRMultiplicativeDecayer())
@@ -93,7 +93,7 @@ def train_with_noise(vari, ignoreme): # pylint: disable=unused-argument
      #.reg(tnr.OnEpochCaller.create_every(dtt.during_training_ff(dtt_training_dir, True, dig), skip=100))
      #.reg(tnr.OnEpochCaller.create_every(pca_3d.during_training(pca3d_training_dir, True, dig, plot_kwargs={'layer_names': layer_names}), start=500, skip=100))
      #.reg(tnr.OnEpochCaller.create_every(pca_ff.during_training(pca_training_dir, True, dig), skip=100))
-     .reg(tnr.OnEpochCaller.create_every(pr.during_training_ff(pr_training_dir, True, dig), skip=100))
+     .reg(tnr.OnEpochCaller.create_every(pr.during_training_ff(pr_training_dir, True, dig), skip=5))
      #.reg(tnr.OnEpochCaller.create_every(svm.during_training_ff(svm_training_dir, True, dig), skip=100))
      #.reg(tnr.OnEpochCaller.create_every(satur.during_training(satur_training_dir, True, dig), skip=100))
      .reg(tnr.OnEpochCaller.create_every(tnr.save_model(trained_net_dir), skip=100))
@@ -181,8 +181,8 @@ def plot_merged(variances):
 
 def main():
     """Main function"""
-    variances = [0, 0.01, 0.02]
-    #train(variances)
+    variances = [0, 0.01, 0.02, 0.05]
+    train(variances)
     plot_merged(variances)
 
 if __name__ == '__main__':
