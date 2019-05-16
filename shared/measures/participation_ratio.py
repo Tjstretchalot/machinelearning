@@ -93,7 +93,8 @@ class PRTrajectory:
         os.makedirs(folder, exist_ok=True)
 
         meta_dict = {'layers': self.layers}
-        json.dump(meta_dict, os.path.join(folder, 'meta.json'))
+        with open(os.path.join(folder, 'meta.json'), 'w') as metaout:
+            json.dump(meta_dict, metaout)
         torch.save(self.overall, os.path.join(folder, 'overall.pt'))
         if self.by_label is not None:
             torch.save(self.by_label, os.path.join(folder, 'by_label.pt'))
@@ -111,7 +112,8 @@ class PRTrajectory:
             raise FileNotFoundError(filename)
         unzip(filename)
 
-        meta_dict = json.load(os.path.join(folder, 'meta.json'))
+        with open(os.path.join(folder, 'meta.json'), 'r') as meta_in:
+            meta_dict = json.load(meta_in)
         overall = torch.load(os.path.join(folder, 'overall.pt'))
         by_label = None
         if os.path.exists(os.path.join(folder, 'by_label.pt')):
