@@ -89,7 +89,7 @@ def train_with_noise(vari, ignoreme): # pylint: disable=unused-argument
      #.reg(tnr.DecayOnPlateau())
      .reg(tnr.DecayEvery(5))
      .reg(tnr.AccuracyTracker(5, 1000, True))
-     .reg(tnr.WeightNoiser(wi.GaussianWeightInitializer(mean=0, vari=vari), (lambda ctx: ctx.model.layers[-2].action.weight.data.detach()), 'scale', (lambda noise: wi.GaussianWeightInitializer(0, noise.vari * 0.5))))
+     .reg(tnr.WeightNoiser(wi.GaussianWeightInitializer(mean=0, vari=vari), (lambda ctx: ctx.model.layers[-1].weight.data.detach()), 'scale', (lambda noise: wi.GaussianWeightInitializer(0, noise.vari * 0.5))))
      #.reg(tnr.OnEpochCaller.create_every(dtt.during_training_ff(dtt_training_dir, True, dig), skip=100))
      #.reg(tnr.OnEpochCaller.create_every(pca_3d.during_training(pca3d_training_dir, True, dig, plot_kwargs={'layer_names': layer_names}), start=500, skip=100))
      #.reg(tnr.OnEpochCaller.create_every(pca_ff.during_training(pca_training_dir, True, dig), skip=100))
