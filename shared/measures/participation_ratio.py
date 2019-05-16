@@ -9,10 +9,12 @@ import typing
 import os
 import time
 import sys
+import json
+from dataclasses import dataclass
 import shared.measures.pca as pca
 from shared.models.ff import FeedforwardNetwork, FFHiddenActivations
 from shared.pwl import PointWithLabelProducer
-from shared.filetools import zipdir
+from shared.filetools import zipdir, unzip
 from shared.trainer import GenericTrainingContext
 import shared.npmp as npmp
 import shared.measures.utils as mutils
@@ -67,7 +69,8 @@ def measure_pr_np(hidden_acts: np.ndarray, iden: typing.Any, outqueue: typing.An
     outqueue.put((iden, result))
     outqueue.close()
 
-class PRTrajectory(typing.NamedTuple):
+@dataclass
+class PRTrajectory:
     """Describes the trajectory of participation ratio through time or layers
 
     Attributes:
@@ -78,6 +81,44 @@ class PRTrajectory(typing.NamedTuple):
     overall: torch.tensor
     by_label: typing.List[torch.tensor]
     layers: bool
+
+    def save(self, outfile: str, exist_ok=False):
+        """Saves this trajaectory to the given file
+
+        Args:
+            outfile (str): the filename to save to; should be a zip file
+            exist_ok (bool): True to overwrite outfile if it exists, False not to
+        """
+        _, folder = mutils.process_outfile(outfile, exist_ok=exist_ok)
+        os.makedirs(folder, exist_ok=True)
+
+        meta_dict = {'layers': self.layers}
+        json.dump(meta_dict, os.path.join(folder, 'meta.json'))
+        torch.save(self.overall, os.path.join(folder, 'overall.pt'))
+        if self.by_label is not None:
+            torch.save(self.by_label, os.path.join(folder, 'by_label.pt'))
+        zipdir(folder)
+
+    @classmethod
+    def load(cls, infile: str):
+        """Loads the PR trajectory saved to the given filepath
+
+        Arguments:
+            infile (str): the filename to load from; should be a zip file
+        """
+        filename, folder = mutils.process_outfile(infile, exist_ok=True)
+        if not os.path.exists(filename):
+            raise FileNotFoundError(filename)
+        unzip(filename)
+
+        meta_dict = json.load(os.path.join(folder, 'meta.json'))
+        overall = torch.load(os.path.join(folder, 'overall.pt'))
+        by_label = None
+        if os.path.exists(os.path.join(folder, 'by_label.pt')):
+            by_label = torch.load(os.path.join(folder, 'by_label.pt'))
+        zipdir(folder)
+        return cls(overall=overall, layers=meta_dict['layers'], by_label=by_label)
+
 
 def measure_pr_ff(network: FeedforwardNetwork, pwl_prod: PointWithLabelProducer) -> PRTrajectory:
     """Measures the participation ratio through layers for the given feedforward network
@@ -204,10 +245,76 @@ def plot_pr_trajectory(traj: PRTrajectory, savepath: str, exist_ok: bool = False
             fig.savefig(os.path.join(savepath_wo_ext, f'{lbl}.png'))
             plt.close(fig)
 
+    traj.save(os.path.join(savepath_wo_ext, 'traj.zip'))
     if os.path.exists(savepath):
         os.remove(savepath)
 
     zipdir(savepath_wo_ext)
+
+class TrajectoryWithMeta(typing.NamedTuple):
+    """Describes the additional information required alongside a trajectory
+    when it is plotted on a figure with other trajectories
+
+    Attributes:
+        trajectory (PRTrajectory): the actual trajectory
+        label (str): a label that distinguishes this trajectory from the others
+    """
+    trajectory: PRTrajectory
+    label: str
+
+def plot_pr_trajectories(trajectories: typing.List[TrajectoryWithMeta],
+                         savepath: str, title: str, exist_ok: bool = False):
+    """Plots multiple participation ratio trajectories on a single figure,
+    where each trajectory must be associated with a particular label
+
+    Arguments:
+        trajectories (list[TrajectoryWithMeta]): the trajectories to plot
+        savepath (str): the zip file to save the resulting figures in
+        title (str): the title for the figure
+        exist_ok (bool, default False): True to overwrite existing files, False not to
+    """
+    if not isinstance(trajectories, (list, tuple)):
+        raise ValueError(f'expected trajectories is list or tuple, got {trajectories} (type={type(trajectories)})')
+    if not trajectories:
+        raise ValueError(f'need at least one trajectory, got empty {type(trajectories)}')
+    if not isinstance(trajectories[0], TrajectoryWithMeta):
+        raise ValueError(f'expected trajectories[0] is TrajectoryWithMeta, got {trajectories[0]} (type={type(trajectories[0])})')
+    layers = trajectories[0].trajectory.layers
+    depth = trajectories[0].trajectory.overall.shape[0]
+    if not isinstance(title, str):
+        raise ValueError(f'expected title is str, got {title} (type={type(title)})')
+    for i, traj in enumerate(trajectories):
+        if not isinstance(traj, TrajectoryWithMeta):
+            raise ValueError(f'expected trajectories[{i}] is TrajectoryWithMeta, got {traj} (type={type(traj)})')
+        if traj.trajectory.layers != layers:
+            raise ValueError(f'trajectories[0].trajectory.layers = {layers}, trajectories[{i}].trajectory.layers = {traj.trajectory.layers}')
+        _depth = traj.trajectory.overall.shape[0]
+        if depth != _depth:
+            raise ValueError(f'trajectories[0].trajectory.overall.shape[0] = {depth}, trajectories[{i}].trajectory.overall.shape[0] = {_depth}')
+
+    filename, folder = mutils.process_outfile(savepath, exist_ok)
+    os.makedirs(folder, exist_ok=True)
+
+    fig, ax = plt.subplots()
+    ax.set_title(title).set_fontsize(18)
+    ax.set_xlabel('Layer' if layers else 'Time').set_fontsize(16)
+    ax.set_ylabel('Participation Ratio').set_fontsize(16)
+    ax.set_xticks([i for i in range(depth)])
+
+    my_cmap = plt.get_cmap('Set1')
+    cols = my_cmap([i for i in range(len(trajectories))])
+    x_vals = np.arange(depth)
+    for ind, traj_meta in enumerate(trajectories):
+        traj = traj_meta.trajectory
+        ax.plot(x_vals, traj.overall.numpy(), color=cols[ind], label=traj_meta.label)
+    ax.legend()
+
+    fig.savefig(os.path.join(folder, 'out.png'))
+    plt.close(fig)
+
+    if os.path.exists(filename):
+        os.remove(filename)
+    zipdir(folder)
 
 def digest_measure_and_plot_pr_ff(sample_points: np.ndarray, sample_labels: np.ndarray,
                         output_dim: int,

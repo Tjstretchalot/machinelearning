@@ -139,6 +139,10 @@ class GaussianWeightInitializer(WeightInitializer):
         return 'gaussian'
 
     def initialize(self, weights):
+        if self.vari == 0:
+            weights += self.mean
+            return
+
         torch.randn(weights.shape, out=weights)
 
         vari = self.vari
