@@ -66,7 +66,7 @@ def train_with_noise(vari, rep, ignoreme): # pylint: disable=unused-argument
     #pca3d_throughtrain.SKIP_TRAINS = 0
     #pca3d_throughtrain.NUM_FRAME_WORKERS = 6
 
-    dig = npmp.NPDigestor(f'train_mult_contr_noise_{vari}', 8)
+    dig = npmp.NPDigestor(f'TRMCN_{rep}_{vari}', 8)
 
     savedir = os.path.join(SAVEDIR, f'variance_{vari}', f'repeat_{rep}')
 
@@ -139,12 +139,12 @@ def plot_pr_together(variances, num_repeats=1, fname_hint='pr_epoch_finished', s
     pr.plot_avg_pr_trajectories(
         trajs_with_meta, savepath, 'PR varying $\sigma^2$', exist_ok=True)
 
-def train(variances, num_repeats):
+def train(variances, reuse_repeats, num_repeats):
     """Trains all the networks"""
     dig = npmp.NPDigestor('train_mult_contr_noise', 4, target_module='mnist.runners.train_multiple_contrast_noise', target_name='train_with_noise')
     empty_arr = np.array([])
     for vari in variances:
-        for i in range(num_repeats):
+        for i in range(reuse_repeats, num_repeats):
             dig(vari, i, empty_arr)
     dig.join()
 
@@ -190,7 +190,8 @@ def main():
     #num_repeats = 10
     variances = [0, 0.2]
     num_repeats = 2
-    train(variances, num_repeats)
+    reuse_repeats = 0
+    train(variances, reuse_repeats, num_repeats)
     plot_merged(variances, num_repeats)
 
 if __name__ == '__main__':
