@@ -112,7 +112,7 @@ def train_with_noise(vari, ignoreme): # pylint: disable=unused-argument
     trainer.train(network)
     dig.archive_raw_inputs(os.path.join(savedir, 'digestor_raw.zip'))
 
-def plot_pr_together(variances, fname_hint='epoch_finished', suppress_zip=False):
+def plot_pr_together(variances, fname_hint='pr_epoch_finished', suppress_zip=False):
     trajs_with_meta = []
     for vari in variances:
         savedir = os.path.join(SAVEDIR, f'variance_{vari}')
@@ -120,7 +120,7 @@ def plot_pr_together(variances, fname_hint='epoch_finished', suppress_zip=False)
         if os.path.exists(pr_dir + '.zip'):
             shared.filetools.unzip(pr_dir + '.zip')
 
-        epoch_dir = os.path.join(pr_dir, f'pr_{fname_hint}')
+        epoch_dir = os.path.join(pr_dir, fname_hint)
         if os.path.exists(epoch_dir + '.zip'):
             shared.filetools.unzip(epoch_dir + '.zip')
 
