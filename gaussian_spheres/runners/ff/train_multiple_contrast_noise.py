@@ -87,7 +87,7 @@ def train_with_noise(vari, rep, ignoreme): # pylint: disable=unused-argument
     logpath = os.path.join(savedir, 'log.txt')
     (trainer
      .reg(tnr.EpochsTracker())
-     .reg(tnr.EpochsStopper(25))
+     .reg(tnr.EpochsStopper(30))
      .reg(tnr.DecayTracker())
      #.reg(tnr.DecayStopper(5))
      .reg(tnr.LRMultiplicativeDecayer())

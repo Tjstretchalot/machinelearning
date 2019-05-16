@@ -225,7 +225,10 @@ class EpochsStopper:
 
     def stopper(self, context: GenericTrainingContext) -> bool:
         """Returns true if self.stop_after epochs have passed"""
-        return context.shared['epochs'].epochs >= self.stop_after
+        should_stop = context.shared['epochs'].epochs >= self.stop_after
+        if should_stop:
+            context.logger.info('[EpochsStopper] stopping (stop_after=%s)', self.stop_after)
+        return should_stop
 
 class OnEpochCaller:
     """Calls a particular function after a certain number of epochs have passed
@@ -436,7 +439,10 @@ class DecayStopper:
 
     def stopper(self, context: GenericTrainingContext) -> bool:
         """Stops after stop_after decays"""
-        return context.shared['decays'].decays >= self.stop_after
+        should_stop = context.shared['decays'].decays >= self.stop_after
+        if should_stop:
+            context.logger.info('[DecayStopper] stopping (stop_after=%s)', self.stop_after)
+        return should_stop
 
 class AccuracyTracker:
     """Measures accuracy every x epochs. Puts self into context.shared['accuracy'].
