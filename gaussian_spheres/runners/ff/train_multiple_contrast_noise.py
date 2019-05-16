@@ -196,8 +196,8 @@ def main():
     #variances = [0, 0.07, 0.14, 0.2]
     #num_repeats = 10
     variances = [0, 0.025, 0.05, 0.075]
-    num_repeats = 12
-    reuse_repeats = 4
+    num_repeats = 100
+    reuse_repeats = 12
     train(variances, reuse_repeats, num_repeats)
     plot_merged(variances, num_repeats)
 
