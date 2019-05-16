@@ -67,7 +67,7 @@ def train_with_noise(vari, ignoreme): # pylint: disable=unused-argument
     #pca3d_throughtrain.SKIP_TRAINS = 0
     #pca3d_throughtrain.NUM_FRAME_WORKERS = 6
 
-    dig = npmp.NPDigestor('train_one', 8)
+    dig = npmp.NPDigestor(f'train_mult_contr_noise_{vari}', 8)
 
     savedir = os.path.join(SAVEDIR, f'variance_{vari}')
 
