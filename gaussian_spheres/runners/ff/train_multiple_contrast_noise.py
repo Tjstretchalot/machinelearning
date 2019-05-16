@@ -51,12 +51,12 @@ def train_with_noise(vari, rep, ignoreme): # pylint: disable=unused-argument
         nonlinearity=nonlins
     )
 
-    _lr = 0.01
+    _lr = 0.02
     trainer = tnr.GenericTrainer(
         train_pwl=train_pwl,
         test_pwl=test_pwl,
         teacher=FFTeacher(),
-        batch_size=30,
+        batch_size=20,
         learning_rate=_lr,
         optimizer=torch.optim.SGD([p for p in network.parameters() if p.requires_grad], lr=_lr),#torch.optim.Adam([p for p in network.parameters() if p.requires_grad], lr=0.003),
         criterion=torch.nn.CrossEntropyLoss()#
