@@ -57,7 +57,7 @@ def train_with_noise(vari, rep, ignoreme): # pylint: disable=unused-argument
         nonlinearity=nonlins
     )
 
-    _lr = 0.001
+    _lr = 0.01
     trainer = tnr.GenericTrainer(
         train_pwl=train_pwl,
         test_pwl=test_pwl,
