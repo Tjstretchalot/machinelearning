@@ -117,10 +117,12 @@ def plot_pr_together(variances, fname_hint='epoch_finished'):
     for vari in variances:
         savedir = os.path.join(SAVEDIR, f'variance_{vari}')
         pr_dir = os.path.join(savedir, 'pr')
-        shared.filetools.unzip(pr_dir + '.zip')
+        if os.path.exists(pr_dir + '.zip'):
+            shared.filetools.unzip(pr_dir + '.zip')
 
-        epoch_dir = os.path.join(pr_dir, fname_hint)
-        shared.filetools.unzip(epoch_dir + '.zip')
+        epoch_dir = os.path.join(pr_dir, f'pr_{fname_hint}')
+        if os.path.exists(epoch_dir + '.zip'):
+            shared.filetools.unzip(epoch_dir + '.zip')
 
         traj = pr.PRTrajectory.load(os.path.join(epoch_dir, 'traj.zip'))
         shared.filetools.zipdir(epoch_dir)
