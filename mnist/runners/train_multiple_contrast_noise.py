@@ -22,8 +22,7 @@ import os
 
 SAVEDIR = shared.filetools.savepath()
 
-
-def train_with_noise(vari, ignoreme): # pylint: disable=unused-argument
+def train_with_noise(vari, rep, ignoreme): # pylint: disable=unused-argument
     """Entry point"""
     train_pwl = MNISTData.load_train().to_pwl().restrict_to(set(range(10))).rescale()
     test_pwl = MNISTData.load_test().to_pwl().restrict_to(set(range(10))).rescale()
@@ -69,7 +68,7 @@ def train_with_noise(vari, ignoreme): # pylint: disable=unused-argument
 
     dig = npmp.NPDigestor(f'train_mult_contr_noise_{vari}', 8)
 
-    savedir = os.path.join(SAVEDIR, f'variance_{vari}')
+    savedir = os.path.join(SAVEDIR, f'variance_{vari}', f'repeat_{rep}')
 
     dtt_training_dir = os.path.join(savedir, 'dtt')
     pca_training_dir = os.path.join(savedir, 'pca')
@@ -112,78 +111,87 @@ def train_with_noise(vari, ignoreme): # pylint: disable=unused-argument
     trainer.train(network)
     dig.archive_raw_inputs(os.path.join(savedir, 'digestor_raw.zip'))
 
-def plot_pr_together(variances, fname_hint='pr_epoch_finished', suppress_zip=False):
+def plot_pr_together(variances, num_repeats=1, fname_hint='pr_epoch_finished', suppress_zip=False):
     """Plots all the data from the given epoch together"""
     trajs_with_meta = []
     for vari in variances:
-        savedir = os.path.join(SAVEDIR, f'variance_{vari}')
-        pr_dir = os.path.join(savedir, 'pr')
-        if os.path.exists(pr_dir + '.zip'):
-            shared.filetools.unzip(pr_dir + '.zip')
+        repeats = []
+        for rep in range(num_repeats):
+            savedir = os.path.join(SAVEDIR, f'variance_{vari}', f'repeat_{rep}')
+            pr_dir = os.path.join(savedir, 'pr')
+            if os.path.exists(pr_dir + '.zip'):
+                shared.filetools.unzip(pr_dir + '.zip')
 
-        epoch_dir = os.path.join(pr_dir, fname_hint)
-        if os.path.exists(epoch_dir + '.zip'):
-            shared.filetools.unzip(epoch_dir + '.zip')
+            epoch_dir = os.path.join(pr_dir, fname_hint)
+            if os.path.exists(epoch_dir + '.zip'):
+                shared.filetools.unzip(epoch_dir + '.zip')
 
-        traj = pr.PRTrajectory.load(os.path.join(epoch_dir, 'traj.zip'))
-        if not suppress_zip:
-            shared.filetools.zipdir(epoch_dir)
-            shared.filetools.zipdir(pr_dir)
+            traj = pr.PRTrajectory.load(os.path.join(epoch_dir, 'traj.zip'))
+            if not suppress_zip:
+                shared.filetools.zipdir(epoch_dir)
+                shared.filetools.zipdir(pr_dir)
 
-        trajs_with_meta.append(pr.TrajectoryWithMeta(trajectory=traj, label=f'$\sigma^2 = {vari}$'))
+            repeats.append(traj)
+        trajs_with_meta.append(pr.TrajectoryWithMeta(trajectory=pr.AveragedPRTrajectory(repeats), label=f'$\sigma^2 = {vari}$'))
 
     savepath = os.path.join(SAVEDIR, f'prs_{fname_hint}')
     print(f'Saving to {savepath} (fname_hint={fname_hint})')
-    pr.plot_pr_trajectories(trajs_with_meta, savepath,
-                            'PR varying $\sigma^2$', exist_ok=True)
+    pr.plot_avg_pr_trajectories(
+        trajs_with_meta, savepath, 'PR varying $\sigma^2$', exist_ok=True)
 
-def train(variances):
+def train(variances, num_repeats):
     """Trains all the networks"""
     dig = npmp.NPDigestor('train_mult_contr_noise', 4, target_module='mnist.runners.train_multiple_contrast_noise', target_name='train_with_noise')
     empty_arr = np.array([])
     for vari in variances:
-        dig(vari, empty_arr)
+        for i in range(num_repeats):
+            dig(vari, i, empty_arr)
     dig.join()
 
-def plot_merged(variances):
+def plot_merged(variances, num_repeats):
     """Finds all the epochs that we went through on all of them and plots them"""
     avail_data = None
     for vari in variances:
-        savedir = os.path.join(SAVEDIR, f'variance_{vari}')
-        pr_dir = os.path.join(savedir, 'pr')
-        if os.path.exists(pr_dir + '.zip'):
-            shared.filetools.unzip(pr_dir + '.zip')
+        for rep in range(num_repeats):
+            savedir = os.path.join(SAVEDIR, f'variance_{vari}', f'repeat_{rep}')
+            pr_dir = os.path.join(savedir, 'pr')
+            if os.path.exists(pr_dir + '.zip'):
+                shared.filetools.unzip(pr_dir + '.zip')
 
-        with os.scandir(pr_dir) as files:
-            first = avail_data is None
-            if first:
-                avail_data = set()
-                missing_data = set()
-            else:
-                missing_data = avail_data.copy()
-
-            for item in files:
-                epoch = os.path.splitext(item.name)[0]
+            with os.scandir(pr_dir) as files:
+                first = avail_data is None
                 if first:
-                    avail_data.add(epoch)
+                    avail_data = set()
+                    missing_data = set()
                 else:
-                    missing_data.remove(epoch)
-            avail_data -= missing_data
+                    missing_data = avail_data.copy()
+
+                for item in files:
+                    epoch = os.path.splitext(item.name)[0]
+                    if first:
+                        avail_data.add(epoch)
+                    else:
+                        missing_data.remove(epoch)
+                avail_data -= missing_data
 
     for avail in avail_data:
-        plot_pr_together(variances, fname_hint=avail, suppress_zip=True)
+        plot_pr_together(variances, num_repeats=num_repeats, fname_hint=avail, suppress_zip=True)
 
     for vari in variances:
-        savedir = os.path.join(SAVEDIR, f'variance_{vari}')
-        pr_dir = os.path.join(savedir, 'pr')
-        if not os.path.exists(pr_dir + '.zip'):
-            shared.filetools.zipdir(pr_dir)
+        for rep in range(num_repeats):
+            savedir = os.path.join(SAVEDIR, f'variance_{vari}', f'repeat_{rep}')
+            pr_dir = os.path.join(savedir, 'pr')
+            if not os.path.exists(pr_dir + '.zip'):
+                shared.filetools.zipdir(pr_dir)
 
 def main():
     """Main function"""
-    variances = [0, 0.07, 0.14, 0.2]
-    train(variances)
-    plot_merged(variances)
+    #variances = [0, 0.07, 0.14, 0.2]
+    #num_repeats = 10
+    variances = [0, 0.2]
+    num_repeats = 2
+    train(variances, num_repeats)
+    plot_merged(variances, num_repeats)
 
 if __name__ == '__main__':
     main()

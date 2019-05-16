@@ -121,6 +121,43 @@ class PRTrajectory:
         zipdir(folder)
         return cls(overall=overall, layers=meta_dict['layers'], by_label=by_label)
 
+class AveragedPRTrajectory:
+    """Describes a pr trajectory that is comprised of multiple sub-trajectories that
+    come from different realizations of noise or weight initialization
+
+    Attributes:
+        trajectories (list[PRTrajectory]): the actual trajectories in this trajectory
+        overall (torch.tensor[number of layers]): the averaged tensor overall
+        overall_std (torch.tensor[number of layers]): the std error at each layer
+        overall_sem (torch.tensor[number of layers]): the std error of mean at each layer
+
+        layers (bool): if this is an average of layer-trajectories
+    """
+
+    def __init__(self, trajectories: typing.List[PRTrajectory]):
+        if not isinstance(trajectories, (list, tuple)):
+            raise ValueError(f'expected trajectories is list[PRTrajectory], got {trajectories} (type={type(trajectories)})')
+        if not trajectories:
+            raise ValueError(f'need at least one trajectory to average over')
+        self.layers = trajectories[0].layers
+        for i, val in enumerate(trajectories):
+            if not isinstance(val, PRTrajectory):
+                raise ValueError(f'expected trajectories[{i}] is PRTrajectory, got {val} (type={type(val)})')
+            if val.layers != self.layers:
+                raise ValueError(f'got trajectories[0].layers = {self.layers}, trajectories[{i}].layers = {val.layers}')
+            if val.overall.shape != trajectories[0].overall.shape:
+                raise ValueError(f'got trajectories[0].overall.shape = {trajectories[0].overall.shape}, trajectories[{i}].overall.shape = {val.overall.shape}')
+
+        self.trajectories = trajectories
+
+        self.layers = self.trajectories[0].layers
+
+        overalls = tuple(traj.overall.reshape(-1, 1) for traj in trajectories)
+        overall_stkd = torch.cat(overalls, dim=1)
+        self.overall = overall_stkd.mean(dim=1)
+        self.overall_std = overall_stkd.std(dim=1)
+        self.overall_sem = self.overall_std / np.sqrt(len(trajectories))
+
 
 def measure_pr_ff(network: FeedforwardNetwork, pwl_prod: PointWithLabelProducer) -> PRTrajectory:
     """Measures the participation ratio through layers for the given feedforward network
@@ -261,7 +298,7 @@ class TrajectoryWithMeta(typing.NamedTuple):
         trajectory (PRTrajectory): the actual trajectory
         label (str): a label that distinguishes this trajectory from the others
     """
-    trajectory: PRTrajectory
+    trajectory: typing.Union[PRTrajectory, AveragedPRTrajectory]
     label: str
 
 def plot_pr_trajectories(trajectories: typing.List[TrajectoryWithMeta],
@@ -309,6 +346,61 @@ def plot_pr_trajectories(trajectories: typing.List[TrajectoryWithMeta],
     for ind, traj_meta in enumerate(trajectories):
         traj = traj_meta.trajectory
         ax.plot(x_vals, traj.overall.numpy(), color=cols[ind], label=traj_meta.label)
+    ax.legend()
+
+    fig.savefig(os.path.join(folder, 'out.png'))
+    plt.close(fig)
+
+    if os.path.exists(filename):
+        os.remove(filename)
+    zipdir(folder)
+
+def plot_avg_pr_trajectories(trajectories: typing.List[TrajectoryWithMeta],
+                             savepath: str, title: str, exist_ok: bool = False):
+    """Plots multiple participation ratio trajectories on a single figure,
+    where each trajectory must be associated with a particular label, where
+    each trajectory is actually the average of multiple trajectories
+
+    Arguments:
+        trajectories (list[TrajectoryWithMeta]): the trajectories to plot
+        savepath (str): the zip file to save the resulting figures in
+        title (str): the title for the figure
+        exist_ok (bool, default False): True to overwrite existing files, False not to
+    """
+    if not isinstance(trajectories, (list, tuple)):
+        raise ValueError(f'expected trajectories is list or tuple, got {trajectories} (type={type(trajectories)})')
+    if not trajectories:
+        raise ValueError(f'need at least one trajectory, got empty {type(trajectories)}')
+    if not isinstance(trajectories[0], TrajectoryWithMeta):
+        raise ValueError(f'expected trajectories[0] is TrajectoryWithMeta, got {trajectories[0]} (type={type(trajectories[0])})')
+    layers = trajectories[0].trajectory.layers
+    depth = trajectories[0].trajectory.overall.shape[0]
+    if not isinstance(title, str):
+        raise ValueError(f'expected title is str, got {title} (type={type(title)})')
+    for i, traj in enumerate(trajectories):
+        if not isinstance(traj, TrajectoryWithMeta):
+            raise ValueError(f'expected trajectories[{i}] is TrajectoryWithMeta, got {traj} (type={type(traj)})')
+        if traj.trajectory.layers != layers:
+            raise ValueError(f'trajectories[0].trajectory.layers = {layers}, trajectories[{i}].trajectory.layers = {traj.trajectory.layers}')
+        _depth = traj.trajectory.overall.shape[0]
+        if depth != _depth:
+            raise ValueError(f'trajectories[0].trajectory.overall.shape[0] = {depth}, trajectories[{i}].trajectory.overall.shape[0] = {_depth}')
+
+    filename, folder = mutils.process_outfile(savepath, exist_ok)
+    os.makedirs(folder, exist_ok=True)
+
+    fig, ax = plt.subplots()
+    ax.set_title(title).set_fontsize(18)
+    ax.set_xlabel('Layer' if layers else 'Time').set_fontsize(16)
+    ax.set_ylabel('Participation Ratio').set_fontsize(16)
+    ax.set_xticks([i for i in range(depth)])
+
+    my_cmap = plt.get_cmap('Set1')
+    cols = my_cmap([i for i in range(len(trajectories))])
+    x_vals = np.arange(depth)
+    for ind, traj_meta in enumerate(trajectories):
+        traj = traj_meta.trajectory
+        ax.errorbar(x_vals, traj.overall.numpy(), yerr=traj.overall_sem*1.96, color=cols[ind], label=traj_meta.label)
     ax.legend()
 
     fig.savefig(os.path.join(folder, 'out.png'))
