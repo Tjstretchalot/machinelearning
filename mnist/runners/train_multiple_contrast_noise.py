@@ -60,7 +60,7 @@ def train_with_noise(vari, ignoreme): # pylint: disable=unused-argument
         batch_size=30,
         learning_rate=0.003,
         optimizer=torch.optim.Adam([p for p in network.parameters() if p.requires_grad], lr=0.003),
-        criterion=torch.nn.CrossEntropyLoss()#mycrits.meansqerr#torch.nn.CrossEntropyLoss()#
+        criterion=mycrits.meansqerr#torch.nn.CrossEntropyLoss()#
     )
 
     #pca3d_throughtrain.FRAMES_PER_TRAIN = 4
@@ -181,7 +181,7 @@ def plot_merged(variances):
 
 def main():
     """Main function"""
-    variances = [0, 0.01, 0.02, 0.05]
+    variances = [0, 0.1, 0.2, 0.3]
     train(variances)
     plot_merged(variances)
 
