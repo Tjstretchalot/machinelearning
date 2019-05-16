@@ -65,7 +65,7 @@ def train_with_noise(vari, rep, ignoreme): # pylint: disable=unused-argument
         batch_size=30,
         learning_rate=_lr,
         optimizer=torch.optim.SGD([p for p in network.parameters() if p.requires_grad], lr=_lr),#torch.optim.Adam([p for p in network.parameters() if p.requires_grad], lr=0.003),
-        criterion=mycrits.meansqerr#torch.nn.CrossEntropyLoss()#
+        criterion=torch.nn.CrossEntropyLoss()#
     )
 
     #pca3d_throughtrain.FRAMES_PER_TRAIN = 4
@@ -98,7 +98,7 @@ def train_with_noise(vari, rep, ignoreme): # pylint: disable=unused-argument
      #.reg(tnr.OnEpochCaller.create_every(dtt.during_training_ff(dtt_training_dir, True, dig), skip=100))
      #.reg(tnr.OnEpochCaller.create_every(pca_3d.during_training(pca3d_training_dir, True, dig, plot_kwargs={'layer_names': layer_names}), start=500, skip=100))
      #.reg(tnr.OnEpochCaller.create_every(pca_ff.during_training(pca_training_dir, True, dig), skip=100))
-     .reg(tnr.OnEpochCaller.create_every(pr.during_training_ff(pr_training_dir, True, dig), skip=1))
+     .reg(tnr.OnEpochCaller.create_every(pr.during_training_ff(pr_training_dir, True, dig), skip=100))
      #.reg(tnr.OnEpochCaller.create_every(svm.during_training_ff(svm_training_dir, True, dig), skip=100))
      #.reg(tnr.OnEpochCaller.create_every(satur.during_training(satur_training_dir, True, dig), skip=100))
      .reg(tnr.OnEpochCaller.create_every(tnr.save_model(trained_net_dir), skip=100))
