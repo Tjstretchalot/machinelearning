@@ -16,13 +16,14 @@ import shared.measures.pca_3d as pca_3d
 import shared.npmp as npmp
 import shared.criterion as mycrits
 import torch
+import numpy as np
 from mnist.pwl import MNISTData
 import os
 
 SAVEDIR = shared.filetools.savepath()
 
 
-def train_with_noise(vari):
+def train_with_noise(vari, ignoreme): # pylint: disable=unused-argument
     """Entry point"""
     train_pwl = MNISTData.load_train().to_pwl().restrict_to(set(range(10))).rescale()
     test_pwl = MNISTData.load_test().to_pwl().restrict_to(set(range(10))).rescale()
@@ -134,8 +135,9 @@ def main():
     """Main function"""
     variances = [0, 0.01, 0.02]
     dig = npmp.NPDigestor('train_mult_contr_noise', 4, target_module='mnist.runners.train_multiple_contrast_noise', target_name='train_with_noise')
+    empty_arr = np.array([])
     for vari in variances:
-        dig(vari)
+        dig(vari, empty_arr)
     dig.join()
     plot_pr_together(variances)
 
