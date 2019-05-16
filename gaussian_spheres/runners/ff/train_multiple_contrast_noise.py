@@ -57,7 +57,7 @@ def train_with_noise(vari, rep, ignoreme): # pylint: disable=unused-argument
         nonlinearity=nonlins
     )
 
-    _lr = 0.01
+    _lr = 0.0001
     trainer = tnr.GenericTrainer(
         train_pwl=train_pwl,
         test_pwl=test_pwl,
@@ -194,8 +194,8 @@ def main():
     """Main function"""
     #variances = [0, 0.07, 0.14, 0.2]
     #num_repeats = 10
-    variances = [0, 0.00075, 0.0015]
-    num_repeats = 2
+    variances = [0]#[0, 0.00075, 0.0015]
+    num_repeats = 1
     reuse_repeats = 0
     train(variances, reuse_repeats, num_repeats)
     plot_merged(variances, num_repeats)
