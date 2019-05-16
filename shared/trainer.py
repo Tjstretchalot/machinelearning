@@ -292,6 +292,38 @@ class OnFinishCaller:
     def __init__(self, on_finished):
         self.finished = on_finished
 
+class DecayEvery:
+    """Simple decayer that just decays every certain number of epochs
+
+    Attributes:
+        num_epochs (float): the number of epochs between decays
+        next_decay (float): when we next decay
+        best_loss (float): the best loss we have seen (used for printing)
+    """
+    def __init__(self, num_epochs: float):
+        self.num_epochs = num_epochs
+        self.best_loss = float('inf')
+        self.next_decay = self.num_epochs
+
+    def setup(self, context, **kwargs):
+        """Initialize next decay and best loss"""
+        self.next_decay = self.num_epochs
+        self.best_loss = float('inf')
+
+    def decay_scheduler(self, context: GenericTrainingContext, loss: float, result: bool) -> bool:
+        """Decays if it has been the required amount of epochs"""
+        if loss < self.best_loss:
+            self.best_loss = loss
+            context.logger.info('[DecayEvery] Improved loss to %s', loss)
+
+        tracker = context.shared['epochs']
+        if tracker.epochs > self.next_decay:
+            result = True
+            self.next_decay += self.num_epochs
+        return result
+
+
+
 class DecayOnPlateau:
     """Decays the loss if there has been no improvement in a certain number of epochs.
     Requires an EpochsTracker

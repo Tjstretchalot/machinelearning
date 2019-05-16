@@ -28,18 +28,20 @@ def main():
     test_pwl = MNISTData.load_test().to_pwl().restrict_to(set(range(10))).rescale()
 
     layers_and_nonlins = (
-        (90, 'tanh'),
-        (90, 'tanh'),
-        (90, 'tanh'),
+        (90, 'relu'),
+        (90, 'relu'),
+        (90, 'relu'),
+        (90, 'relu'),
+        (90, 'relu'),
     )
 
     layers = [lyr[0] for lyr in layers_and_nonlins]
     nonlins = [lyr[1] for lyr in layers_and_nonlins]
-    nonlins.append('linear') # output
+    nonlins.append('relu') # output
     #layer_names = [f'{lyr[1]} (layer {idx})' for idx, lyr in enumerate(layers_and_nonlins)]
     layer_names = [f'Layer {idx+1}' for idx, lyr in enumerate(layers_and_nonlins)]
-    layer_names.insert(0, 'input')
-    layer_names.append('output')
+    layer_names.insert(0, 'Input')
+    layer_names.append('Output')
 
     network = FeedforwardLarge.create(
         input_dim=train_pwl.input_dim, output_dim=train_pwl.output_dim,
@@ -77,11 +79,12 @@ def main():
     logpath = os.path.join(SAVEDIR, 'log.txt')
     (trainer
      .reg(tnr.EpochsTracker())
-     .reg(tnr.EpochsStopper(300))
+     .reg(tnr.EpochsStopper(3))
      .reg(tnr.DecayTracker())
-     .reg(tnr.DecayStopper(8))
+     .reg(tnr.DecayStopper(5))
      .reg(tnr.LRMultiplicativeDecayer())
-     .reg(tnr.DecayOnPlateau())
+     #.reg(tnr.DecayOnPlateau())
+     .reg(tnr.DecayEvery(5))
      .reg(tnr.AccuracyTracker(5, 1000, True))
      .reg(tnr.OnEpochCaller.create_every(dtt.during_training_ff(dtt_training_dir, True, dig), skip=100))
      .reg(tnr.OnEpochCaller.create_every(pca_3d.during_training(pca3d_training_dir, True, dig, plot_kwargs={'layer_names': layer_names}), start=500, skip=100))

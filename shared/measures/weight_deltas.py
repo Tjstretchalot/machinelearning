@@ -24,7 +24,7 @@ def _binned2norm(induced: np.ndarray, outpath: str, title: str, dpi=400, transpa
     os.makedirs(outfolder, exist_ok=True)
 
     fig, ax = plt.subplots()
-    ax.set_xlabel('$Induced \\Delta \\| W \\|_2$').set_fontsize(16)
+    ax.set_xlabel('Induced $\\Delta \\| W \\|_2$').set_fontsize(16)
     ax.set_ylabel('Count').set_fontsize(16)
 
     ax.set_title(title).set_fontsize(18)
