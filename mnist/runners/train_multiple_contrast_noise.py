@@ -103,7 +103,7 @@ def train_with_noise(vari, ignoreme): # pylint: disable=unused-argument
      .reg(tnr.ZipDirOnFinish(dtt_training_dir))
      .reg(tnr.ZipDirOnFinish(pca_training_dir))
      .reg(tnr.ZipDirOnFinish(pca3d_training_dir))
-     #.reg(tnr.ZipDirOnFinish(pr_training_dir))
+     .reg(tnr.ZipDirOnFinish(pr_training_dir))
      .reg(tnr.ZipDirOnFinish(svm_training_dir))
      .reg(tnr.ZipDirOnFinish(satur_training_dir))
      .reg(tnr.ZipDirOnFinish(trained_net_dir))
