@@ -12,6 +12,7 @@ import shared.measures.pca3d_throughtrain as pca3d_throughtrain
 import shared.measures.saturation as satur
 import shared.measures.participation_ratio as pr
 import shared.measures.svm as svm
+import shared.measures.weight_deltas as wds
 import shared.criterion as mycrits
 import shared.filetools
 import shared.npmp as npmp
@@ -69,6 +70,7 @@ def main():
     satur_training_dir = os.path.join(SAVEDIR, 'saturation')
     trained_net_dir = os.path.join(SAVEDIR, 'trained_model')
     pca_throughtrain_dir = os.path.join(SAVEDIR, 'pca_throughtrain')
+    wds_training_dir = os.path.join(SAVEDIR, 'weightdeltas')
     logpath = os.path.join(SAVEDIR, 'log.txt')
     (trainer
      .reg(tnr.EpochsTracker())
@@ -86,6 +88,7 @@ def main():
      .reg(tnr.OnEpochCaller.create_every(svm.during_training_ff(svm_training_dir, True, dig), skip=100))
      .reg(tnr.OnEpochCaller.create_every(satur.during_training(satur_training_dir, True, dig), skip=100))
      .reg(tnr.OnEpochCaller.create_every(tnr.save_model(trained_net_dir), skip=100))
+     .reg(wds.Binned2Norm((lambda ctx: ctx.model.layers[0].action.weight.data.detach()), dig, wds_training_dir, 'Induced Changes in $W^{(1)}$'))
      #.reg(pca3d_throughtrain.PCAThroughTrain(pca_throughtrain_dir, layer_names, True, layer_indices=plot_layers))
      .reg(tnr.OnFinishCaller(lambda *args, **kwargs: dig.join()))
      .reg(tnr.CopyLogOnFinish(logpath))
