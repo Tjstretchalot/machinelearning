@@ -478,7 +478,7 @@ class AccuracyTracker:
 
         self.last_measure_epoch = context.shared['epochs'].epochs
         self.accuracy = accuracy
-        context.logger.info('[AccuracyTracker] %s/%s (%s%%)', correct_preds, real_num_points, accuracy)
+        context.logger.info('[AccuracyTracker] %s/%s (%s%%)', int(correct_preds), int(real_num_points), f'{float(accuracy*100):.2f}')
 
     def setup(self, context: GenericTrainingContext, **kwargs) -> None: #pylint: disable=unused-argument
         """Stores self into context.shared['accuracy']"""
