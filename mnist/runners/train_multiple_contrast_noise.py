@@ -163,12 +163,11 @@ def plot_merged(variances):
                 missing_data = avail_data.copy()
 
             for item in files:
-                if item.is_file():
-                    epoch = os.path.splitext(item.name)[0]
-                    if first:
-                        avail_data.add(epoch)
-                    else:
-                        missing_data.remove(epoch)
+                epoch = os.path.splitext(item.name)[0]
+                if first:
+                    avail_data.add(epoch)
+                else:
+                    missing_data.remove(epoch)
             avail_data -= missing_data
 
     for avail in avail_data:
