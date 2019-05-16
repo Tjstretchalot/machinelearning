@@ -21,23 +21,24 @@ from gaussian_spheres.pwl import GaussianSpheresPWLP
 import os
 
 SAVEDIR = shared.filetools.savepath()
+DIM = 64
 
 def train_with_noise(vari, rep, ignoreme): # pylint: disable=unused-argument
     """Entry point"""
     train_pwl = GaussianSpheresPWLP.create(
-        epoch_size=2700, input_dim=32, output_dim=10, cube_half_side_len=2,
+        epoch_size=2700, input_dim=DIM, output_dim=10, cube_half_side_len=2,
         num_clusters=10, std_dev=0.5, mean=0, min_sep=1, force_split=True
     )
     test_pwl = train_pwl
 
     layers_and_nonlins = (
-        (32, 'relu'),
-        (32, 'relu'),
-        (32, 'relu'),
-        (32, 'relu'),
-        (32, 'relu'),
-        (32, 'relu'),
-        (32, 'relu'),
+        (DIM, 'relu'),
+        (DIM, 'relu'),
+        (DIM, 'relu'),
+        (DIM, 'relu'),
+        (DIM, 'relu'),
+        (DIM, 'relu'),
+        (DIM, 'relu'),
     )
 
     layers = [lyr[0] for lyr in layers_and_nonlins]
@@ -56,7 +57,7 @@ def train_with_noise(vari, rep, ignoreme): # pylint: disable=unused-argument
         nonlinearity=nonlins
     )
 
-    _lr = 0.1
+    _lr = 0.2
     trainer = tnr.GenericTrainer(
         train_pwl=train_pwl,
         test_pwl=test_pwl,
