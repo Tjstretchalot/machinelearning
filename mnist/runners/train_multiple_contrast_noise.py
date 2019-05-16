@@ -166,8 +166,6 @@ def plot_merged(variances):
                         missing_data.remove(epoch)
             avail_data -= missing_data
 
-        shared.filetools.zipdir(pr_dir)
-
     print(f'available data: {avail_data}')
 
 
