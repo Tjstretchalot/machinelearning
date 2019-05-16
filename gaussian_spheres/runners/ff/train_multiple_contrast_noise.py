@@ -66,7 +66,7 @@ def train_with_noise(vari, rep, ignoreme): # pylint: disable=unused-argument
         batch_size=20,
         learning_rate=_lr,
         optimizer=torch.optim.Adam([p for p in network.parameters() if p.requires_grad], lr=_lr),
-        criterion=torch.nn.CrossEntropyLoss()#
+        criterion=mycrits.meansqerr#torch.nn.CrossEntropyLoss()#
     )
 
     #pca3d_throughtrain.FRAMES_PER_TRAIN = 4
@@ -88,7 +88,7 @@ def train_with_noise(vari, rep, ignoreme): # pylint: disable=unused-argument
     logpath = os.path.join(savedir, 'log.txt')
     (trainer
      .reg(tnr.EpochsTracker())
-     .reg(tnr.EpochsStopper(1))
+     .reg(tnr.EpochsStopper(5))
      .reg(tnr.DecayTracker())
      #.reg(tnr.DecayStopper(5))
      .reg(tnr.LRMultiplicativeDecayer())
