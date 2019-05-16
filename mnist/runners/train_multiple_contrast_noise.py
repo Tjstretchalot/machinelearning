@@ -29,16 +29,16 @@ def train_with_noise(vari, ignoreme): # pylint: disable=unused-argument
     test_pwl = MNISTData.load_test().to_pwl().restrict_to(set(range(10))).rescale()
 
     layers_and_nonlins = (
-        (90, 'relu'),
-        (90, 'relu'),
-        (90, 'relu'),
-        (90, 'relu'),
-        (90, 'relu'),
+        (90, 'tanh'),
+        (90, 'tanh'),
+        (90, 'tanh'),
+        (90, 'tanh'),
+        (90, 'tanh'),
     )
 
     layers = [lyr[0] for lyr in layers_and_nonlins]
     nonlins = [lyr[1] for lyr in layers_and_nonlins]
-    nonlins.append('relu') # output
+    nonlins.append('tanh') # output
     #layer_names = [f'{lyr[1]} (layer {idx})' for idx, lyr in enumerate(layers_and_nonlins)]
     layer_names = [f'Layer {idx+1}' for idx, lyr in enumerate(layers_and_nonlins)]
     layer_names.insert(0, 'Input')
