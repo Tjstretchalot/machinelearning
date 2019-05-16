@@ -131,7 +131,7 @@ def plot_pr_together(variances, fname_hint='pr_epoch_finished', suppress_zip=Fal
 
         trajs_with_meta.append(pr.TrajectoryWithMeta(trajectory=traj, label=f'$\sigma^2 = {vari}$'))
 
-    pr.plot_pr_trajectories(trajs_with_meta, os.path.join(SAVEDIR, 'prs'),
+    pr.plot_pr_trajectories(trajs_with_meta, os.path.join(SAVEDIR, f'prs_{fname_hint}'),
                             'PR varying $\sigma^2$', exist_ok=True)
 
 def train(variances):
