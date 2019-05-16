@@ -191,7 +191,7 @@ def main():
     variances = [0, 0.2]
     num_repeats = 2
     reuse_repeats = 0
-    train(variances, reuse_repeats, num_repeats)
+    #train(variances, reuse_repeats, num_repeats)
     plot_merged(variances, num_repeats)
 
 if __name__ == '__main__':

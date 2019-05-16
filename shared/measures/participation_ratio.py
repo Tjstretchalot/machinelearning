@@ -400,6 +400,7 @@ def plot_avg_pr_trajectories(trajectories: typing.List[TrajectoryWithMeta],
     x_vals = np.arange(depth)
     for ind, traj_meta in enumerate(trajectories):
         traj = traj_meta.trajectory
+        print(f'overall shape: {traj.overall.shape}; sem shape: {traj.overall_sem.shape}')
         ax.errorbar(x_vals, traj.overall.numpy(), yerr=traj.overall_sem*1.96, color=cols[ind], label=traj_meta.label)
     ax.legend()
 
