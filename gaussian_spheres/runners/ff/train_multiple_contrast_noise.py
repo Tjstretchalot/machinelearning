@@ -45,13 +45,13 @@ def train_with_noise(vari, rep, ignoreme): # pylint: disable=unused-argument
 
     network = FeedforwardLarge.create(
         input_dim=train_pwl.input_dim, output_dim=train_pwl.output_dim,
-        weights=wi.GaussianWeightInitializer(mean=0, vari=0.3, normalize_dim=0),
+        weights=wi.GaussianWeightInitializer(mean=0, vari=0.001, normalize_dim=0),
         biases=wi.ZerosWeightInitializer(),
         layer_sizes=layers,
         nonlinearity=nonlins
     )
 
-    _lr = 0.1
+    _lr = 0.0001
     trainer = tnr.GenericTrainer(
         train_pwl=train_pwl,
         test_pwl=test_pwl,
