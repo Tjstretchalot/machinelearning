@@ -65,7 +65,7 @@ def train_with_noise(vari, rep, ignoreme): # pylint: disable=unused-argument
         teacher=FFTeacher(),
         batch_size=20,
         learning_rate=_lr,
-        optimizer=torch.optim.Adam([p for p in network.parameters() if p.requires_grad], lr=_lr),
+        optimizer=torch.optim.SGD([p for p in network.parameters() if p.requires_grad], lr=_lr),
         criterion=torch.nn.CrossEntropyLoss()#
     )
 
