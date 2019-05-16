@@ -141,11 +141,42 @@ def train(variances):
         dig(vari, empty_arr)
     dig.join()
 
+def plot_merged(variances):
+    """Finds all the epochs that we went through on all of them and plots them"""
+    avail_data = None
+    for vari in variances:
+        savedir = os.path.join(SAVEDIR, f'variance_{vari}')
+        pr_dir = os.path.join(savedir, 'pr')
+        if os.path.exists(pr_dir + '.zip'):
+            shared.filetools.unzip(pr_dir + '.zip')
+
+        with os.scandir(pr_dir) as files:
+            first = avail_data is None
+            if first:
+                avail_data = set()
+            else:
+                missing_data = avail_data.copy()
+
+            for item in files:
+                if item.is_file():
+                    epoch = os.path.splitext(item.name)[0]
+                    if first:
+                        avail_data.add(epoch)
+                    else:
+                        missing_data.remove(epoch)
+            avail_data -= missing_data
+
+        shared.filetools.zipdir(pr_dir)
+
+    print(f'available data: {avail_data}')
+
+
+
 def main():
     """Main function"""
     variances = [0, 0.01, 0.02]
     #train(variances)
-    plot_pr_together(variances)
+    plot_merged(variances)
 
 if __name__ == '__main__':
     main()
