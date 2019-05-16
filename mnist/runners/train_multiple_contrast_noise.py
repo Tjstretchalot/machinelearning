@@ -112,7 +112,7 @@ def train_with_noise(vari, ignoreme): # pylint: disable=unused-argument
     trainer.train(network)
     dig.archive_raw_inputs(os.path.join(savedir, 'digestor_raw.zip'))
 
-def plot_pr_together(variances, fname_hint='epoch_finished'):
+def plot_pr_together(variances, fname_hint='epoch_finished', suppress_zip=False):
     trajs_with_meta = []
     for vari in variances:
         savedir = os.path.join(SAVEDIR, f'variance_{vari}')
@@ -125,8 +125,9 @@ def plot_pr_together(variances, fname_hint='epoch_finished'):
             shared.filetools.unzip(epoch_dir + '.zip')
 
         traj = pr.PRTrajectory.load(os.path.join(epoch_dir, 'traj.zip'))
-        shared.filetools.zipdir(epoch_dir)
-        shared.filetools.zipdir(pr_dir)
+        if not suppress_zip:
+            shared.filetools.zipdir(epoch_dir)
+            shared.filetools.zipdir(pr_dir)
 
         trajs_with_meta.append(pr.TrajectoryWithMeta(trajectory=traj, label=f'$\sigma^2 = {vari}$'))
 
@@ -167,9 +168,14 @@ def plot_merged(variances):
                         missing_data.remove(epoch)
             avail_data -= missing_data
 
-    print(f'available data: {avail_data}')
+    for avail in avail_data:
+        plot_pr_together(variances, fname_hint=avail, suppress_zip=True)
 
-
+    for vari in variances:
+        savedir = os.path.join(SAVEDIR, f'variance_{vari}')
+        pr_dir = os.path.join(savedir, 'pr')
+        if not os.path.exists(pr_dir + '.zip'):
+            shared.filetools.zipdir(pr_dir)
 
 def main():
     """Main function"""
