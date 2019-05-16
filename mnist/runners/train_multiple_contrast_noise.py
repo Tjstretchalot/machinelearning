@@ -181,7 +181,7 @@ def plot_merged(variances):
 
 def main():
     """Main function"""
-    variances = [0, 0.1, 0.2, 0.3]
+    variances = [0, 0.07, 0.14, 0.2]
     train(variances)
     plot_merged(variances)
 
