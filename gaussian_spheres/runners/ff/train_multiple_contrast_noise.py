@@ -147,7 +147,7 @@ def plot_pr_together(variances, num_repeats=1, fname_hint='pr_epoch_finished', s
 
 def train(variances, reuse_repeats, num_repeats):
     """Trains all the networks"""
-    dig = npmp.NPDigestor('train_mult_contr_noise', 4, target_module='mnist.runners.train_multiple_contrast_noise', target_name='train_with_noise')
+    dig = npmp.NPDigestor('train_mult_contr_noise', 4, target_module='gaussian_spheres.runners.ff.train_multiple_contrast_noise', target_name='train_with_noise')
     empty_arr = np.array([])
     for vari in variances:
         for i in range(reuse_repeats, num_repeats):
