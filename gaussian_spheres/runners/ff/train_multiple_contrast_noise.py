@@ -33,6 +33,10 @@ def train_with_noise(vari, rep, ignoreme): # pylint: disable=unused-argument
 
     layers_and_nonlins = (
         (DIM, 'isrlu'),
+        (DIM, 'isrlu'),
+        (DIM, 'isrlu'),
+        (DIM, 'isrlu'),
+        (DIM, 'isrlu'),
     )
 
     layers = [lyr[0] for lyr in layers_and_nonlins]
