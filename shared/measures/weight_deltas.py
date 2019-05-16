@@ -74,6 +74,7 @@ class Binned2Norm:
 
     def finish(self, context: GenericTrainingContext, result: dict):
         """Actually plots through the digestor"""
+        context.logger.info('[WDS] Plotting Binned2Norm (title=%s) (outpath=%s)', self.title, str(self.outpath))
         ind_norm_np = np.array(self.induced_norms, dtype='float64')
         self.dig(target_module='shared.measures.weight_deltas', target_name='_binned2norm',
                  induced=ind_norm_np, outpath=self.outpath, title=self.title)
