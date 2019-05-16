@@ -113,6 +113,7 @@ def train_with_noise(vari, ignoreme): # pylint: disable=unused-argument
     dig.archive_raw_inputs(os.path.join(savedir, 'digestor_raw.zip'))
 
 def plot_pr_together(variances, fname_hint='pr_epoch_finished', suppress_zip=False):
+    """Plots all the data from the given epoch together"""
     trajs_with_meta = []
     for vari in variances:
         savedir = os.path.join(SAVEDIR, f'variance_{vari}')
