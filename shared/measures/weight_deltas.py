@@ -72,7 +72,7 @@ class Binned2Norm:
         self.induced_norms.append(float(torch.norm(self.last_val - cur_val)))
         self.last_val = cur_val.clone()
 
-    def finish(self, context: GenericTrainingContext, result: dict):
+    def finished(self, context: GenericTrainingContext, result: dict):
         """Actually plots through the digestor"""
         context.logger.info('[WDS] Plotting Binned2Norm (title=%s) (outpath=%s)', self.title, str(self.outpath))
         ind_norm_np = np.array(self.induced_norms, dtype='float64')
