@@ -131,14 +131,18 @@ def plot_pr_together(variances, fname_hint='epoch_finished'):
     pr.plot_pr_trajectories(trajs_with_meta, os.path.join(SAVEDIR, 'prs'),
                             'PR varying $\sigma^2$')
 
-def main():
-    """Main function"""
-    variances = [0, 0.01, 0.02]
+def train(variances):
+    """Trains all the networks"""
     dig = npmp.NPDigestor('train_mult_contr_noise', 4, target_module='mnist.runners.train_multiple_contrast_noise', target_name='train_with_noise')
     empty_arr = np.array([])
     for vari in variances:
         dig(vari, empty_arr)
     dig.join()
+
+def main():
+    """Main function"""
+    variances = [0, 0.01, 0.02]
+    #train(variances)
     plot_pr_together(variances)
 
 if __name__ == '__main__':
