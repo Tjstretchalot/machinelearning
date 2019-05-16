@@ -88,7 +88,7 @@ def train_with_noise(vari, rep, ignoreme): # pylint: disable=unused-argument
     logpath = os.path.join(savedir, 'log.txt')
     (trainer
      .reg(tnr.EpochsTracker())
-     .reg(tnr.EpochsStopper(5))
+     .reg(tnr.EpochsStopper(1))
      .reg(tnr.DecayTracker())
      #.reg(tnr.DecayStopper(5))
      .reg(tnr.LRMultiplicativeDecayer())
@@ -195,9 +195,9 @@ def main():
     """Main function"""
     #variances = [0, 0.07, 0.14, 0.2]
     #num_repeats = 10
-    variances = [0, 0.01, 0.02, 0.03, 0.04, 0.05]
-    num_repeats = 100
-    reuse_repeats = 20
+    variances = [0, 0.025, 0.05, 0.075]
+    num_repeats = 10
+    reuse_repeats = 0
     train(variances, reuse_repeats, num_repeats)
     plot_merged(variances, num_repeats)
 
