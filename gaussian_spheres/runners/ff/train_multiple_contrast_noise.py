@@ -194,7 +194,7 @@ def main():
     """Main function"""
     #variances = [0, 0.07, 0.14, 0.2]
     #num_repeats = 10
-    variances = [0, 0.0075, 0.015]
+    variances = [0, 0.00075, 0.0015]
     num_repeats = 2
     reuse_repeats = 0
     train(variances, reuse_repeats, num_repeats)
