@@ -91,7 +91,7 @@ def train_with_noise(vari, rep, ignoreme): # pylint: disable=unused-argument
      .reg(tnr.InfOrNANDetecter())
      .reg(tnr.InfOrNANStopper())
      .reg(tnr.LRMultiplicativeDecayer(factor=0.9))
-     .reg(tnr.DecayOnPlateau())
+     .reg(tnr.DecayOnPlateau(verbose=False))
      #.reg(tnr.DecayEvery(1, verbose=False))
      .reg(tnr.AccuracyTracker(10, 1000, True))
      .reg(tnr.WeightNoiser(wi.GaussianWeightInitializer(mean=0, vari=vari), (lambda ctx: ctx.model.layers[-1].weight.data.detach()), 'scale', (lambda noise: wi.GaussianWeightInitializer(0, noise.vari * 0.9))))

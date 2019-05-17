@@ -350,9 +350,11 @@ class DecayOnPlateau:
         improved_loss (bool): if we improved the loss this epoch
 
         loop_loss (float): the best loss we've seen this loop
+
+        verbose (bool): True to print out loss info
     """
 
-    def __init__(self, patience: int = 5, improve_epsilon: float = 1e-06):
+    def __init__(self, patience: int = 5, improve_epsilon: float = 1e-06, verbose: bool = True):
         self.patience = patience
         self.improve_epsilon = improve_epsilon
 
@@ -361,6 +363,7 @@ class DecayOnPlateau:
         self.improved_loss = False
 
         self.loop_loss = float('inf')
+        self.verbose = verbose
 
     def decay_scheduler(self, context: GenericTrainingContext, loss: float, result: bool) -> bool:
         """Decays if the loss hasn't improved in self.patience epochs"""
@@ -369,9 +372,10 @@ class DecayOnPlateau:
         if epochs_tracker.new_epoch:
             if not self.improved_loss:
                 self.patience_used += 1
-                context.logger.debug('[DecayOnPlateau] used up patience #%s'
-                                     + ' (best loss this loop: %s)',
-                                     self.patience_used, self.loop_loss)
+                if self.verbose:
+                    context.logger.debug('[DecayOnPlateau] used up patience #%s'
+                                        + ' (best loss this loop: %s)',
+                                        self.patience_used, self.loop_loss)
                 self.loop_loss = float('inf')
                 if self.patience_used >= self.patience:
                     self.patience_used = 0
@@ -382,7 +386,8 @@ class DecayOnPlateau:
                 self.improved_loss = False
         else:
             if loss < self.best_loss - self.improve_epsilon:
-                context.logger.info('[DecayOnPlateau] improved loss to %s', loss)
+                if self.verbose:
+                    context.logger.info('[DecayOnPlateau] improved loss to %s', loss)
                 self.improved_loss = True
                 self.best_loss = loss
             if loss < self.loop_loss:
