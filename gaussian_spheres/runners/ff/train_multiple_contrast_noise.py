@@ -161,6 +161,7 @@ def train(variances, reuse_repeats, num_repeats):
 def plot_merged(variances, num_repeats):
     """Finds all the epochs that we went through on all of them and plots them"""
     avail_data = None
+    already_warned = set()
     for vari in variances:
         for rep in range(num_repeats):
             savedir = os.path.join(SAVEDIR, f'variance_{vari}', f'repeat_{rep}')
@@ -183,6 +184,10 @@ def plot_merged(variances, num_repeats):
                     elif epoch in missing_data:
                         missing_data.remove(epoch)
                 avail_data -= missing_data
+                for val in missing_data:
+                    if val not in already_warned:
+                        print(f'missing {val} in vari={vari}, rep={rep}')
+                        already_warned.add(val)
 
     for avail in avail_data:
         plot_pr_together(variances, num_repeats=num_repeats, fname_hint=avail, suppress_zip=True)
