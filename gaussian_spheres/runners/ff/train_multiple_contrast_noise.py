@@ -180,7 +180,7 @@ def plot_merged(variances, num_repeats):
                     epoch = os.path.splitext(item.name)[0]
                     if first:
                         avail_data.add(epoch)
-                    else:
+                    elif epoch in missing_data:
                         missing_data.remove(epoch)
                 avail_data -= missing_data
 
