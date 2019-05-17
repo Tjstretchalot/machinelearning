@@ -248,7 +248,7 @@ class OnEpochCaller:
             detector detects network explosion/implosion
     """
 
-    def __init__(self, epoch_filter: typing.Callable, on_epoch: typing.Callable, supress_on_inf_or_nan = True):
+    def __init__(self, epoch_filter: typing.Callable, on_epoch: typing.Callable, suppress_on_inf_or_nan = True):
         if not callable(epoch_filter):
             raise ValueError(f'expected epoch_filter is callable, got {epoch_filter} (type={type(epoch_filter)})')
         if not callable(on_epoch):
