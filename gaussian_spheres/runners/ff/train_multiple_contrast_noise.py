@@ -21,12 +21,13 @@ from gaussian_spheres.pwl import GaussianSpheresPWLP
 import os
 
 SAVEDIR = shared.filetools.savepath()
-DIM = 64
+INPUT_DIM = 64
+DIM = 32
 
 def train_with_noise(vari, rep, ignoreme): # pylint: disable=unused-argument
     """Entry point"""
     train_pwl = GaussianSpheresPWLP.create(
-        epoch_size=3000, input_dim=DIM, output_dim=10, cube_half_side_len=2,
+        epoch_size=3000, input_dim=INPUT_DIM, output_dim=10, cube_half_side_len=2,
         num_clusters=30, std_dev=0.02, mean=0, min_sep=0.2, force_split=True
     )
     test_pwl = train_pwl
