@@ -226,12 +226,12 @@ class FeedforwardLarge(FeedforwardNetwork):
         if not isinstance(output_dim, int):
             raise ValueError(f'expected output_dim is int, got {output_dim} (type={type(output_dim)})')
         if isinstance(nonlinearity, str):
-            if nonlinearity not in nonlins.LOOKUP:
-                raise ValueError(f'expected nonlinearity is in {set(nonlins.LOOKUP)}, got {nonlinearity}')
+            if nonlinearity not in nonlins.EXTENDED_LOOKUP:
+                raise ValueError(f'expected nonlinearity is in {set(nonlins.EXTENDED_LOOKUP)}, got {nonlinearity}')
         elif isinstance(nonlinearity, (tuple, list)):
             for idx, val in enumerate(nonlinearity):
-                if val not in nonlins.LOOKUP:
-                    raise ValueError(f'expected nonlinearity[{idx}] is in {set(nonlins.LOOKUP)}, got {val} (type={type(val)})')
+                if val not in nonlins.EXTENDED_LOOKUP:
+                    raise ValueError(f'expected nonlinearity[{idx}] is in {set(nonlins.EXTENDED_LOOKUP)}, got {val} (type={type(val)})')
         else:
             raise ValueError(f'expected nonlinearity is str or list[str], got {nonlinearity} (type={type(nonlinearity)}')
 
@@ -245,8 +245,12 @@ class FeedforwardLarge(FeedforwardNetwork):
 
             layer_size, train_weights, train_bias = layer_settings
             layer = torch.nn.Linear(last_dim, layer_size).double()
-            wi.deser_or_noop(weights).initialize(layer.weight.data)
-            wi.deser_or_noop(biases).initialize(layer.bias.data)
+            if weights is not None:
+                layer.weight.data[:] = 0
+                wi.deser_or_noop(weights).initialize(layer.weight.data)
+            if biases is not None:
+                layer.bias.data[:] = 0
+                wi.deser_or_noop(biases).initialize(layer.bias.data)
 
             layer.weight.requires_grad = train_weights
             layer.bias.requires_grad = train_bias
@@ -255,18 +259,22 @@ class FeedforwardLarge(FeedforwardNetwork):
             last_dim = layer_size
 
         layer = torch.nn.Linear(last_dim, output_dim).double()
-        wi.deser_or_noop(weights).initialize(layer.weight.data)
-        wi.deser_or_noop(biases).initialize(layer.bias.data)
+        if weights is not None:
+            layer.weight.data[:] = 0
+            wi.deser_or_noop(weights).initialize(layer.weight.data)
+        if biases is not None:
+            layer.bias.data[:] = 0
+            wi.deser_or_noop(biases).initialize(layer.bias.data)
         layer.weight.requires_grad = train_readout_weights
         layer.bias.requires_grad = train_readout_bias
         layers.append(layer)
 
-        _lookup = nonlins.LOOKUP
+        _lookup = nonlins.extended_lookup
 
         if isinstance(nonlinearity, str):
-            _nonlins = [_lookup[nonlinearity] for i in range(len(layers))]
+            _nonlins = [_lookup(nonlinearity) for i in range(len(layers))]
         else:
-            _nonlins = [_lookup[nonlin] for nonlin in nonlinearity]
+            _nonlins = [_lookup(nonlin) for nonlin in nonlinearity]
             if len(_nonlins) != len(layers):
                 raise ValueError(f'expected len(nonlinearity) = len(layers) but got {len(_nonlins)} nonlinearties and {len(layers)} layers')
 

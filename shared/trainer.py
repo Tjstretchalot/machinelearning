@@ -61,6 +61,7 @@ class GenericTrainer:
 
         batch_size (int): the initial batch size when training
         learning_rate (double): the initial learning rate for all parameters
+        die_on_inf_or_nan (bool): stops early if it detects initialization failure
         optimizer (torch.nn.optim.Optimizer): the optimizer to use
         criterion (torch.nn.modules.loss._Loss): typically torch.nn.CrossEntropyLoss
 
@@ -302,11 +303,13 @@ class DecayEvery:
         num_epochs (float): the number of epochs between decays
         next_decay (float): when we next decay
         best_loss (float): the best loss we have seen (used for printing)
+        verbose (bool): True to print out improvement info
     """
-    def __init__(self, num_epochs: float):
+    def __init__(self, num_epochs: float, verbose: bool = True):
         self.num_epochs = num_epochs
         self.best_loss = float('inf')
         self.next_decay = self.num_epochs
+        self.verbose = verbose
 
     def setup(self, context, **kwargs):
         """Initialize next decay and best loss"""
@@ -317,7 +320,8 @@ class DecayEvery:
         """Decays if it has been the required amount of epochs"""
         if loss < self.best_loss:
             self.best_loss = loss
-            context.logger.info('[DecayEvery] Improved loss to %s', loss)
+            if self.verbose:
+                context.logger.info('[DecayEvery] Improved loss to %s', loss)
 
         tracker = context.shared['epochs']
         if tracker.epochs > self.next_decay:

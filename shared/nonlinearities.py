@@ -38,25 +38,22 @@ class ISRLU(torch.autograd.Function):
         nisr, = ctx.saved_tensors
         return grad_output * (nisr.clone() ** 3)
 
-class MyRELU(torch.autograd.Function):
-    @staticmethod
-    def forward(ctx, tensor):
-        ctx.save_for_backward(tensor)
-        return torch.max(tensor, torch.tensor((0,), dtype=tensor.dtype))
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        tensor, = ctx.saved_tensors
-        res = grad_output.clone()
-        res[tensor < 0] = 0
-        return res
-
 LOOKUP = {
-    'relu': MyRELU.apply,#torch.relu,
+    'relu': torch.relu,
     'tanh': torch.tanh,
     'tanh_recip': tanh_recip,
     'none': linear,
     'linear': linear,
     'cube': cube,
-    'isrlu': ISRLU.apply,
+    'isrlu': ISRLU.apply
 }
+
+EXTENDED_LOOKUP = set(k for k in LOOKUP.keys())
+EXTENDED_LOOKUP.add('leakyrelu')
+
+def extended_lookup(val):
+    if val in LOOKUP:
+        return LOOKUP[val]
+    if val == 'leakyrelu':
+        return torch.nn.LeakyReLU()
+    raise ValueError(f'unknown nonlinearity: {val}')
