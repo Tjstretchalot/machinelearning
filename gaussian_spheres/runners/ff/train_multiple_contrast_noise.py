@@ -87,6 +87,8 @@ def train_with_noise(vari, rep, ignoreme): # pylint: disable=unused-argument
      .reg(tnr.EpochsStopper(500))
      .reg(tnr.DecayTracker())
      .reg(tnr.DecayStopper(10))
+     .reg(tnr.InfOrNANDetecter())
+     .reg(tnr.InfOrNANStopper())
      .reg(tnr.LRMultiplicativeDecayer(factor=0.9))
      .reg(tnr.DecayOnPlateau())
      #.reg(tnr.DecayEvery(1, verbose=False))
@@ -111,8 +113,13 @@ def train_with_noise(vari, rep, ignoreme): # pylint: disable=unused-argument
      .reg(tnr.ZipDirOnFinish(trained_net_dir))
     )
 
-    trainer.train(network)
+    result = trainer.train(network)
     dig.archive_raw_inputs(os.path.join(savedir, 'digestor_raw.zip'))
+
+    if result['inf_or_nan']:
+        print('[TMCN] Inf or NAN detected - repeating run')
+        shared.filetools.deldir(savedir)
+        train_with_noise(vari, rep, ignoreme)
 
 def plot_pr_together(variances, num_repeats=1, fname_hint='pr_epoch_finished', suppress_zip=False):
     """Plots all the data from the given epoch together"""

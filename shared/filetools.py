@@ -19,6 +19,23 @@ def savepath():
     module_path = os.path.splitext(module_path)[0]
     return os.path.join('out', module_path)
 
+def deldir(dirpath: str):
+    """Deletes the specified directory
+
+    Args:
+        dirpath (str): the path to the directory that is deleted
+    """
+
+    if not isinstance(dirpath, str):
+        raise ValueError(f'expected dirpath is str, got {dirpath} (type={type(dirpath)})')
+    if not os.path.exists(dirpath):
+        return
+
+    cwd = os.getcwd()
+    shutil.rmtree(dirpath)
+    os.chdir(cwd)
+
+
 def zipdir(dirpath: str):
     """Zips the specified directory and deletes it.
 

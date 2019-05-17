@@ -10,6 +10,7 @@ import math
 import os
 import shutil
 import time
+import numpy as np
 
 from shared.models.generic import Network
 from shared.events import Event
@@ -61,7 +62,6 @@ class GenericTrainer:
 
         batch_size (int): the initial batch size when training
         learning_rate (double): the initial learning rate for all parameters
-        die_on_inf_or_nan (bool): stops early if it detects initialization failure
         optimizer (torch.nn.optim.Optimizer): the optimizer to use
         criterion (torch.nn.modules.loss._Loss): typically torch.nn.CrossEntropyLoss
 
@@ -243,9 +243,12 @@ class OnEpochCaller:
             the create_ methods.
         on_epoch (callable): the object to call with the context and a filename
             hint
+
+        suppress_on_inf_or_nan (bool): if True then suppresses calls if the inf or nan
+            detector detects network explosion/implosion
     """
 
-    def __init__(self, epoch_filter: typing.Callable, on_epoch: typing.Callable):
+    def __init__(self, epoch_filter: typing.Callable, on_epoch: typing.Callable, supress_on_inf_or_nan = True):
         if not callable(epoch_filter):
             raise ValueError(f'expected epoch_filter is callable, got {epoch_filter} (type={type(epoch_filter)})')
         if not callable(on_epoch):
@@ -253,6 +256,7 @@ class OnEpochCaller:
 
         self.epoch_filter = epoch_filter
         self.on_epoch = on_epoch
+        self.suppress_on_inf_or_nan = suppress_on_inf_or_nan
 
     @classmethod
     def create_every(cls, on_epoch: typing.Callable,
@@ -285,11 +289,13 @@ class OnEpochCaller:
         """Checks epoch"""
         tracker = context.shared['epochs']
         if (tracker.first or tracker.new_epoch) and self.epoch_filter(int(tracker.epochs)):
-            self.on_epoch(context, f'epoch_{int(tracker.epochs)}')
+            if (not self.suppress_on_inf_or_nan) or (not context.shared['inf_or_nan'].detected):
+                self.on_epoch(context, f'epoch_{int(tracker.epochs)}')
 
     def finished(self, context: GenericTrainingContext, result: dict) -> None: # pylint: disable=unused-argument
         """Saves final_epoch"""
-        self.on_epoch(context, 'epoch_finished')
+        if (not self.suppress_on_inf_or_nan) or (not context.shared['inf_or_nan'].detected):
+            self.on_epoch(context, 'epoch_finished')
 
 class OnFinishCaller:
     """Calls a particular function when finished"""
@@ -507,7 +513,8 @@ class AccuracyTracker:
         result['accuracy'] = self.accuracy
 
 class WeightNoiser:
-    """Adds some noise to the last->output weights during training
+    """Adds some noise to the last->output weights during training. Always no-ops on
+    inf or nan if the detector is available
 
     Attributes:
         noise (WeightInitializer): the noise initialization
@@ -549,6 +556,8 @@ class WeightNoiser:
 
     def pre_train(self, context: GenericTrainingContext):
         """Updates the current noise and applies it"""
+        if 'inf_or_nan' in context.shared and context.shared['inf_or_nan'].detected:
+            return
         self.current_noise[:] = 0
         self.noise.initialize(self.current_noise)
         if self.noise_strat == 'add':
@@ -658,6 +667,39 @@ class EpochProgress:
         if printed:
             self.last_print = time.time()
             self.last_epoch = context.shared['epochs'].epochs
+
+class InfOrNANDetecter:
+    """Detects if there is an inf/nan loss. Stores self under
+    context.shared['inf_or_nan']
+
+    Attributes:
+        detected (bool): True if the network is in a bad state, false otherwise
+    """
+
+    def __init__(self):
+        self.detected = False
+
+    def setup(self, context: GenericTrainingContext, **kwargs):
+        """Stores self in context.shared and resets"""
+        context.shared['inf_or_nan'] = self
+        self.detected = False
+
+    def post_train(self, context: GenericTrainingContext, loss: float): # pylint: disable=unused-argument
+        """Checks for inf or nan loss / weights
+        """
+        if np.isinf(float(loss)) or np.isnan(float(loss)):
+            self.detected = True
+
+    def finished(self, context: GenericTrainingContext, result: dict): # pylint: disable=unused-argument
+        """Stores if we detected if or nan in the result"""
+        result['inf_or_nan'] = self.detected
+
+class InfOrNANStopper:
+    """Stops if the inf or nan detecter detects a bad state"""
+
+    def stopper(self, context: GenericTrainingContext) -> bool:
+        """Stops if inf or nan detected"""
+        return context.shared['inf_or_nan'].detected
 
 
 def save_model(outpath: str):
