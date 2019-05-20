@@ -21,13 +21,13 @@ from gaussian_spheres.pwl import GaussianSpheresPWLP
 import os
 
 SAVEDIR = shared.filetools.savepath()
-INPUT_DIM = 64
+INPUT_DIM = 32
 DIM = 32
 
 def train_with_noise(vari, rep, ignoreme): # pylint: disable=unused-argument
     """Entry point"""
     train_pwl = GaussianSpheresPWLP.create(
-        epoch_size=3000, input_dim=INPUT_DIM, output_dim=10, cube_half_side_len=2,
+        epoch_size=30000, input_dim=INPUT_DIM, output_dim=2, cube_half_side_len=2,
         num_clusters=30, std_dev=0.02, mean=0, min_sep=0.2, force_split=True
     )
     test_pwl = train_pwl
@@ -55,7 +55,7 @@ def train_with_noise(vari, rep, ignoreme): # pylint: disable=unused-argument
         nonlinearity=nonlins
     )
 
-    _lr = 1
+    _lr = 0.5
     trainer = tnr.GenericTrainer(
         train_pwl=train_pwl,
         test_pwl=test_pwl,
@@ -91,14 +91,14 @@ def train_with_noise(vari, rep, ignoreme): # pylint: disable=unused-argument
      .reg(tnr.InfOrNANDetecter())
      .reg(tnr.InfOrNANStopper())
      .reg(tnr.LRMultiplicativeDecayer(factor=0.9))
-     .reg(tnr.DecayOnPlateau(verbose=False))
-     #.reg(tnr.DecayEvery(1, verbose=False))
-     .reg(tnr.AccuracyTracker(10, 1000, True))
+     #.reg(tnr.DecayOnPlateau(verbose=False))
+     .reg(tnr.DecayEvery(1, verbose=False))
+     .reg(tnr.AccuracyTracker(1, 1000, True))
      .reg(tnr.WeightNoiser(wi.GaussianWeightInitializer(mean=0, vari=vari), (lambda ctx: ctx.model.layers[-1].weight.data.detach()), 'scale', (lambda noise: wi.GaussianWeightInitializer(0, noise.vari * 0.9))))
      #.reg(tnr.OnEpochCaller.create_every(dtt.during_training_ff(dtt_training_dir, True, dig), skip=100))
      #.reg(tnr.OnEpochCaller.create_every(pca_3d.during_training(pca3d_training_dir, True, dig, plot_kwargs={'layer_names': layer_names}), start=500, skip=100))
      #.reg(tnr.OnEpochCaller.create_every(pca_ff.during_training(pca_training_dir, True, dig), skip=100))
-     .reg(tnr.OnEpochCaller.create_every(pr.during_training_ff(pr_training_dir, True, dig), skip=100))
+     .reg(tnr.OnEpochCaller.create_every(pr.during_training_ff(pr_training_dir, True, dig), skip=1))
      #.reg(tnr.OnEpochCaller.create_every(svm.during_training_ff(svm_training_dir, True, dig), skip=100))
      #.reg(tnr.OnEpochCaller.create_every(satur.during_training(satur_training_dir, True, dig), skip=100))
      .reg(tnr.OnEpochCaller.create_every(tnr.save_model(trained_net_dir), skip=100))
@@ -152,7 +152,7 @@ def plot_pr_together(variances, num_repeats=1, fname_hint='pr_epoch_finished', s
 
 def train(variances, reuse_repeats, num_repeats):
     """Trains all the networks"""
-    dig = npmp.NPDigestor('train_mult_contr_noise', 4, target_module='gaussian_spheres.runners.ff.train_multiple_contrast_noise', target_name='train_with_noise')
+    dig = npmp.NPDigestor('train_mult_contr_noise', 2, target_module='gaussian_spheres.runners.ff.train_multiple_contrast_noise', target_name='train_with_noise')
     empty_arr = np.array([])
     for vari in variances:
         for i in range(reuse_repeats, num_repeats):

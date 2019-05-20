@@ -10,6 +10,7 @@ import math
 import os
 import shutil
 import time
+import collections
 import numpy as np
 
 from shared.models.generic import Network
@@ -151,8 +152,9 @@ class GenericTrainer:
         )
         del _logger
 
-        for param_group in context.optimizer.param_groups:
-            param_group['lr'] = self.learning_rate
+        if self.learning_rate is not None:
+            for param_group in context.optimizer.param_groups:
+                param_group['lr'] = self.learning_rate
 
         self.setup(context, **kwargs)
 
@@ -181,12 +183,14 @@ class EpochsTracker:
         epochs (float): the number of epochs we've gone through (correct from post_train (inclusive) to pre_loop (exclusive))
         new_epoch (bool): True if this is a new epoch, false otherwise
         first (bool): True if this is the first loop, false otherwise
+        verbose (bool): True to print out epoch information, False not to
     """
 
-    def __init__(self):
+    def __init__(self, verbose=True):
         self.epochs = 0.0
         self.new_epoch = False
         self.first = True
+        self.verbose = verbose
 
     def setup(self, context, **kwargs):
         """Initializes epochs to 0 and new_epoch to false"""
@@ -205,7 +209,8 @@ class EpochsTracker:
             new_epoch = math.floor(self.epochs) + 1
             self.epochs = new_epoch + (future_pos / context.train_pwl.epoch_size)
             self.new_epoch = True
-            context.logger.debug('[EpochsTracker] starting epoch %s', new_epoch)
+            if self.verbose:
+                context.logger.debug('[EpochsTracker] starting epoch %s', new_epoch)
         else:
             self.epochs = math.floor(self.epochs) + (future_pos / context.train_pwl.epoch_size)
             self.new_epoch = False
@@ -248,7 +253,7 @@ class OnEpochCaller:
             detector detects network explosion/implosion
     """
 
-    def __init__(self, epoch_filter: typing.Callable, on_epoch: typing.Callable, suppress_on_inf_or_nan = True):
+    def __init__(self, epoch_filter: typing.Callable, on_epoch: typing.Callable, suppress_on_inf_or_nan=True):
         if not callable(epoch_filter):
             raise ValueError(f'expected epoch_filter is callable, got {epoch_filter} (type={type(epoch_filter)})')
         if not callable(on_epoch):
@@ -260,7 +265,8 @@ class OnEpochCaller:
 
     @classmethod
     def create_every(cls, on_epoch: typing.Callable,
-                     start=0, skip=1, stop=None) -> 'OnEpochCaller':
+                     start=0, skip=1, stop=None,
+                     suppress_on_inf_or_nan=True) -> 'OnEpochCaller':
         """Calls the given callable every skip epochs after start, not including
         the stop epoch or any epoch after that.
 
@@ -283,7 +289,7 @@ class OnEpochCaller:
             if stop is not None and epoch >= stop:
                 return False
             return True
-        return cls(epoch_filter, on_epoch)
+        return cls(epoch_filter, on_epoch, suppress_on_inf_or_nan=suppress_on_inf_or_nan)
 
     def pre_loop(self, context: GenericTrainingContext):
         """Checks epoch"""
@@ -342,6 +348,8 @@ class DecayOnPlateau:
     Requires an EpochsTracker
 
     Attributes:
+        initial_patience (int): the number of epochs we wait initially before considering loss,
+            required for transfer learning
         patience (int): the number of epochs we wait for improvement
         improve_epsilon (float): the minimum improvement we consider
 
@@ -354,7 +362,9 @@ class DecayOnPlateau:
         verbose (bool): True to print out loss info
     """
 
-    def __init__(self, patience: int = 5, improve_epsilon: float = 1e-06, verbose: bool = True):
+    def __init__(self, patience: int = 5, improve_epsilon: float = 1e-06, verbose: bool = True,
+                 initial_patience: int = 0):
+        self.initial_patience = initial_patience
         self.patience = patience
         self.improve_epsilon = improve_epsilon
 
@@ -369,6 +379,9 @@ class DecayOnPlateau:
         """Decays if the loss hasn't improved in self.patience epochs"""
 
         epochs_tracker: EpochsTracker = context.shared['epochs']
+        if epochs_tracker.epochs < self.initial_patience:
+            return
+
         if epochs_tracker.new_epoch:
             if not self.improved_loss:
                 self.patience_used += 1
@@ -425,20 +438,32 @@ class LRMultiplicativeDecayer:
     Attributes:
         factor (float): the multipicative factor for the learning rate
         minimum (float): the minimum learning rate
+        reset_state (bool): True to reset state, False not to
     """
 
-    def __init__(self, factor=0.5, minimum=1e-09):
+    def __init__(self, factor=0.5, minimum=1e-09, reset_state=False):
         self.factor = factor
         self.minimum = minimum
+        self.reset_state = reset_state
 
     def decay(self, context: GenericTrainingContext) -> GenericTrainingContext:
         """Performs multiplicative LR decay"""
         lowest_lr = 1000
-        for param_group in context.optimizer.param_groups:
-            param_group['lr'] *= self.factor
-            if param_group['lr'] < self.minimum:
-                param_group['lr'] = self.minimum
-            lowest_lr = min(param_group['lr'], lowest_lr)
+        optims = None
+        if hasattr(context, 'optimizers'):
+            optims = context.optimizers
+        else:
+            optims = [context.optimizer]
+
+        for optim in optims:
+            if self.reset_state:
+                if hasattr(optim, 'state'):
+                    optim.state = collections.defaultdict(dict)
+            for param_group in optim.param_groups:
+                param_group['lr'] *= self.factor
+                if param_group['lr'] < self.minimum:
+                    param_group['lr'] = self.minimum
+                lowest_lr = min(param_group['lr'], lowest_lr)
         context.logger.debug('[LRMultiplicativeDecayer] learning rate=%s', lowest_lr)
         return context
 
@@ -632,6 +657,7 @@ class EpochProgress:
         print_every (float): number of seconds between prints
         last_print (float): when we last printed progress
         last_epoch (float): the value of epochs the last time we printed
+        last_loss (float): the latest loss we've seen
 
         hint_end_epoch (int): the epoch we expect to stop at
     """
@@ -641,6 +667,7 @@ class EpochProgress:
         self.last_print = None
         self.last_epoch = None
         self.hint_end_epoch = hint_end_epoch
+        self.last_loss = float('inf')
 
     def print(self, context: GenericTrainingContext):
         """Prints out progress information"""
@@ -654,11 +681,13 @@ class EpochProgress:
         seconds_per_epoch = duration / progress
         time_left_in_epoch = (int(epoch+1) - epoch) * seconds_per_epoch
 
-        context.logger.info(f'[EpochProgress] Epoch {epoch:.2f} ({progress:.2f} in last {duration:.2f}s, {seconds_per_epoch:.2f} secs/epoch, {time_left_in_epoch:.2f} secs rem in epoch)')
+        context.logger.info(f'[EpochProgress] Epoch {epoch:.2f} (loss: {self.last_loss}) ({progress:.2f} in last {duration:.2f}s, {seconds_per_epoch:.2f} secs/epoch, {time_left_in_epoch:.2f} secs rem in epoch)')
         if self.hint_end_epoch is not None and epoch < self.hint_end_epoch:
             epochs_left = (self.hint_end_epoch - epoch)
             time_left = epochs_left * seconds_per_epoch
             context.logger.info(f'[EpochProgress] {epochs_left} epochs / {time_left} secs until epoch {self.hint_end_epoch}')
+
+        self.last_loss = float('inf')
 
     def pre_train(self, context: GenericTrainingContext):
         """Determines if we should print out progress"""
@@ -672,6 +701,11 @@ class EpochProgress:
         if printed:
             self.last_print = time.time()
             self.last_epoch = context.shared['epochs'].epochs
+
+    def post_train(self, context: GenericTrainingContext, loss: float):
+        """Checks the best loss we've seen"""
+        if self.last_loss > loss:
+            self.last_loss = loss
 
 class InfOrNANDetecter:
     """Detects if there is an inf/nan loss. Stores self under

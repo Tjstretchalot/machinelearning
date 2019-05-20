@@ -4,6 +4,7 @@ import typing
 import torch
 
 from shared.models.generic import Network
+from shared.seqseqprod import Sequence
 
 class NetworkTeacher:
     """Describes something that can send points to a particular network."""
@@ -30,6 +31,46 @@ class NetworkTeacher:
             network (Network): the network to make classify
             points (torch.tensor [batch_size x input_dim]): the points to send to the network
             out (torch.tensor [batch_size]): where to save the output
+        """
+
+        raise NotImplementedError()
+
+class SeqSeqTeacher:
+    """Describes something that can teach sequence-sequence models"""
+
+    def teach_many(self, network: Network, optimizers: typing.List[torch.optim.Optimizer],
+                   criterion: typing.Any, inputs: typing.List[Sequence],
+                   outputs: typing.List[Sequence]) -> float:
+        """Teaches the specified network by feeding it sequences and their associated expected
+        outputs.
+
+        Arguments:
+            network (Network): the network to teach
+            optimizers (torch.optim.Optimizer): the optimizers to use. The number of meaning depend
+                on the network
+            criterion (torch.nn.loss._Loss): the loss function
+            inputs (list[Sequence]): a list of length batch_size that contains the sequences
+                to send to the network
+            outputs (list[Sequence]): a list of length batch_size that contains the sequences
+                we expect from the network
+
+        Returns:
+            the average loss on the batch
+        """
+
+        raise NotImplementedError()
+
+    def classify_many(self, network: Network,
+                      inputs: typing.List[Sequence]) -> typing.List[Sequence]:
+        """Runs the input through the network and returns the result
+
+        Arguments:
+            network (Network): the network to make transform/classify
+            inputs (list[Sequence]): a list of length batch_size that contains the sequences
+                to send to the network
+
+        Returns:
+            a list of length batch_size that contains the sequences the network produced
         """
 
         raise NotImplementedError()

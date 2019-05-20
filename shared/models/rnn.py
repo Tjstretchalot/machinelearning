@@ -52,7 +52,7 @@ class NaturalRNN(Network):
         self.hidden_dim = input_weights.shape[1]
 
         self.nonlinearity = nonlinearity
-        self.input_weights = torch.nn.Parameter(input_weights, requires_grad=False)
+        self.input_weights = torch.nn.Parameter(input_weights, requires_grad=True)
         self.input_biases = torch.nn.Parameter(input_biases, requires_grad=True)
         self.hidden_weights = torch.nn.Parameter(hidden_weights, requires_grad=True)
         self.hidden_biases = torch.nn.Parameter(hidden_biases, requires_grad=True)

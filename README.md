@@ -21,3 +21,8 @@ This is the typical MNIST dataset. To run this folder you need to download the M
 ## CIFAR
 
 This is for the CIFAR-10 dataset. This folder leverages the PyTorch auto-downloading feature and will thus be loaded automatically.
+
+## Typing
+
+This is a toy project where the goal is to teach a recurrent network to type like a human. It works like follows: First the network is presented the
+characters in the order that they should be typed, a signal is sent, then we begin to readout the characters with the delay to type them.
