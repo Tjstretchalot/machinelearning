@@ -98,6 +98,9 @@ def recur_unzip(path: str, result: typing.List[str] = None) -> typing.List[str]:
 
     my_split = os.path.abspath(path).split(os.path.sep)
     curdir = None
+    if my_split[0] == '':
+        curdir = my_split.pop(0)
+
     for thisdir in my_split:
         if curdir is None:
             curdir = thisdir
