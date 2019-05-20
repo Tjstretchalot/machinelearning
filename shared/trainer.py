@@ -11,6 +11,7 @@ import os
 import shutil
 import time
 import collections
+import json
 import numpy as np
 
 from shared.models.generic import Network
@@ -494,14 +495,18 @@ class AccuracyTracker:
 
         last_measure_epoch (int): the last epoch we measured at
         accuracy (float): the accuracy percentage on the last check
+
+        savepath (str, optional): if not None, saves accuracy to the given file on
+            completion
     """
-    def __init__(self, measure_every: int, num_points: int, validation: bool):
+    def __init__(self, measure_every: int, num_points: int, validation: bool, savepath: str = None):
         self.measure_every = measure_every
         self.num_points = num_points
         self.validation = validation
 
         self.last_measure_epoch = float('-inf')
         self.accuracy = float('nan')
+        self.savepath = savepath
 
     def measure(self, context: GenericTrainingContext) -> None:
         """Measures accuracy and updates last_measure_epoch and accuracy"""
@@ -541,6 +546,12 @@ class AccuracyTracker:
         """Remeasures and stores accuracy"""
         self.measure(context)
         result['accuracy'] = self.accuracy
+
+        if self.savepath is not None:
+            dirname = os.path.dirname(self.savepath)
+            os.makedirs(dirname, exist_ok=True)
+            with open(self.savepath, 'w') as outfile:
+                json.dump({'accuracy': self.accuracy}, outfile)
 
 class WeightNoiser:
     """Adds some noise to the last->output weights during training. Always no-ops on
