@@ -11,6 +11,7 @@ import shared.measures.participation_ratio as pr
 import shared.measures.svm as svm
 import shared.measures.saturation as satur
 import shared.measures.pca3d_throughtrain as pca3d_throughtrain
+import shared.measures.acts as measacts
 import shared.filetools
 import shared.measures.pca_3d as pca_3d
 import shared.npmp as npmp
@@ -70,7 +71,7 @@ def train_with_noise(vari, rep, ignoreme): # pylint: disable=unused-argument
     #pca3d_throughtrain.SKIP_TRAINS = 0
     #pca3d_throughtrain.NUM_FRAME_WORKERS = 6
 
-    dig = npmp.NPDigestor(f'TRMCN_{rep}_{vari}', 8)
+    dig = npmp.NPDigestor(f'TRMCN_{rep}_{vari}', 1)
 
     savedir = os.path.join(SAVEDIR, f'variance_{vari}', f'repeat_{rep}')
 
@@ -82,10 +83,11 @@ def train_with_noise(vari, rep, ignoreme): # pylint: disable=unused-argument
     satur_training_dir = os.path.join(savedir, 'saturation')
     trained_net_dir = os.path.join(savedir, 'trained_model')
     pca_throughtrain_dir = os.path.join(savedir, 'pca_throughtrain')
+    acts_training_dir = os.path.join(savedir, 'acts')
     logpath = os.path.join(savedir, 'log.txt')
     (trainer
      .reg(tnr.EpochsTracker())
-     .reg(tnr.EpochsStopper(500))
+     .reg(tnr.EpochsStopper(0.1))
      .reg(tnr.DecayTracker())
      .reg(tnr.DecayStopper(10))
      .reg(tnr.InfOrNANDetecter())
@@ -98,9 +100,10 @@ def train_with_noise(vari, rep, ignoreme): # pylint: disable=unused-argument
      #.reg(tnr.OnEpochCaller.create_every(dtt.during_training_ff(dtt_training_dir, True, dig), skip=100))
      #.reg(tnr.OnEpochCaller.create_every(pca_3d.during_training(pca3d_training_dir, True, dig, plot_kwargs={'layer_names': layer_names}), start=500, skip=100))
      #.reg(tnr.OnEpochCaller.create_every(pca_ff.during_training(pca_training_dir, True, dig), skip=100))
-     .reg(tnr.OnEpochCaller.create_every(pr.during_training_ff(pr_training_dir, True, dig), skip=1))
+     #.reg(tnr.OnEpochCaller.create_every(pr.during_training_ff(pr_training_dir, True, dig), skip=100))
      #.reg(tnr.OnEpochCaller.create_every(svm.during_training_ff(svm_training_dir, True, dig), skip=100))
      #.reg(tnr.OnEpochCaller.create_every(satur.during_training(satur_training_dir, True, dig), skip=100))
+     .reg(tnr.OnEpochCaller.create_every(measacts.during_training(acts_training_dir, dig), skip=100))
      .reg(tnr.OnEpochCaller.create_every(tnr.save_model(trained_net_dir), skip=100))
      #.reg(pca3d_throughtrain.PCAThroughTrain(pca_throughtrain_dir, layer_names, True))
      .reg(tnr.OnFinishCaller(lambda *args, **kwargs: dig.join()))
@@ -200,15 +203,29 @@ def plot_merged(variances, num_repeats):
             if not os.path.exists(pr_dir + '.zip'):
                 shared.filetools.zipdir(pr_dir)
 
+def merge_acts(variances, num_repeats, fname_hint='epoch_finished'):
+    """Merges the activation data into a single directory and set of files
+    for easier loading into matlab et al"""
+    for vari in variances:
+        data_to_merge = []
+        for rep in range(num_repeats):
+            savedir = os.path.join(SAVEDIR, f'variance_{vari}', f'repeat_{rep}')
+            acts_dir = os.path.join(savedir, 'acts')
+            epochdir = os.path.join(acts_dir, fname_hint, 'train')
+            data_to_merge.append(epochdir)
+        measacts.merge_many(os.path.join(SAVEDIR, f'merged_acts_{vari}'), *data_to_merge)
+
 def main():
     """Main function"""
     #variances = [0, 0.07, 0.14, 0.2]
     #num_repeats = 10
     variances = [0, 0.025, 0.05, 0.075]
-    num_repeats = 20
+    num_repeats = 5
     reuse_repeats = 0
     train(variances, reuse_repeats, num_repeats)
-    plot_merged(variances, num_repeats)
+    #plot_merged(variances, num_repeats)
+    merge_acts(variances, num_repeats)
+    #train_with_noise(0, 1, None)
 
 if __name__ == '__main__':
     main()

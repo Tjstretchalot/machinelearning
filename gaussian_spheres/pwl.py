@@ -79,13 +79,11 @@ class GaussianSpheresPWLP(PointWithLabelProducer):
 
         return cls(epoch_size, input_dim, output_dim, clusters, std_dev, mean)
 
-    def _fill(self, points: torch.tensor, labels: torch.tensor):
-        batch_size = points.shape[0]
-
-        cluster_inds = torch.randint(len(self.clusters), (batch_size,), dtype=torch.long)
+    def _fill_with_clusters(self, points: torch.tensor, labels: torch.tensor,
+                            cluster_inds: torch.tensor):
         vec = torch.zeros((self.input_dim,), dtype=torch.double)
 
-        for i in range(batch_size):
+        for i in range(points.shape[0]):
             clust = self.clusters[cluster_inds[i].item()]
             radius = torch.abs(self.radius_dist.sample()).double()
 
@@ -93,6 +91,34 @@ class GaussianSpheresPWLP(PointWithLabelProducer):
             vec *= (radius / torch.norm(vec))
             labels[i] = clust.label
             points[i, :] = clust.point + vec
+
+    def _fill(self, points: torch.tensor, labels: torch.tensor):
+        batch_size = points.shape[0]
+
+        cluster_inds = torch.randint(len(self.clusters), (batch_size,), dtype=torch.long)
+        self._fill_with_clusters(points, labels, cluster_inds)
+
+    def fill_uniform(self, points: torch.tensor, labels: torch.tensor):
+        """Fills the specified points and labels such that the labels are spread
+        evenly"""
+        batch_size = points.shape[0]
+        num_per_label = batch_size // self.output_dim
+        if num_per_label * self.output_dim != batch_size:
+            raise ValueError(f'cannot fill {batch_size} uniformly when output dim is {self.output_dim}')
+
+        cluster_lbls = np.zeros(len(self.clusters), dtype='int32')
+        for ind, clust in enumerate(self.clusters):
+            cluster_lbls[ind] = clust.label
+
+        cluster_inds = torch.zeros(0, dtype=torch.long)
+        for lbl in range(self.output_dim):
+            mask = cluster_lbls == lbl
+            viable_clust_inds = np.arange(len(self.clusters), dtype='int64')[mask]
+            lbl_clust_inds = np.random.choice(viable_clust_inds, (num_per_label,))
+
+            cluster_inds = torch.cat((cluster_inds, torch.from_numpy(lbl_clust_inds)))
+
+        self._fill_with_clusters(points, labels, cluster_inds)
 
     def _position(self, pos: int):
         pass

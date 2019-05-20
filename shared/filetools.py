@@ -4,6 +4,7 @@
 import sys
 import os
 import shutil
+import typing
 
 def savepath():
     """Gets the best savepath for the current script. The result
@@ -78,3 +79,40 @@ def unzip(archivepath: str):
     shutil.unpack_archive(archivepath, wo_ext)
     os.chdir(cwd)
     os.remove(archivepath)
+
+def recur_unzip(path: str, result: typing.List[str] = None) -> typing.List[str]:
+    """Tries to ensure that the specified path exists by extracting zip files that
+    exist where directories are missing with the same name. Returns a list of directories
+    unzipped in the order that they can be rezipped in
+
+    Args:
+        path (str): the path to recursively unzip to
+    """
+
+    if result is None:
+        result = []
+
+    if os.path.exists(path):
+        return result
+
+
+    my_split = os.path.abspath(path).split(os.path.sep)
+    curdir = None
+    for thisdir in my_split:
+        if curdir is None:
+            curdir = thisdir
+        else:
+            curdir += os.path.sep + thisdir
+        if not os.path.exists(curdir):
+            if not os.path.exists(curdir + '.zip'):
+                zipmany(*result)
+                raise FileNotFoundError(curdir)
+            result.append(curdir)
+            unzip(curdir + '.zip')
+    return result
+
+
+def zipmany(*paths):
+    """Zips the specified list of directories in the order that they are given"""
+    for path in paths:
+        zipdir(path)
