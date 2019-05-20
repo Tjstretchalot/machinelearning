@@ -71,7 +71,7 @@ def train_with_noise(vari, rep, ignoreme): # pylint: disable=unused-argument
     #pca3d_throughtrain.SKIP_TRAINS = 0
     #pca3d_throughtrain.NUM_FRAME_WORKERS = 6
 
-    dig = npmp.NPDigestor(f'TRMCN_{rep}_{vari}', 1)
+    dig = npmp.NPDigestor(f'TRMCN_{rep}_{vari}', 4)
 
     savedir = os.path.join(SAVEDIR, f'variance_{vari}', f'repeat_{rep}')
 
@@ -155,7 +155,7 @@ def plot_pr_together(variances, num_repeats=1, fname_hint='pr_epoch_finished', s
 
 def train(variances, reuse_repeats, num_repeats):
     """Trains all the networks"""
-    dig = npmp.NPDigestor('train_mult_contr_noise', 2, target_module='gaussian_spheres.runners.ff.train_multiple_contrast_noise', target_name='train_with_noise')
+    dig = npmp.NPDigestor('train_mult_contr_noise', 12, target_module='gaussian_spheres.runners.ff.train_multiple_contrast_noise', target_name='train_with_noise')
     empty_arr = np.array([])
     for vari in variances:
         for i in range(reuse_repeats, num_repeats):
