@@ -222,7 +222,7 @@ def main():
     variances = [0, 0.025, 0.05, 0.075]
     num_repeats = 5
     reuse_repeats = 0
-    train(variances, reuse_repeats, num_repeats)
+    #train(variances, reuse_repeats, num_repeats)
     #plot_merged(variances, num_repeats)
     merge_acts(variances, num_repeats)
     #train_with_noise(0, 1, None)
