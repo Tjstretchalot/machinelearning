@@ -10,7 +10,6 @@ import os
 import time
 import sys
 import json
-from dataclasses import dataclass
 import shared.measures.pca as pca
 from shared.models.ff import FeedforwardNetwork, FFHiddenActivations
 from shared.pwl import PointWithLabelProducer
@@ -69,7 +68,6 @@ def measure_pr_np(hidden_acts: np.ndarray, iden: typing.Any, outqueue: typing.An
     outqueue.put((iden, result))
     outqueue.close()
 
-@dataclass
 class PRTrajectory:
     """Describes the trajectory of participation ratio through time or layers
 
@@ -81,6 +79,11 @@ class PRTrajectory:
     overall: torch.tensor
     by_label: typing.List[torch.tensor]
     layers: bool
+
+    def __init__(self, overall, by_label, layers):
+        self.overall = overall
+        self.by_label = by_label
+        self.layers = layers
 
     def save(self, outfile: str, exist_ok=False):
         """Saves this trajaectory to the given file
