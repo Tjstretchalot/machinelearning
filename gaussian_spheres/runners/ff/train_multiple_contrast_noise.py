@@ -108,7 +108,7 @@ def train_with_noise(vari, rep, pr_repeats, ignoreme): # pylint: disable=unused-
     else:
         tonoise = [len(network.layers) - 1]
 
-    noisestyle = 'scale'
+    noisestyle = 'add'
     def layer_fetcher(lyr):
         return lambda ctx: ctx.model.layers[lyr].weight.data.detach()
 
@@ -241,7 +241,7 @@ def main():
     """Main function"""
     #variances = [0, 0.07, 0.14, 0.2]
     #num_repeats = 10
-    variances = [0, 0.025, 0.05, 0.075]
+    variances = [0, 0.025, 0.05, 0.075, 0.15]
     num_repeats = 5
     pr_repeats = 3
     reuse_repeats = 0
