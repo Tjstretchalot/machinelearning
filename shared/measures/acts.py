@@ -16,7 +16,8 @@ import shared.measures.utils as mutils
 import shared.npmp as npmp
 
 def save_using(samples: np.ndarray, labels: np.ndarray, *layer_acts: typing.Tuple[np.ndarray],
-               num_labels: int, outpath: str, exist_ok: bool, meta: dict):
+               num_labels: int, outpath: str, exist_ok: bool, meta: dict,
+               **additional: typing.Dict[str, np.ndarray]):
     """Stores the activations of the network to the given file, optionally
     overwriting it if it already exists.
 
@@ -31,6 +32,7 @@ def save_using(samples: np.ndarray, labels: np.ndarray, *layer_acts: typing.Tupl
         outpath (str): the file to save to, should be a zip file
         exist_ok (bool): True to overwrite existing files, False not to
         meta (dict): saved alongside the data in json-format
+        additional (dict[str, ndarray]): any additional arrays to save
     """
     filepath, folderpath = mutils.process_outfile(outpath, exist_ok)
 
@@ -38,7 +40,7 @@ def save_using(samples: np.ndarray, labels: np.ndarray, *layer_acts: typing.Tupl
 
     label_masks = [labels == val for val in range(num_labels)]
 
-    asdict = {'samples': samples, 'labels': labels}
+    asdict = dict({'samples': samples, 'labels': labels}, **additional)
     for layer, act in enumerate(layer_acts):
         asdict[f'layer_{layer}'] = act
         for label, mask in enumerate(label_masks):
@@ -165,6 +167,17 @@ def during_training(savepath: str, dig: npmp.NPDigestor, num_points=3000, meta: 
 
             points, labels = None, None
             hidacts.numpy()
+
+            additional = dict()
+            additional['epoch'] = np.array([context.shared['epochs'].epoch], dtype='float64')
+            if 'accuracy' in context.shared:
+                acctracker = context.shared['accuracy']
+                if acctracker.last_measure_epoch != context.shared['epochs'].epoch:
+                    context.logger.debug('[ACTS] Forcing accuracy measure')
+                    acctracker.measure(context)
+                additional['accuracy'] = np.array([acctracker.accuracy], dtype='float64')
+                context.logger.debug('[ACTS] Detected and included accuracy')
+
 
             dig(hidacts.sample_points, hidacts.sample_labels, *hidacts.hid_acts,
                 num_labels=pwl.output_dim, outpath=os.path.join(savepath, fname_hint, pwlname),
