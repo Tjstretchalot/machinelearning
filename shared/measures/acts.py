@@ -10,7 +10,7 @@ import os
 import json
 import time
 
-from shared.trainer import GenericTrainingContext
+from shared.trainer import GenericTrainingContext, AccuracyTracker
 import shared.filetools as filetools
 import shared.measures.utils as mutils
 import shared.npmp as npmp
@@ -174,10 +174,10 @@ def during_training(savepath: str, dig: npmp.NPDigestor, num_points=3000, meta: 
             hidacts.numpy()
 
             additional = dict()
-            additional['epoch'] = np.array([context.shared['epochs'].epoch], dtype='float64')
+            additional['epoch'] = np.array([context.shared['epochs'].epochs], dtype='float64')
             if 'accuracy' in context.shared:
-                acctracker = context.shared['accuracy']
-                if acctracker.last_measure_epoch != context.shared['epochs'].epoch:
+                acctracker: AccuracyTracker = context.shared['accuracy']
+                if acctracker.last_measure_epoch != context.shared['epochs'].epochs:
                     context.logger.debug('[ACTS] Forcing accuracy measure')
                     acctracker.measure(context)
                 additional['accuracy'] = np.array([acctracker.accuracy], dtype='float64')

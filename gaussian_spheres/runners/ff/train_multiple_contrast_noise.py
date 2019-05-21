@@ -116,6 +116,8 @@ def train_with_noise(vari, rep, ignoreme): # pylint: disable=unused-argument
     for lyr in tonoise:
         trainer.reg(tnr.WeightNoiser(wi.GaussianWeightInitializer(mean=0, vari=vari), layer_fetcher(lyr), noisestyle, noisedecayer))
 
+    if rep == 0:
+        trainer.reg(tnr.OnEpochCaller.create_every(pr.during_training_ff(pr_training_dir, True, dig), skip=100))
     (trainer
      #.reg(tnr.OnEpochCaller.create_every(dtt.during_training_ff(dtt_training_dir, True, dig), skip=100))
      #.reg(tnr.OnEpochCaller.create_every(pca_3d.during_training(pca3d_training_dir, True, dig, plot_kwargs={'layer_names': layer_names}), start=500, skip=100))
