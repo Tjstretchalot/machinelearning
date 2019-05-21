@@ -187,7 +187,7 @@ def during_training(savepath: str, dig: npmp.NPDigestor, num_points=3000, meta: 
             dig(hidacts.sample_points, hidacts.sample_labels, *hidacts.hid_acts,
                 num_labels=pwl.output_dim, outpath=os.path.join(savepath, fname_hint, pwlname),
                 exist_ok=False, meta=meta, target_module='shared.measures.acts',
-                target_name='save_using')
+                target_name='save_using', **additional)
     return on_step
 
 

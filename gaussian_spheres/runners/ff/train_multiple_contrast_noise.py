@@ -30,7 +30,7 @@ ALL_LAYERS_NOISED = True
 """If True, all except input->first layers are noised. If False, just output
 layers noised"""
 
-def train_with_noise(vari, rep, ignoreme): # pylint: disable=unused-argument
+def train_with_noise(vari, rep, pr_repeats, ignoreme): # pylint: disable=unused-argument
     """Entry point"""
     train_pwl = GaussianSpheresPWLP.create(
         epoch_size=30000, input_dim=INPUT_DIM, output_dim=2, cube_half_side_len=2,
@@ -116,7 +116,7 @@ def train_with_noise(vari, rep, ignoreme): # pylint: disable=unused-argument
     for lyr in tonoise:
         trainer.reg(tnr.WeightNoiser(wi.GaussianWeightInitializer(mean=0, vari=vari), layer_fetcher(lyr), noisestyle, noisedecayer))
 
-    if rep == 0:
+    if rep < pr_repeats:
         trainer.reg(tnr.OnEpochCaller.create_every(pr.during_training_ff(pr_training_dir, True, dig), skip=100))
     (trainer
      #.reg(tnr.OnEpochCaller.create_every(dtt.during_training_ff(dtt_training_dir, True, dig), skip=100))
@@ -175,13 +175,13 @@ def plot_pr_together(variances, num_repeats=1, fname_hint='pr_epoch_finished', s
     pr.plot_avg_pr_trajectories(
         trajs_with_meta, savepath, 'PR varying $\sigma^2$', exist_ok=True)
 
-def train(variances, reuse_repeats, num_repeats):
+def train(variances, reuse_repeats, num_repeats, pr_repeats):
     """Trains all the networks"""
     dig = npmp.NPDigestor('train_mult_contr_noise', 12, target_module='gaussian_spheres.runners.ff.train_multiple_contrast_noise', target_name='train_with_noise')
     empty_arr = np.array([])
     for vari in variances:
         for i in range(reuse_repeats, num_repeats):
-            dig(vari, i, empty_arr)
+            dig(vari, i, pr_repeats, empty_arr)
     dig.join()
 
 def plot_merged(variances, num_repeats):
@@ -243,11 +243,12 @@ def main():
     #num_repeats = 10
     variances = [0, 0.025, 0.05, 0.075]
     num_repeats = 5
+    pr_repeats = 3
     reuse_repeats = 0
-    train(variances, reuse_repeats, num_repeats)
-    #plot_merged(variances, num_repeats)
+    train(variances, reuse_repeats, num_repeats, pr_repeats)
+    plot_merged(variances, pr_repeats)#num_repeats)
     merge_acts(variances, num_repeats)
-    #train_with_noise(0, 1, None)
+    #train_with_noise(0, 1, 1, None)
 
 if __name__ == '__main__':
     main()
