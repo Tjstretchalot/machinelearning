@@ -1,5 +1,5 @@
 """This is a storage measure - it stores the activations of the network in both
-a python and matlab format
+a python and matlab format.
 """
 
 import numpy as np
@@ -14,6 +14,9 @@ from shared.trainer import GenericTrainingContext
 import shared.filetools as filetools
 import shared.measures.utils as mutils
 import shared.npmp as npmp
+
+SAVE_SPLIT = False
+"""If true, then save_using will save each array individually alongside the all array"""
 
 def save_using(samples: np.ndarray, labels: np.ndarray, *layer_acts: typing.Tuple[np.ndarray],
                num_labels: int, outpath: str, exist_ok: bool, meta: dict,
@@ -48,9 +51,10 @@ def save_using(samples: np.ndarray, labels: np.ndarray, *layer_acts: typing.Tupl
     scipy.io.savemat(os.path.join(folderpath, 'all'), asdict) # pylint: disable=no-member
     np.savez(os.path.join(folderpath, 'all'), **asdict)
 
-    for key, val in asdict.items():
-        scipy.io.savemat(os.path.join(folderpath, key), {key: val}) # pylint: disable=no-member
-        np.savez(os.path.join(folderpath, key), val)
+    if SAVE_SPLIT:
+        for key, val in asdict.items():
+            scipy.io.savemat(os.path.join(folderpath, key), {key: val}) # pylint: disable=no-member
+            np.savez(os.path.join(folderpath, key), val)
 
     scipy.io.savemat(os.path.join(folderpath, 'meta'), meta) # pylint: disable=no-member
     with open(os.path.join(folderpath, 'meta.json'), 'w') as outfile:
@@ -113,9 +117,10 @@ def merge_many(outpath: str, *paths, auto_open_zips=True):
     scipy.io.savemat(os.path.join(outpath, 'all'), cur_all) # pylint: disable=no-member
     np.savez(os.path.join(outpath, 'all'), **cur_all)
 
-    for key, val in cur_all.items():
-        scipy.io.savemat(os.path.join(outpath, key), {key: val}) # pylint: disable=no-member
-        np.savez(os.path.join(outpath, key), val)
+    if SAVE_SPLIT:
+        for key, val in cur_all.items():
+            scipy.io.savemat(os.path.join(outpath, key), {key: val}) # pylint: disable=no-member
+            np.savez(os.path.join(outpath, key), val)
 
 def during_training(savepath: str, dig: npmp.NPDigestor, num_points=3000, meta: dict = None):
     """Returns a callable that saves activations to the given file hint. This

@@ -16,6 +16,7 @@ import shared.filetools
 import shared.measures.pca_3d as pca_3d
 import shared.npmp as npmp
 import shared.criterion as mycrits
+import time
 import torch
 import numpy as np
 from gaussian_spheres.pwl import GaussianSpheresPWLP
@@ -24,6 +25,10 @@ import os
 SAVEDIR = shared.filetools.savepath()
 INPUT_DIM = 32
 DIM = 32
+
+ALL_LAYERS_NOISED = True
+"""If True, all except input->first layers are noised. If False, just output
+layers noised"""
 
 def train_with_noise(vari, rep, ignoreme): # pylint: disable=unused-argument
     """Entry point"""
@@ -96,14 +101,29 @@ def train_with_noise(vari, rep, ignoreme): # pylint: disable=unused-argument
      #.reg(tnr.DecayOnPlateau(verbose=False))
      .reg(tnr.DecayEvery(1, verbose=False))
      .reg(tnr.AccuracyTracker(1, 1000, True, savepath=os.path.join(savedir, 'accuracy.json')))
-     .reg(tnr.WeightNoiser(wi.GaussianWeightInitializer(mean=0, vari=vari), (lambda ctx: ctx.model.layers[-1].weight.data.detach()), 'scale', (lambda noise: wi.GaussianWeightInitializer(0, noise.vari * 0.9))))
+    )
+
+    if ALL_LAYERS_NOISED:
+        tonoise = list(range(1, len(network.layers)))
+    else:
+        tonoise = [len(network.layers) - 1]
+
+    noisestyle = 'scale'
+    def layer_fetcher(lyr):
+        return lambda ctx: ctx.model.layers[lyr].weight.data.detach()
+
+    noisedecayer = lambda noise: wi.GaussianWeightInitializer(0, noise.vari * 0.9)
+    for lyr in tonoise:
+        trainer.reg(tnr.WeightNoiser(wi.GaussianWeightInitializer(mean=0, vari=vari), layer_fetcher(lyr), noisestyle, noisedecayer))
+
+    (trainer
      #.reg(tnr.OnEpochCaller.create_every(dtt.during_training_ff(dtt_training_dir, True, dig), skip=100))
      #.reg(tnr.OnEpochCaller.create_every(pca_3d.during_training(pca3d_training_dir, True, dig, plot_kwargs={'layer_names': layer_names}), start=500, skip=100))
      #.reg(tnr.OnEpochCaller.create_every(pca_ff.during_training(pca_training_dir, True, dig), skip=100))
      #.reg(tnr.OnEpochCaller.create_every(pr.during_training_ff(pr_training_dir, True, dig), skip=100))
      #.reg(tnr.OnEpochCaller.create_every(svm.during_training_ff(svm_training_dir, True, dig), skip=100))
      #.reg(tnr.OnEpochCaller.create_every(satur.during_training(satur_training_dir, True, dig), skip=100))
-     .reg(tnr.OnEpochCaller.create_every(measacts.during_training(acts_training_dir, dig), skip=100))
+     .reg(tnr.OnEpochCaller.create_every(measacts.during_training(acts_training_dir, dig, meta={'time': time.time(), 'noised_layers': tonoise, 'variance': vari, 'repeat': rep}), skip=100))
      .reg(tnr.OnEpochCaller.create_every(tnr.save_model(trained_net_dir), skip=100))
      #.reg(pca3d_throughtrain.PCAThroughTrain(pca_throughtrain_dir, layer_names, True))
      .reg(tnr.OnFinishCaller(lambda *args, **kwargs: dig.join()))
