@@ -44,10 +44,19 @@ def save_using(samples: np.ndarray, labels: np.ndarray, *layer_acts: typing.Tupl
     label_masks = [labels == val for val in range(num_labels)]
 
     asdict = dict({'samples': samples, 'labels': labels}, **additional)
+    layers_stacked = None
     for layer, act in enumerate(layer_acts):
+        if layer > 0 and layer < len(layer_acts):
+            if layers_stacked is None:
+                layers_stacked = np.expand_dims(act, 0)
+            elif act.shape[0] == layers_stacked.shape[1] and act.shape[1] == layers_stacked.shape[2]:
+                layers_stacked = np.concatenate((layers_stacked, np.expand_dims(act, 0)), axis=0)
+
         asdict[f'layer_{layer}'] = act
         for label, mask in enumerate(label_masks):
             asdict[f'layer_{layer}_label_{label}'] = act[mask]
+
+    asdict['layers_stacked'] = layer
     scipy.io.savemat(os.path.join(folderpath, 'all'), asdict) # pylint: disable=no-member
     np.savez(os.path.join(folderpath, 'all'), **asdict)
 
