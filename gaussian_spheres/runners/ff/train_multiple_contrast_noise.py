@@ -145,7 +145,7 @@ def train_with_noise(vari, rep, pr_repeats, ignoreme): # pylint: disable=unused-
     if result['inf_or_nan']:
         print('[TMCN] Inf or NAN detected - repeating run')
         shared.filetools.deldir(savedir)
-        train_with_noise(vari, rep, ignoreme)
+        train_with_noise(vari, rep, pr_repeats, ignoreme)
 
 def plot_pr_together(variances, num_repeats=1, fname_hint='pr_epoch_finished', suppress_zip=False):
     """Plots all the data from the given epoch together"""
