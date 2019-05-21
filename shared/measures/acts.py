@@ -56,7 +56,7 @@ def save_using(samples: np.ndarray, labels: np.ndarray, *layer_acts: typing.Tupl
         for label, mask in enumerate(label_masks):
             asdict[f'layer_{layer}_label_{label}'] = act[mask]
 
-    asdict['layers_stacked'] = layer
+    asdict['layers_stacked'] = layers_stacked
     scipy.io.savemat(os.path.join(folderpath, 'all'), asdict) # pylint: disable=no-member
     np.savez(os.path.join(folderpath, 'all'), **asdict)
 
