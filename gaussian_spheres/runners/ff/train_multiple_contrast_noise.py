@@ -55,7 +55,7 @@ def train_with_noise(vari, rep, pr_repeats, ignoreme): # pylint: disable=unused-
 
     network = FeedforwardLarge.create(
         input_dim=train_pwl.input_dim, output_dim=train_pwl.output_dim,
-        weights=wi.GaussianWeightInitializer(mean=0, vari=2 / (DIM * 2), normalize_dim=None),
+        weights=wi.RectangularEyeWeightInitializer(gain=1),#wi.GaussianWeightInitializer(mean=0, vari=2 / (DIM * 2), normalize_dim=None),
         biases=wi.ZerosWeightInitializer(),
         layer_sizes=layers,
         nonlinearity=nonlins
@@ -241,8 +241,8 @@ def main():
     """Main function"""
     #variances = [0, 0.07, 0.14, 0.2]
     #num_repeats = 10
-    variances = [0, 0.025, 0.05, 0.075, 0.15]
-    num_repeats = 5
+    variances = [0, 0.025, 0.05, 0.075]
+    num_repeats = 3
     pr_repeats = 3
     reuse_repeats = 0
     train(variances, reuse_repeats, num_repeats, pr_repeats)
