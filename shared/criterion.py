@@ -23,6 +23,15 @@ def meansqerr(output: torch.tensor, labels: torch.tensor):
     adj_output[torch.arange(bats), labels] -= 1
     return torch.mean(adj_output ** 2)
 
+def hubererr(output: torch.tensor, labels: torch.tensor):
+    """This criterion is like meansqerr except uses huber loss instead of
+    squared error.
+    """
+    bats = output.shape[0]
+    target = torch.zeros_like(output)
+    target[torch.arange(bats), labels] += 1
+    return torch.functional.F.smooth_l1_loss(output, target)
+
 def create_meansqerr_regul(noise_strength=0):
     """This returns a which criterion evaluates a one-hot vector on mean-squared error
     with a regularizing term on the two-norm of the output"""

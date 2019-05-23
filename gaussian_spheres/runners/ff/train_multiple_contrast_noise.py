@@ -68,7 +68,7 @@ def train_with_noise(vari, rep, pr_repeats, ignoreme): # pylint: disable=unused-
         batch_size=1,
         learning_rate=_lr,
         optimizer=torch.optim.Adam([p for p in network.parameters() if p.requires_grad], lr=_lr),
-        criterion=torch.nn.SmoothL1Loss()#mycrits.meansqerr#torch.nn.CrossEntropyLoss()#
+        criterion=mycrits.hubererr#torch.nn.CrossEntropyLoss()#
     )
 
     #pca3d_throughtrain.FRAMES_PER_TRAIN = 4
