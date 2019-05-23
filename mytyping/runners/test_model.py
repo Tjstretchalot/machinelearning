@@ -39,7 +39,7 @@ def _eval(ssp, teacher, network):
 
 def main():
     """Meant to be invoked for this runner"""
-    folderpath = os.path.join('out', 'mytyping', 'runners', 'transfer_train_ussp', '4layer', '8', '0')
+    folderpath = os.path.join('out', 'mytyping', 'runners', 'transfer_train_ussp', '1layer', '0', '1')
     words = mwords.load_custom(os.path.join(folderpath, 'words.txt'))
     ssp = ussp.UniformSSP(words.words, 64)
 
