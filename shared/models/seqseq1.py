@@ -219,7 +219,7 @@ class DecoderRNN(Network):
             perf_stats.enter('HIDDEN_TO_OUTPUT')
             out = self.hidden_to_output(hidden, state)
             perf_stats.exit()
-            if callback(out):
+            if not callback(out):
                 return hidden, state
 
         while True:
@@ -229,7 +229,7 @@ class DecoderRNN(Network):
             perf_stats.exit_then_enter('HIDDEN_TO_OUTPUT')
             out = self.hidden_to_output(hidden, state)
             perf_stats.exit()
-            if callback(out):
+            if not callback(out):
                 return hidden, state
 
     def context_to_hidden(self, context: torch.tensor) -> torch.tensor:

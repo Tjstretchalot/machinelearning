@@ -13,6 +13,7 @@ import shared.models.seqseq1 as ss1
 import mytyping.encoding as menc
 import mytyping.wordlist as mwords
 import shared.filetools
+from shared.perf_stats import NoopPerfStats
 import os
 import logging
 
@@ -26,9 +27,8 @@ def _eval(ssp, teacher, network):
 
         res = teacher.classify_many(network, [inp])[0]
 
-        if menc.accuracy(res, out) >= 1:
-            continue
-
+        #if menc.accuracy(res, out) >= 1:
+        #    continue
         print(f'{true_str}<STP> --> ', end='')
         for item in res.raw:
             is_char, key, _ = menc.read_output(item)
@@ -36,6 +36,7 @@ def _eval(ssp, teacher, network):
                 print('<STP>')
             else:
                 print(key, end='')
+        print(f'\nacc: {menc.accuracy(res, out)}')
 
 def main():
     """Meant to be invoked for this runner"""
@@ -43,7 +44,7 @@ def main():
     words = mwords.load_custom(os.path.join(folderpath, 'words.txt'))
     ssp = ussp.UniformSSP(words.words, 64)
 
-    network = torch.load(os.path.join(folderpath, 'trained_models', 'epoch_800.pt'))
+    network = torch.load(os.path.join(folderpath, 'trained_models', 'epoch_finished.pt'))
 
     teacher = ss1.EncoderDecoderTeacher(menc.stop_failer, 30)
     _eval(ssp, teacher, network)
@@ -52,7 +53,8 @@ def main():
     _logger = logging.getLogger(__name__)
     _logger.setLevel(logging.DEBUG)
     logging.basicConfig(format='%(asctime)s %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p')
-    ctx = stnr.SSPGenericTrainingContext(model=network, teacher=teacher, train_ssp=ssp, test_ssp=ssp, optimizers=[], batch_size=1, shared={}, logger=_logger)
+    ctx = stnr.SSPGenericTrainingContext(model=network, teacher=teacher, train_ssp=ssp, test_ssp=ssp, optimizers=[], batch_size=1, shared={}, logger=_logger,
+                                         perf_stats=NoopPerfStats())
     ctx.shared['epochs'] = tnr.EpochsTracker()
     ctx.shared['epochs'].new_epoch = True
 
