@@ -15,7 +15,7 @@ import mytyping.wordlist as mwords
 import shared.filetools
 import os
 
-MODEL_NAME = '4layer'
+MODEL_NAME = '1layer'
 SAVEDIR = os.path.join(shared.filetools.savepath(), MODEL_NAME)
 
 def _eval(ssp, teacher, network):
@@ -59,7 +59,7 @@ def train_on(network, teacher, wordlist, num_words, thisdir, patience):
         batch_size=1,
         learning_rate=0.003,
         optimizers=[torch.optim.Adam([p for p in network.parameters() if p.requires_grad], lr=1)],
-        criterion=torch.nn.MSELoss()
+        criterion=torch.nn.SmoothL1Loss()
     )
 
     trained_model_dir = os.path.join(thisdir, 'trained_models')
@@ -68,7 +68,7 @@ def train_on(network, teacher, wordlist, num_words, thisdir, patience):
 
     (trainer
         .reg(tnr.EpochsTracker(verbose=False))
-        .reg(tnr.EpochProgress(5))
+        .reg(tnr.EpochProgress(15))
         .reg(tnr.DecayTracker())
         .reg(tnr.DecayOnPlateau(patience=patience, verbose=False, initial_patience=5))
         .reg(tnr.DecayStopper(5))
@@ -84,14 +84,14 @@ def train_on(network, teacher, wordlist, num_words, thisdir, patience):
 def main():
     """Meant to be invoked for this runner"""
     num_blocks = 50
-    block_size = 2
-    small_block_size = 2
+    block_size = 10
+    small_block_size = 5
     small_num_blocks = block_size / small_block_size
     start_block = 0 # set to 0 for a clean model
     start_small_block = 0 # set to 0 for a clean model
-    encoding_dim_exp = [1, 0, 2, 1, 0] * 10
-    context_dim_exp = [1, 0, 0, 0, 1] * 10
-    decoding_dim_exp = [1, 0, 2, 1, 0] * 10
+    encoding_dim_exp = [1, 2, 4, 1, 0] * ((num_blocks // block_size) + 1)
+    context_dim_exp = [1, 0, 0, 0, 3] * ((num_blocks // block_size) + 1)
+    decoding_dim_exp = [1, 2, 4, 1, 0] * ((num_blocks // block_size) + 1)
     patience = [45 for _ in range(num_blocks)]
 
     if small_num_blocks != int(small_num_blocks):
@@ -105,12 +105,12 @@ def main():
     if start_block == 0 and start_small_block == 0:
         network = ss1.EncoderDecoder(
             input_dim=menc.INPUT_DIM,
-            encoding_dim=2,
-            context_dim=1,
-            decoding_dim=2,
+            encoding_dim=8,
+            context_dim=4,
+            decoding_dim=8,
             output_dim=menc.OUTPUT_DIM,
-            encoding_layers=4,
-            decoding_layers=4
+            encoding_layers=1,
+            decoding_layers=1
         )
     else:
         network = torch.load(os.path.join(SAVEDIR, str(start_block), str(start_small_block), 'trained_models', 'epoch_finished.pt'))
