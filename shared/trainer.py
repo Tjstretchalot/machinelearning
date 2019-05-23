@@ -738,6 +738,7 @@ class InfOrNANDetecter:
         """Checks for inf or nan loss / weights
         """
         if np.isinf(float(loss)) or np.isnan(float(loss)):
+            context.logger.info(f'[InfOrNan] Bad loss: {loss}')
             self.detected = True
 
     def finished(self, context: GenericTrainingContext, result: dict): # pylint: disable=unused-argument

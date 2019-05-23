@@ -217,8 +217,8 @@ class SompolinskyFixedGainWeightInitializer(WeightInitializer):
         size = weights.shape[0]
         if weights.shape[1] != size:
             raise ValueError(f'matrix is not square: [{size}x{weights.shape[1]}]')
-        torch.eye(size, out=weights)
-        weights += torch.randn(size, size) * (self.gain / math.sqrt(size))
+        torch.eye(size, out=weights, dtype=weights.dtype)
+        weights += torch.randn(size, size, dtype=weights.dtype) * (self.gain / math.sqrt(size))
 
     def _serialize(self):
         return self.gain
@@ -308,6 +308,34 @@ class RectangularEyeWeightInitializer(WeightInitializer):
 
 WEIGHT_INIT_IMPLS[RectangularEyeWeightInitializer.identifier()] = (
     RectangularEyeWeightInitializer
+)
+
+class WICombine(WeightInitializer):
+    """Performs a series of weight initializers in order
+
+    Attributes:
+        children (list[WeightInitializer]): the weight initializers to invoke
+    """
+    def __init__(self, children):
+        self.children = children
+
+    @classmethod
+    def identifier(cls):
+        return "combine"
+
+    def initialize(self, weights):
+        for child in self.children:
+            child.initialize(weights)
+
+    def _serialize(self):
+        return tuple(child.serialize() for child in self.children)
+
+    @classmethod
+    def deserialize(cls, serd):
+        return cls(tuple(deserialize(child) for child in serd))
+
+WEIGHT_INIT_IMPLS[WICombine.identifier()] = (
+    WICombine
 )
 
 def deserialize(serd_weight_init) -> WeightInitializer:

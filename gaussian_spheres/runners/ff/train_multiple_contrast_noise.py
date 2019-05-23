@@ -2,7 +2,8 @@
 """
 
 import shared.setup_torch #pylint: disable=unused-import
-from shared.models.ff import FeedforwardLarge, FFTeacher
+from shared.models.ff import FeedforwardComplex, FFTeacher
+import shared.convutils as cu
 import shared.trainer as tnr
 import shared.weight_inits as wi
 import shared.measures.dist_through_time as dtt
@@ -37,39 +38,37 @@ def train_with_noise(vari, rep, pr_repeats, ignoreme): # pylint: disable=unused-
         num_clusters=30, std_dev=0.02, mean=0, min_sep=0.2, force_split=True
     )
     test_pwl = train_pwl
+    nets = cu.FluentShape(INPUT_DIM).verbose()
 
-    layers_and_nonlins = (
-        (DIM, 'leakyrelu'),
-        (DIM, 'leakyrelu'),
-        (DIM, 'leakyrelu'),
-        (DIM, 'leakyrelu'),
+    mywi = None#wi.WICombine([
+        #wi.RectangularEyeWeightInitializer(0.1),
+        #wi.GaussianWeightInitializer(mean=0, vari=0.3)
+    #])
+
+    network = FeedforwardComplex(INPUT_DIM, train_pwl.output_dim,
+        [
+            nets.linear_(DIM, weights_init=mywi),
+            nets.nonlin('tanh'),
+            nets.linear_(DIM, weights_init=mywi),
+            nets.nonlin('tanh'),
+            nets.linear_(DIM, weights_init=mywi),
+            nets.nonlin('tanh'),
+            nets.linear_(DIM, weights_init=mywi),
+            nets.nonlin('tanh'),
+            nets.linear_(train_pwl.output_dim),
+            nets.nonlin('tanh'),
+        ]
     )
 
-    layers = [lyr[0] for lyr in layers_and_nonlins]
-    nonlins = [lyr[1] for lyr in layers_and_nonlins]
-    nonlins.append('leakyrelu') # output
-    #layer_names = [f'{lyr[1]} (layer {idx})' for idx, lyr in enumerate(layers_and_nonlins)]
-    layer_names = [f'Layer {idx+1}' for idx, lyr in enumerate(layers_and_nonlins)]
-    layer_names.insert(0, 'Input')
-    layer_names.append('Output')
-
-    network = FeedforwardLarge.create(
-        input_dim=train_pwl.input_dim, output_dim=train_pwl.output_dim,
-        weights=wi.RectangularEyeWeightInitializer(gain=1),#wi.GaussianWeightInitializer(mean=0, vari=2 / (DIM * 2), normalize_dim=None),
-        biases=wi.ZerosWeightInitializer(),
-        layer_sizes=layers,
-        nonlinearity=nonlins
-    )
-
-    _lr = 0.5
+    _lr = 0.003
     trainer = tnr.GenericTrainer(
         train_pwl=train_pwl,
         test_pwl=test_pwl,
         teacher=FFTeacher(),
-        batch_size=20,
+        batch_size=1,
         learning_rate=_lr,
-        optimizer=torch.optim.SGD([p for p in network.parameters() if p.requires_grad], lr=_lr),
-        criterion=mycrits.meansqerr#torch.nn.CrossEntropyLoss()#
+        optimizer=torch.optim.Adam([p for p in network.parameters() if p.requires_grad], lr=_lr),
+        criterion=torch.nn.SmoothL1Loss()#mycrits.meansqerr#torch.nn.CrossEntropyLoss()#
     )
 
     #pca3d_throughtrain.FRAMES_PER_TRAIN = 4
@@ -79,6 +78,7 @@ def train_with_noise(vari, rep, pr_repeats, ignoreme): # pylint: disable=unused-
     dig = npmp.NPDigestor(f'TRMCN_{rep}_{vari}', 4)
 
     savedir = os.path.join(SAVEDIR, f'variance_{vari}', f'repeat_{rep}')
+    shared.filetools.deldir(savedir)
 
     dtt_training_dir = os.path.join(savedir, 'dtt')
     pca_training_dir = os.path.join(savedir, 'pca')
@@ -106,15 +106,16 @@ def train_with_noise(vari, rep, pr_repeats, ignoreme): # pylint: disable=unused-
     if ALL_LAYERS_NOISED:
         tonoise = list(range(1, len(network.layers)))
     else:
-        tonoise = [len(network.layers) - 1]
+        tonoise = [len(network.layers) - 2]
 
     noisestyle = 'add'
     def layer_fetcher(lyr):
-        return lambda ctx: ctx.model.layers[lyr].weight.data.detach()
+        return lambda ctx: ctx.model.layers[lyr].action.weight.data.detach()
 
     noisedecayer = lambda noise: wi.GaussianWeightInitializer(0, noise.vari * 0.9)
     for lyr in tonoise:
-        trainer.reg(tnr.WeightNoiser(wi.GaussianWeightInitializer(mean=0, vari=vari), layer_fetcher(lyr), noisestyle, noisedecayer))
+        if network.layers[lyr].is_module:
+            trainer.reg(tnr.WeightNoiser(wi.GaussianWeightInitializer(mean=0, vari=vari), layer_fetcher(lyr), noisestyle, noisedecayer))
 
     if rep < pr_repeats:
         trainer.reg(tnr.OnEpochCaller.create_every(pr.during_training_ff(pr_training_dir, True, dig), skip=100))
@@ -145,7 +146,7 @@ def train_with_noise(vari, rep, pr_repeats, ignoreme): # pylint: disable=unused-
     if result['inf_or_nan']:
         print('[TMCN] Inf or NAN detected - repeating run')
         shared.filetools.deldir(savedir)
-        train_with_noise(vari, rep, pr_repeats, ignoreme)
+        #train_with_noise(vari, rep, pr_repeats, ignoreme)
 
 def plot_pr_together(variances, num_repeats=1, fname_hint='pr_epoch_finished', suppress_zip=False):
     """Plots all the data from the given epoch together"""
@@ -245,10 +246,10 @@ def main():
     num_repeats = 3
     pr_repeats = 3
     reuse_repeats = 0
-    train(variances, reuse_repeats, num_repeats, pr_repeats)
-    plot_merged(variances, pr_repeats)#num_repeats)
-    merge_acts(variances, num_repeats)
-    #train_with_noise(0, 1, 1, None)
+    #train(variances, reuse_repeats, num_repeats, pr_repeats)
+    #plot_merged(variances, pr_repeats)#num_repeats)
+    #merge_acts(variances, num_repeats)
+    train_with_noise(0.025, 0, 1, None)
 
 if __name__ == '__main__':
     main()

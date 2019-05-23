@@ -372,7 +372,7 @@ class FluentShape:
         return ComplexLayer(
             style='nonlinearity', is_module=False,
             invokes_callback=invokes_callback,
-            action=snonlins.LOOKUP[name]
+            action=snonlins.extended_lookup(name)
         )
 
     def tanh(self, invokes_callback=True):
