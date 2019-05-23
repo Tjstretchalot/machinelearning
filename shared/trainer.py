@@ -498,9 +498,13 @@ class AccuracyTracker:
 
         savepath (str, optional): if not None, saves accuracy to the given file on
             completion
+
+        verbose (bool): True to actually print out accuracy information after measuring
     """
-    def __init__(self, measure_every: int, num_points: int, validation: bool, savepath: str = None):
+    def __init__(self, measure_every: int, num_points: int, validation: bool, savepath: str = None,
+                 verbose: bool = True):
         self.measure_every = measure_every
+        self.verbose = verbose
         self.num_points = num_points
         self.validation = validation
 
@@ -508,8 +512,10 @@ class AccuracyTracker:
         self.accuracy = float('nan')
         self.savepath = savepath
 
-    def measure(self, context: GenericTrainingContext) -> None:
+    def measure(self, context: GenericTrainingContext, verbose=None) -> None:
         """Measures accuracy and updates last_measure_epoch and accuracy"""
+        if verbose is None:
+            verbose = self.verbose
         pwl = context.test_pwl if self.validation else context.train_pwl
 
         real_num_points = int(math.ceil(self.num_points / context.batch_size) * context.batch_size)
@@ -529,7 +535,8 @@ class AccuracyTracker:
 
         self.last_measure_epoch = context.shared['epochs'].epochs
         self.accuracy = accuracy
-        context.logger.info('[AccuracyTracker] %s/%s (%s%%)', int(correct_preds), int(real_num_points), f'{float(accuracy*100):.2f}')
+        if verbose:
+            context.logger.info('[AccuracyTracker] %s/%s (%s%%)', int(correct_preds), int(real_num_points), f'{float(accuracy*100):.2f}')
 
     def setup(self, context: GenericTrainingContext, **kwargs) -> None: #pylint: disable=unused-argument
         """Stores self into context.shared['accuracy']"""
@@ -666,6 +673,7 @@ class EpochProgress:
 
     Attributes:
         print_every (float): number of seconds between prints
+        accuracy (bool): True to print accuracy information (forces remeasurment)
         last_print (float): when we last printed progress
         last_epoch (float): the value of epochs the last time we printed
         last_loss (float): the latest loss we've seen
@@ -673,8 +681,9 @@ class EpochProgress:
         hint_end_epoch (int): the epoch we expect to stop at
     """
 
-    def __init__(self, print_every=15, hint_end_epoch=None):
+    def __init__(self, print_every=15, hint_end_epoch=None, accuracy=False):
         self.print_every = float(print_every)
+        self.accuracy = accuracy
         self.last_print = None
         self.last_epoch = None
         self.hint_end_epoch = hint_end_epoch
@@ -693,6 +702,9 @@ class EpochProgress:
         time_left_in_epoch = (int(epoch+1) - epoch) * seconds_per_epoch
 
         context.logger.info(f'[EpochProgress] Epoch {epoch:.2f} (loss: {self.last_loss}) ({progress:.2f} in last {duration:.2f}s, {seconds_per_epoch:.2f} secs/epoch, {time_left_in_epoch:.2f} secs rem in epoch)')
+        if self.accuracy:
+            acctracker: AccuracyTracker = context.shared['accuracy']
+            acctracker.measure(context, verbose=True)
         if self.hint_end_epoch is not None and epoch < self.hint_end_epoch:
             epochs_left = (self.hint_end_epoch - epoch)
             time_left = epochs_left * seconds_per_epoch

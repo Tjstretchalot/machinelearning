@@ -68,13 +68,13 @@ def train_on(network, teacher, wordlist, num_words, thisdir, patience):
 
     (trainer
         .reg(tnr.EpochsTracker(verbose=False))
-        .reg(tnr.EpochProgress(15))
+        .reg(tnr.EpochProgress(5, accuracy=True))
         .reg(tnr.DecayTracker())
         .reg(tnr.DecayOnPlateau(patience=patience, verbose=False, initial_patience=5))
         .reg(tnr.DecayStopper(5))
         .reg(tnr.LRMultiplicativeDecayer(reset_state=True))
         .reg(tnr.OnEpochCaller.create_every(tnr.save_model(trained_model_dir), skip=50, suppress_on_inf_or_nan=False))
-        .reg(mtnr.AccuracyTracker(5, 100, True))
+        .reg(mtnr.AccuracyTracker(5, 100, True, verbose=False))
     )
 
     trainer.train(network)

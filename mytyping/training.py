@@ -9,22 +9,27 @@ class AccuracyTracker:
 
     Attributes:
         measure_every (int): the number of epochs between accuracy measures
+        verbose (bool): True to actually print out accuracy after measuring
         num_points (int): the number of points to measure
         validation (bool): true for a validation measure, false for a train data measure
 
         last_measure_epoch (int): the last epoch we measured at
         accuracy (float): the accuracy percentage on the last check
     """
-    def __init__(self, measure_every: int, num_points: int, validation: bool):
+    def __init__(self, measure_every: int, num_points: int, validation: bool,
+                 verbose: bool = False):
         self.measure_every = measure_every
+        self.verbose = verbose
         self.num_points = num_points
         self.validation = validation
 
         self.last_measure_epoch = float('-inf')
         self.accuracy = float('nan')
 
-    def measure(self, context: SSPGenericTrainingContext) -> None:
+    def measure(self, context: SSPGenericTrainingContext, verbose=None) -> None:
         """Measures accuracy and updates last_measure_epoch and accuracy"""
+        if verbose is None:
+            verbose = self.verbose
         ssp = context.test_ssp if self.validation else context.train_ssp
 
         real_num_points = min(self.num_points, ssp.epoch_size)
@@ -41,7 +46,8 @@ class AccuracyTracker:
 
         self.last_measure_epoch = context.shared['epochs'].epochs
         self.accuracy = accuracy
-        context.logger.info('[AccuracyTracker] %s/%s (%s%%)', int(correct_preds), int(real_num_points), f'{float(accuracy*100):.2f}')
+        if verbose:
+            context.logger.info('[AccuracyTracker] %s/%s (%s%%)', int(correct_preds), int(real_num_points), f'{float(accuracy*100):.2f}')
 
     def setup(self, context: SSPGenericTrainingContext, **kwargs) -> None: #pylint: disable=unused-argument
         """Stores self into context.shared['accuracy']"""
