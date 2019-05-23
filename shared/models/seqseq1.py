@@ -7,6 +7,7 @@ import torch.nn as nn
 
 import shared.typeutils as tus
 import shared.nonlinearities as nonlins
+from shared.perf_stats import PerfStats, NoopPerfStats
 from shared.models.generic import Network
 from shared.teachers import SeqSeqTeacher, Sequence
 
@@ -77,7 +78,8 @@ class EncoderRNN(Network):
         copy.out_interpreter.bias.data[:self.output_dim] = self.out_interpreter.bias.data
         return copy
 
-    def forward(self, inp: torch.tensor) -> torch.tensor: # pylint: disable=arguments-differ, line-too-long
+    def forward(self, inp: torch.tensor, # pylint: disable=arguments-differ
+                perf_stats: PerfStats = NoopPerfStats()) -> torch.tensor:
         """Presents the given string to the network and returns the context state
 
         Arguments:
@@ -85,16 +87,24 @@ class EncoderRNN(Network):
                 input features. May send multiple batches of the same sequence length at once.
                 The batch is indicated with the first index.  The second index corresponds to the
                 timestep of the sequence, and the last index tells us which feature
-
+            perf_stats (PerfStats): used for performance tracking, assumed to have already been
+                started and within a region that identifies this object. Use NoopPerfStats to
+                not use this.
         Returns:
             context_vector (torch.tensor[batch_size, output_size])
         """
         tus.check_tensors(inp=(inp, (('batch_size', None), ('sequence length', None),
                                      ('input size', self.input_dim)), torch.double))
+
+        perf_stats.enter('IN_INTERP')
+        interpinp = self.in_interpreter(inp.reshape(inp.shape[0] * inp.shape[1], inp.shape[2]))
+        perf_stats.exit_then_enter('IN_NONLIN')
         interpinp = self.in_nonlinearity(
-            self.in_interpreter(inp.reshape(inp.shape[0] * inp.shape[1], inp.shape[2]))
+            interpinp
         ).reshape(inp.shape[0], inp.shape[1], self.hidden_size)
+        perf_stats.exit_then_enter('GRU')
         out1, out2 = self.gru(interpinp)
+        perf_stats.exit()
         out2 = out2.transpose(0, 1) # pytorch bug I'm fairly sure
         tus.check_tensors(out1=(out1, (('batch_size', inp.shape[0]), ('sequence length', inp.shape[1]),
                                        ('hidden_size', self.hidden_size)), torch.double),
@@ -102,8 +112,13 @@ class EncoderRNN(Network):
                                        ('hidden_size', self.hidden_size)), torch.double))
         out1_last = out1[:, -1, :].reshape(out1.shape[0], self.hidden_size)
         out2_reshaped = out2.reshape(out2.shape[0], self.num_layers * self.hidden_size)
+        perf_stats.enter('CAT')
         stacked = torch.cat((out1_last, out2_reshaped), dim=1)
-        out = self.out_nonlinearity(self.out_interpreter(stacked))
+        perf_stats.exit_then_enter('OUT_INTERP')
+        out = self.out_interpreter(stacked)
+        perf_stats.exit_then_enter('OUT_NONLIN')
+        out = self.out_nonlinearity(out)
+        perf_stats.exit()
         tus.check_tensors(out=(out, (('batch_size', inp.shape[0]),
                                      ('output_size', self.output_dim)), torch.double))
         return out
@@ -171,7 +186,8 @@ class DecoderRNN(Network):
         return copy
 
 
-    def forward(self, inp: torch.tensor, callback: typing.Callable = None) -> torch.tensor: # pylint: disable=arguments-differ
+    def forward(self, inp: torch.tensor, callback: typing.Callable = None, # pylint: disable=arguments-differ
+                perf_stats: PerfStats = NoopPerfStats()) -> torch.tensor:
         """Goes from the input vector to a sequence. The sequence is returned by invoking the
         callback at each step, which must return True if the network needs to continue or False
         if the network is finished. This operation cannot be batched.
@@ -183,20 +199,37 @@ class DecoderRNN(Network):
             callback (function(output (tensor [output_dim])) -> bool, optional): accepts the step
                 of the network and returns True to continue generating a sequence and False to stop.
                 If None, acts like lambda out: True.
-
+            perf_stats (PerfStats, optional): used to handle performance tracking. assumed
+                to have been started and entered a region already that identifies this as the
+                decoder rnn
         Returns:
             out (tensor [output_dim]): the last output of the network
         """
         tus.check_tensors(inp=(inp, [('input_dim', self.input_dim)], torch.double))
+        perf_stats.enter('CONTEXT_TO_HIDDEN')
         inp_interp = self.context_to_hidden(inp)
 
+        perf_stats.exit_then_enter('HIDDEN_THROUGH_GRU')
         hidden, state = self.hidden_through_gru(inp_interp, None)
-        if callback is None or not callback(self.hidden_to_output(hidden, state)):
+        perf_stats.exit()
+
+        if callback is None:
             return hidden, state
+        else:
+            perf_stats.enter('HIDDEN_TO_OUTPUT')
+            out = self.hidden_to_output(hidden, state)
+            perf_stats.exit()
+            if callback(out):
+                return hidden, state
 
         while True:
+            perf_stats.enter('HIDDEN_THROUGH_GRU')
             hidden, state = self.hidden_through_gru(hidden, state)
-            if not callback(self.hidden_to_output(hidden, state)):
+
+            perf_stats.exit_then_enter('HIDDEN_TO_OUTPUT')
+            out = self.hidden_to_output(hidden, state)
+            perf_stats.exit()
+            if callback(out):
                 return hidden, state
 
     def context_to_hidden(self, context: torch.tensor) -> torch.tensor:
@@ -280,7 +313,8 @@ class EncoderDecoder(Network):
         copy.decoder = self.decoder.transfer_up(new_context_dim, new_decoding_dim)
         return copy
 
-    def forward(self, inp: torch.tensor, callback: typing.Callable) -> None: # pylint: disable=arguments-differ
+    def forward(self, inp: torch.tensor, callback: typing.Callable, # pylint: disable=arguments-differ
+                perf_stats: PerfStats = NoopPerfStats()) -> None:
         """Forwards through the network. This is not sufficient information for training really,
         which should probably understand the encoding / decoding dichotomy. However, it does make
         the forward pass pretty easy.
@@ -290,10 +324,14 @@ class EncoderDecoder(Network):
                 network.
             callback (function(tensor[output_dim]) -> bool): the callback is presented with each
                 output element of the sequence until it returns False
+            perf_stats (optional): used to store performance information
         """
 
-        context = self.encoder(inp.unsqueeze(dim=0))
-        self.decoder(context.squeeze(), callback)
+        perf_stats.enter('ENCODE')
+        context = self.encoder(inp.unsqueeze(dim=0), perf_stats)
+        perf_stats.exit_then_enter('DECODE')
+        self.decoder(context.squeeze(), callback, perf_stats)
+        perf_stats.exit()
 
 class EDReader:
     """Callable class that stores the output as a sequence until we reach a certain
@@ -335,7 +373,7 @@ class EncoderDecoderTeacher(SeqSeqTeacher):
         self.stop_failer = stop_failer
 
     def teach_single(self, network: EncoderDecoder, optimizers: typing.List[torch.optim.Optimizer],
-                     criterion: typing.Any, inp: Sequence, out: Sequence) -> float:
+                     criterion: typing.Any, inp: Sequence, out: Sequence, perf_stats: PerfStats) -> float:
         """Teaches the network with a single input / output sequence"""
         network.train()
 
@@ -343,39 +381,57 @@ class EncoderDecoderTeacher(SeqSeqTeacher):
             network.zero_grad()
             for optim in optimizers:
                 optim.zero_grad()
+            perf_stats.enter('INIT_ENCODER_INPUT')
             encoder_input = inp.raw if torch.is_tensor(inp.raw) else torch.tensor(inp.raw, dtype=torch.double) # pylint: disable=not-callable, line-too-long
-            context = network.encoder(encoder_input.unsqueeze(dim=0)).squeeze()
+            perf_stats.exit_then_enter('ENCODE')
+            context = network.encoder(encoder_input.unsqueeze(dim=0), perf_stats).squeeze()
+            perf_stats.exit()
 
+            perf_stats.enter('DECODE')
             loss = 0
+            perf_stats.enter('CONTEXT_TO_HIDDEN')
             cur_hidden, cur_state = network.decoder.context_to_hidden(context), None
+            perf_stats.exit()
             for exp in out.raw:
+                perf_stats.enter('INIT_EXP_TORCH')
                 exp_torch = exp if torch.is_tensor(exp) else torch.tensor(exp, dtype=torch.double) # pylint: disable=not-callable, line-too-long
+                perf_stats.exit_then_enter('HIDDEN_THROUGH_GRU')
                 cur_hidden, cur_state = network.decoder.hidden_through_gru(cur_hidden, cur_state)
+                perf_stats.exit_then_enter('HIDDEN_TO_OUTPUT')
                 act = network.decoder.hidden_to_output(cur_hidden, cur_state)
-
+                perf_stats.exit_then_enter('CRITERION')
                 loss += criterion(act, exp_torch)
+                perf_stats.exit()
 
+            perf_stats.exit()
+
+            perf_stats.enter('LOSS_BACKWARD')
             loss.backward()
+            perf_stats.exit_then_enter('OPTIMS_STEP')
             for optim in optimizers:
                 optim.step()
+            perf_stats.exit()
 
         return loss.item()
 
     def teach_many(self, network: EncoderDecoder, optimizers: typing.List[torch.optim.Optimizer],
                    criterion: typing.Any, inputs: typing.List[Sequence],
-                   outputs: typing.List[Sequence]) -> float:
+                   outputs: typing.List[Sequence],
+                   perf_stats: PerfStats = NoopPerfStats()) -> float:
         all_losses = torch.zeros(len(inputs), dtype=torch.double)
         for ind, inp in enumerate(inputs):
             out = outputs[ind]
-            all_losses[ind] = self.teach_single(network, optimizers, criterion, inp, out)
+            all_losses[ind] = self.teach_single(network, optimizers, criterion, inp, out, perf_stats)
         return all_losses.mean().item()
 
     def classify_many(self, network: EncoderDecoder,
-                      inputs: typing.List[Sequence]) -> typing.List[Sequence]:
+                      inputs: typing.List[Sequence],
+                      perf_stats: PerfStats = NoopPerfStats()) -> typing.List[Sequence]:
         result = []
-        for inp in inputs:
-            inp_tensor = inp.raw if torch.is_tensor(inp.raw) else torch.tensor(inp.raw, dtype=torch.double) # pylint: disable=not-callable, line-too-long
-            reader = EDReader(self.stop_failer, self.max_out_len)
-            network(inp_tensor, reader)
-            result.append(Sequence(raw=reader.output))
+        with torch.set_grad_enabled(False):
+            for inp in inputs:
+                inp_tensor = inp.raw if torch.is_tensor(inp.raw) else torch.tensor(inp.raw, dtype=torch.double) # pylint: disable=not-callable, line-too-long
+                reader = EDReader(self.stop_failer, self.max_out_len)
+                network(inp_tensor, reader, perf_stats)
+                result.append(Sequence(raw=reader.output))
         return result

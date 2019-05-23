@@ -4,13 +4,15 @@ import torch
 import typing
 
 ROUND_DELAYS = True
-DELAY_POWERS = 10
+DELAY_POWERS = 0 # 0 = autoencoder
 INPUT_DIM = 29
 OUTPUT_DIM = INPUT_DIM + DELAY_POWERS
 
 def round_delay(delay: float) -> int:
     """Rounds the delay to the next larger power of 2, capping it at the maximum delay the
     network can store"""
+    if DELAY_POWERS == 0:
+        return 0
     if delay <= 0:
         return 0
     if delay >= (1 << (DELAY_POWERS - 1)):
@@ -72,11 +74,12 @@ def read_output(output: torch.tensor) -> typing.Tuple[bool, typing.Optional[str]
     if output[0] > 0.5:
         return False, None, None
 
-    delay_powers = output[1:1 + DELAY_POWERS] > 0.5
     delay = 0
-    for i in range(DELAY_POWERS):
-        if delay_powers[i]:
-            delay += 2 ** i
+    if DELAY_POWERS > 0:
+        delay_powers = output[1:1 + DELAY_POWERS] > 0.5
+        for i in range(DELAY_POWERS):
+            if delay_powers[i]:
+                delay += 2 ** i
 
     char_ind = output[1 + DELAY_POWERS:].argmax()
     character = get_char_from_index(char_ind)
@@ -92,13 +95,14 @@ def encode_output(character: str, delay: float) -> torch.tensor:
     if ROUND_DELAYS:
         delay = round_delay(delay)
     result = torch.zeros(OUTPUT_DIM, dtype=torch.double)
-    remdelay = delay
-    i = DELAY_POWERS - 1
-    while remdelay > 0 and i >= 0:
-        if remdelay >= 2 ** i:
-            result[i + 1] = 1
-            remdelay -= 2 ** i
-        i -= 1
+    if DELAY_POWERS > 0:
+        remdelay = delay
+        i = DELAY_POWERS - 1
+        while remdelay > 0 and i >= 0:
+            if remdelay >= 2 ** i:
+                result[i + 1] = 1
+                remdelay -= 2 ** i
+            i -= 1
 
     result[1 + DELAY_POWERS:] = torch.tensor(encode_input(character)[1:], dtype=torch.double) # pylint: disable=not-callable
     return torch_to_tuple(result)

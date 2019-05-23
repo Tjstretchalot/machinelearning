@@ -138,6 +138,11 @@ class PerfStats:
         self._end()
         return True, False
 
+    def exit_then_enter(self, region_name):
+        """Invokes exit() and then enter() with the given region name"""
+        self.exit()
+        self.enter(region_name)
+
     def mean(self):
         """Determines the mean time spent in this region. Returns 0 if this region is not
         entered (i.e. the top-level region).
@@ -173,20 +178,26 @@ class PerfStats:
 
         child_names = np.zeros(len(self.children), dtype='object')
         child_means = np.zeros(len(self.children), dtype='float64')
+        child_amts = np.zeros(len(self.children), dtype='int32')
+        child_sums = np.zeros(len(self.children), dtype='float64')
 
         for (i, (k, child)) in enumerate(self.children.items()):
             child_names[i] = k
             child_means[i] = child.mean()
+            child_amts[i] = child.rolling_count
+            child_sums[i] = child.rolling_time
 
         sortinds = np.argsort(-child_means)
         child_names = child_names[sortinds]
         child_means = child_means[sortinds]
+        child_amts = child_amts[sortinds]
+        child_sums = child_sums[sortinds]
 
         num_hotspots = min(num_hotspots, len(self.children))
         num_skipped = len(self.children) - num_hotspots
 
         for i in range(num_hotspots):
-            print(f'{indent}{child_names[i]} - {child_means[i]}s', file=out)
+            print(f'{indent}{child_names[i]} - {child_means[i]}s (#: {child_amts[i]} | tot: {child_sums[i]})', file=out)
             self.children[child_names[i]].print(out, level, indent + '  ')
 
         if num_skipped > 0:
@@ -242,8 +253,36 @@ class LoggingPerfStats(PerfStats):
         self.loghandle.flush()
         self.last_logged = time.time() # in case printing takes a while
 
+    def force_log(self):
+        """Forces this perf stats to log right now"""
+        self._log()
+
     def close(self):
         """Closes the open loghandle if there is one"""
         if self.loghandle is not None:
             self.loghandle.close()
             self.loghandle = None
+
+class NoopPerfStats:
+    """A perf-stats like object that does nothing. Useful if you want to pass a perf
+    stats around without is None checks everywhere"""
+
+    def enter(self, *args, **kwargs):
+        """No-op"""
+        pass
+
+    def exit(self, *args, **kwargs) -> typing.Tuple[bool, bool]:
+        """No-op"""
+        return False, True
+
+    def exit_then_enter(self, *args, **kwargs):
+        """No-op"""
+        pass
+
+    def mean(self, *args, **kwargs) -> float:
+        """Always returns 0"""
+        return 0.0
+
+    def print(self, *args, **kwargs):
+        """No-op"""
+        pass

@@ -3,6 +3,7 @@ present to a (recurrent) neural network"""
 
 import shared.typeutils as tus
 import typing
+from shared.perf_stats import PerfStats, NoopPerfStats
 
 class Sequence(typing.NamedTuple):
     """Describes an arbitrary sequence of collections of floats"""
@@ -39,7 +40,8 @@ class SeqSeqProducer:
             self.position = self.position + 1
         return result
 
-    def get_current(self) -> typing.Tuple[Sequence, Sequence]:
+    def get_current(self,
+                    perf_stats: PerfStats = NoopPerfStats()) -> typing.Tuple[Sequence, Sequence]:
         """Gets the value at the current position. Returns the input and the output in that order"""
         raise NotImplementedError()
 

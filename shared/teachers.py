@@ -5,6 +5,7 @@ import torch
 
 from shared.models.generic import Network
 from shared.seqseqprod import Sequence
+from shared.perf_stats import PerfStats, NoopPerfStats
 
 class NetworkTeacher:
     """Describes something that can send points to a particular network."""
@@ -40,7 +41,8 @@ class SeqSeqTeacher:
 
     def teach_many(self, network: Network, optimizers: typing.List[torch.optim.Optimizer],
                    criterion: typing.Any, inputs: typing.List[Sequence],
-                   outputs: typing.List[Sequence]) -> float:
+                   outputs: typing.List[Sequence],
+                   perf_stats: PerfStats = NoopPerfStats()) -> float:
         """Teaches the specified network by feeding it sequences and their associated expected
         outputs.
 
@@ -53,6 +55,8 @@ class SeqSeqTeacher:
                 to send to the network
             outputs (list[Sequence]): a list of length batch_size that contains the sequences
                 we expect from the network
+            perf_stats (PerfStats, optional): used to track performance information. Starts
+                entering subdivisions of teachmany
 
         Returns:
             the average loss on the batch
@@ -61,13 +65,16 @@ class SeqSeqTeacher:
         raise NotImplementedError()
 
     def classify_many(self, network: Network,
-                      inputs: typing.List[Sequence]) -> typing.List[Sequence]:
+                      inputs: typing.List[Sequence],
+                      perf_stats: PerfStats = NoopPerfStats()) -> typing.List[Sequence]:
         """Runs the input through the network and returns the result
 
         Arguments:
             network (Network): the network to make transform/classify
             inputs (list[Sequence]): a list of length batch_size that contains the sequences
                 to send to the network
+            perf_stats (PerfStats, optional): used to store performance information. starts
+                by entering subdivisions of classify_many
 
         Returns:
             a list of length batch_size that contains the sequences the network produced

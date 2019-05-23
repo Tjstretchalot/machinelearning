@@ -8,6 +8,7 @@ from shared.models.generic import Network
 from shared.seqseqprod import SeqSeqProducer
 from shared.teachers import SeqSeqTeacher
 from shared.events import Event
+from shared.perf_stats import PerfStats, NoopPerfStats, LoggingPerfStats
 import shared.trainer
 
 class SSPGenericTrainingContext(typing.NamedTuple):
@@ -39,6 +40,7 @@ class SSPGenericTrainingContext(typing.NamedTuple):
 
     shared: dict
     logger: logging.Logger
+    perf_stats: PerfStats
 
     @property
     def train_pwl(self):
@@ -134,12 +136,19 @@ class SSPGenericTrainer:
             _logger.setLevel(logging.DEBUG)
             logging.basicConfig(format='%(asctime)s %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p')
 
+        if 'perf_stats' in kwargs:
+            perf_stats = kwargs['perf_stats']
+            del kwargs['perf_stats']
+        else:
+            perf_stats = NoopPerfStats()
+
         context = SSPGenericTrainingContext(
             model=model, teacher=self.teacher, train_ssp=self.train_ssp, test_ssp=self.test_ssp,
             batch_size=self.batch_size, optimizers=self.optimizers, shared=dict(),
-            logger=_logger
+            logger=_logger, perf_stats=perf_stats
         )
         del _logger
+        del perf_stats
 
         if self.learning_rate is not None:
             for optim in context.optimizers:
@@ -149,7 +158,9 @@ class SSPGenericTrainer:
         self.setup(context, **kwargs)
 
         while True:
+            context.perf_stats.enter('PRE_LOOP')
             self.pre_loop(context)
+            context.perf_stats.exit_then_enter('GET_INPUTS')
 
             inputs = []
             outputs = []
@@ -158,15 +169,25 @@ class SSPGenericTrainer:
                 inputs.append(inp)
                 outputs.append(out)
 
+            context.perf_stats.exit_then_enter('PRE_TRAIN')
             self.pre_train(context)
+            context.perf_stats.exit_then_enter('TEACH_MANY')
             loss = context.teacher.teach_many(context.model, context.optimizers, self.criterion,
-                                              inputs, outputs)
+                                              inputs, outputs, context.perf_stats)
+            context.perf_stats.exit_then_enter('POST_TRAIN')
             self.post_train(context, loss)
+            context.perf_stats.exit_then_enter('DECAY_SCHEDULER')
             if self.decay_scheduler(context, loss, False):
+                context.perf_stats.exit_then_enter('DECAY')
                 context = self.decay(context)
+            context.perf_stats.exit_then_enter('STOPPER')
             if self.stopper(context):
+                context.perf_stats.exit()
                 break
+            context.perf_stats.exit()
 
         result = dict()
+        context.perf_stats.enter('FINISHED')
         self.finished(context, result)
+        context.perf_stats.exit()
         return result

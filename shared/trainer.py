@@ -751,6 +751,29 @@ class InfOrNANStopper:
         """Stops if inf or nan detected"""
         return context.shared['inf_or_nan'].detected
 
+class TimeStopper:
+    """Stops after a certain amount of time has passed
+
+    Attributes:
+        time_secs (float): number of seconds to stop after
+
+        _stop_time (float): the actual time at which we will stop
+    """
+
+    def __init__(self, time_secs: float):
+        self.time_secs = time_secs
+        self._stop_time = None
+
+    def setup(self, context, **kwargs): # pylint: disable=unused-argument
+        """Stores the stop time"""
+        self._stop_time = time.time() + self.time_secs
+
+    def stopper(self, context: GenericTrainingContext) -> bool:
+        """Returns true if we've passed our stop time"""
+        if time.time() > self._stop_time:
+            context.logger.info('[TimeStopper] Stopping..')
+            return True
+        return False
 
 def save_model(outpath: str):
     """A callable for EpochCaller and similar that saves the model to the given
