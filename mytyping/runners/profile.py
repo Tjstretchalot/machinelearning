@@ -39,7 +39,7 @@ def main():
         batch_size=50,
         learning_rate=0.003,
         optimizers=[torch.optim.Adam([p for p in network.parameters() if p.requires_grad], lr=1)],
-        criterion=torch.nn.MSELoss()
+        criterion=torch.nn.SmoothL1Loss()
     )
 
     trained_model_dir = os.path.join(SAVEDIR, 'trained_models')

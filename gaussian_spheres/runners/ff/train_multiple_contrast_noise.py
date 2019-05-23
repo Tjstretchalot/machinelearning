@@ -35,39 +35,39 @@ def train_with_noise(vari, rep, pr_repeats, ignoreme): # pylint: disable=unused-
     """Entry point"""
     train_pwl = GaussianSpheresPWLP.create(
         epoch_size=30000, input_dim=INPUT_DIM, output_dim=2, cube_half_side_len=2,
-        num_clusters=30, std_dev=0.02, mean=0, min_sep=0.2, force_split=True
+        num_clusters=10, std_dev=0.2, mean=0, min_sep=0.4, force_split=True
     )
     test_pwl = train_pwl
     nets = cu.FluentShape(INPUT_DIM).verbose()
 
-    mywi = None#wi.WICombine([
-        #wi.RectangularEyeWeightInitializer(0.1),
-        #wi.GaussianWeightInitializer(mean=0, vari=0.3)
-    #])
+    mywi = wi.WICombine([
+        wi.RectangularEyeWeightInitializer(1),
+        wi.GaussianWeightInitializer(mean=0, vari=0.3)
+    ])
 
     network = FeedforwardComplex(INPUT_DIM, train_pwl.output_dim,
         [
             nets.linear_(DIM, weights_init=mywi),
-            nets.nonlin('tanh'),
+            nets.nonlin('leakyrelu'),
             nets.linear_(DIM, weights_init=mywi),
-            nets.nonlin('tanh'),
+            nets.nonlin('leakyrelu'),
             nets.linear_(DIM, weights_init=mywi),
-            nets.nonlin('tanh'),
+            nets.nonlin('leakyrelu'),
             nets.linear_(DIM, weights_init=mywi),
-            nets.nonlin('tanh'),
+            nets.nonlin('leakyrelu'),
             nets.linear_(train_pwl.output_dim),
-            nets.nonlin('tanh'),
+            nets.nonlin('leakyrelu'),
         ]
     )
 
-    _lr = 0.003
+    _lr = 0.01
     trainer = tnr.GenericTrainer(
         train_pwl=train_pwl,
         test_pwl=test_pwl,
         teacher=FFTeacher(),
-        batch_size=1,
+        batch_size=20,
         learning_rate=_lr,
-        optimizer=torch.optim.Adam([p for p in network.parameters() if p.requires_grad], lr=_lr),
+        optimizer=torch.optim.SGD([p for p in network.parameters() if p.requires_grad], lr=_lr),
         criterion=mycrits.hubererr#torch.nn.CrossEntropyLoss()#
     )
 
@@ -93,6 +93,7 @@ def train_with_noise(vari, rep, pr_repeats, ignoreme): # pylint: disable=unused-
     (trainer
      .reg(tnr.EpochsTracker())
      .reg(tnr.EpochsStopper(300))
+     .reg(tnr.EpochProgress(5, hint_end_epoch=10))
      .reg(tnr.DecayTracker())
      .reg(tnr.DecayStopper(10))
      .reg(tnr.InfOrNANDetecter())
@@ -242,14 +243,14 @@ def main():
     """Main function"""
     #variances = [0, 0.07, 0.14, 0.2]
     #num_repeats = 10
-    variances = [0, 0.025, 0.05, 0.075]
-    num_repeats = 3
-    pr_repeats = 3
+    variances = [0, 0.025]#, 0.05, 0.075]
+    num_repeats = 1
+    pr_repeats = 1
     reuse_repeats = 0
-    #train(variances, reuse_repeats, num_repeats, pr_repeats)
-    #plot_merged(variances, pr_repeats)#num_repeats)
+    train(variances, reuse_repeats, num_repeats, pr_repeats)
+    plot_merged(variances, pr_repeats)#num_repeats)
     #merge_acts(variances, num_repeats)
-    train_with_noise(0.025, 0, 1, None)
+    #train_with_noise(0, 0, 1, None)
 
 if __name__ == '__main__':
     main()
