@@ -5,6 +5,7 @@ import torch.nn
 from functools import reduce
 import operator
 from shared.models.ff import ComplexLayer
+from shared.models.ode import ODEBlock
 import shared.nonlinearities as snonlins
 import shared.weight_inits as wi
 
@@ -362,6 +363,15 @@ class FluentShape:
             print(f'linear_({output_dim}, invokes_callback={invokes_callback}) -> {self.dims}')
 
         return lyr
+
+    def ode_(self, wrappable, invokes_callback=True):
+        """Convenience function to embed another network into this network inside an
+        ODE Block"""
+        if self._verbose:
+            print(f'ode_(wrappable, invokes_callback={invokes_callback})')
+
+        return ComplexLayer(style='layer', is_module=True, invokes_callback=invokes_callback,
+                            action=ODEBlock(wrappable))
 
     def nonlin(self, name: str, invokes_callback=True):
         """Convenience function to invoke a given nonlinearity by name;

@@ -60,7 +60,7 @@ def main():
     trainer = tnr.GenericTrainer(
         train_pwl=pwl,
         test_pwl=pwl,
-        teacher=FFTeacher(),
+        teacher=FFTeacher(True),
         batch_size=20,
         learning_rate=0.001,
         optimizer=torch.optim.Adam([p for p in network.parameters() if p.requires_grad], lr=0.001),
@@ -83,6 +83,7 @@ def main():
     (trainer
      .reg(tnr.EpochsTracker())
      .reg(tnr.EpochsStopper(100))
+     .reg(tnr.InfOrNANDetecter())
      .reg(tnr.DecayTracker())
      .reg(tnr.DecayStopper(8))
      .reg(tnr.LRMultiplicativeDecayer())
@@ -91,12 +92,12 @@ def main():
      #.reg(tnr.WeightNoiser(
      #    wi.GaussianWeightInitializer(mean=0, vari=0.02, normalize_dim=None),
      #    lambda ctxt: ctxt.model.layers[-1].weight.data))
-     .reg(tnr.OnEpochCaller.create_every(satur.during_training(satur_training_dir, True, dig), skip=1000))
-     .reg(tnr.OnEpochCaller.create_every(dtt.during_training_ff(dtt_training_dir, True, dig), skip=1000))
+     #.reg(tnr.OnEpochCaller.create_every(satur.during_training(satur_training_dir, True, dig), skip=1000))
+     #.reg(tnr.OnEpochCaller.create_every(dtt.during_training_ff(dtt_training_dir, True, dig), skip=1000))
      .reg(tnr.OnEpochCaller.create_every(pca_ff.during_training(pca_training_dir, True, dig), skip=1000))
-     .reg(tnr.OnEpochCaller.create_every(pr.during_training_ff(pr_training_dir, True, dig), skip=1000))
-     .reg(tnr.OnEpochCaller.create_every(svm.during_training_ff(svm_training_dir, True, dig), skip=1000))
-     .reg(pca3d_throughtrain.PCAThroughTrain(pca_throughtrain_dir, layer_names, True))
+     #.reg(tnr.OnEpochCaller.create_every(pr.during_training_ff(pr_training_dir, True, dig), skip=1000))
+     #.reg(tnr.OnEpochCaller.create_every(svm.during_training_ff(svm_training_dir, True, dig), skip=1000))
+     #.reg(pca3d_throughtrain.PCAThroughTrain(pca_throughtrain_dir, layer_names, True))
      .reg(tnr.OnFinishCaller(lambda *args, **kwargs: dig.join()))
      .reg(tnr.ZipDirOnFinish(dtt_training_dir))
      .reg(tnr.ZipDirOnFinish(pca_training_dir))

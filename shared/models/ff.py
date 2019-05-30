@@ -365,7 +365,7 @@ class FeedforwardComplex(FeedforwardNetwork):
             raise ValueError('forward(inp[, acts_cb]) expected at least one argument, got 0')
 
         inp = args[0]
-        inp = inp.float() # todo
+        inp = inp.float()
         if not torch.is_tensor(inp):
             raise ValueError(f'forward(inp[, acts_cb]) expected inp is torch.tensor, got {inp} (type={type(inp)})')
 
@@ -381,21 +381,18 @@ class FeedforwardComplex(FeedforwardNetwork):
                 raise ValueError(f'forward(inp, acts_cb) expected acts_cb is callable, got {activations_callback}')
 
         activations = inp
-        #print(f'input: shape={inp.shape}, dtype={inp.dtype}')
         if activations_callback:
             activations_callback(FFHiddenActivations(layer=0, hidden_acts=inp.double()))
 
         layer_ind = 1
         for lyr in self.layers:
             activations = lyr.action(activations)
-            #print(f'after layer {idx} (style={lyr.style}), shape={activations.shape}, dtype={activations.dtype}')
             if lyr.invokes_callback and activations_callback:
                 cb_activations = activations.double()
                 if len(activations.shape) != 2:
                     cb_activations = activations.reshape(
                         activations.shape[0],
                         reduce(operator.mul, activations.shape[1:]))
-                    #print(f'after reshaping for callback: {cb_activations.shape}')
                 activations_callback(FFHiddenActivations(layer=layer_ind, hidden_acts=cb_activations))
                 layer_ind += 1
 
