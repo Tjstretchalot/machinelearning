@@ -7,6 +7,7 @@ from shared.models.generic import Network
 from shared.teachers import NetworkTeacher
 import shared.weight_inits as wi
 import shared.nonlinearities as nonlins
+import shared.typeutils as tus
 
 import typing
 import math
@@ -404,6 +405,8 @@ class FFTeacher(NetworkTeacher):
     """
     def teach_many(self, network: Network, optimizer: torch.optim.Optimizer, criterion: typing.Any,
                    points: torch.tensor, labels: torch.tensor):
+        tus.check_tensors(points=(points, (('batch', None), ('input_dim', network.input_dim)), torch.float32),
+                          labels=(labels, (('batch', points.shape[0]), ('output_dim', network.output_dim)), torch.float32))
         network.train()
         with torch.set_grad_enabled(True):
             network.zero_grad()
@@ -415,6 +418,8 @@ class FFTeacher(NetworkTeacher):
         return loss.item()
 
     def classify_many(self, network: Network, points: torch.tensor, out: torch.tensor):
+        tus.check_tensors(points=(points, (('batch', None), ('input_dim', network.input_dim)), torch.float32),
+                          out=(out, (('batch', points.shape[0]), ('output_dim', network.output_dim)), torch.float32))
         network.eval()
         with torch.no_grad():
             result = network(points)

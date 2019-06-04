@@ -7,6 +7,8 @@ from shared.models.generic import Network
 from shared.seqseqprod import Sequence
 from shared.perf_stats import PerfStats, NoopPerfStats
 
+import shared.typeutils as tus
+
 class NetworkTeacher:
     """Describes something that can send points to a particular network."""
 
@@ -35,6 +37,20 @@ class NetworkTeacher:
         """
 
         raise NotImplementedError()
+
+    def teach(self, network: Network, optimizer: torch.optim.Optimizer, criterion: typing.Any,
+              point: torch.tensor, label: torch.tensor) -> float:
+        """Equivalent to teach_many with batch_size 1"""
+        tus.check_tensors(point=(point, (network.input_dim,), torch.float32),
+                          label=(label, (network.output_dim,), torch.float32))
+        return self.teach_many(
+            network, optimizer, criterion,
+            point.unsqueeze(0), label.unsqueeze(0)
+            )
+
+    def classify(self, network: Network, point: torch.tensor, out: torch.tensor):
+        """Equivalent to classify_many with batch_size 1"""
+        self.classify_many(network, point.unsqueeze(0), out.unsqueeze(0))
 
 class SeqSeqTeacher:
     """Describes something that can teach sequence-sequence models"""

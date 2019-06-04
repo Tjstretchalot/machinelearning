@@ -24,5 +24,8 @@ This is for the CIFAR-10 dataset. This folder leverages the PyTorch auto-downloa
 
 ## Typing
 
-This is a toy project where the goal is to teach a recurrent network to type like a human. It works like follows: First the network is presented the
-characters in the order that they should be typed, a signal is sent, then we begin to readout the characters with the delay to type them.
+This is a sequence-sequence autoencoder that optionally includes a delay, although it isn't used anywhere. This is based on the encoder-decoder framework and uses online training (though not particularly effectively). This module also has a bit of work on trying to train more complex models by training a simpler model and then copying the weights over to a bigger network. It improves the accuracy somewhat but is not effective compared to attention networks
+
+## OR Reinforce
+
+This contains various reinforcement learning models for the optimax rogue environment. They are mostly based around the Q-learning concept with online learning (i.e. intrasession learning).
