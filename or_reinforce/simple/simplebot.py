@@ -5,6 +5,7 @@ import sys
 from collections import deque
 import numpy as np
 import random
+import time
 
 from optimax_rogue_bots.bot import Bot
 from optimax_rogue.game.state import GameState
@@ -151,7 +152,8 @@ class SimpleBot(Bot):
 
     def save(self):
         """saves the model"""
-        print('[simplebot] saving')
+        print(f'[simplebot] {time.ctime()} saving')
+        sys.stdout.flush()
         _save_model(self.model)
 
     def teach(self):
