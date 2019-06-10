@@ -53,7 +53,7 @@ def main():
      .reg(tnr.InfOrNANDetecter())
      .reg(tnr.InfOrNANDetecter())
      .reg(tnr.DecayTracker())
-     .reg(tnr.DecayStopper(8))
+     .reg(tnr.DecayStopper(5))
      .reg(tnr.LRMultiplicativeDecayer())
      .reg(tnr.DecayOnPlateau())
      .reg(tnr.AccuracyTracker(5, 1000, True))
@@ -104,13 +104,13 @@ def main():
     nha.torch()
     traj = pca_ff.to_trajectory(nha.sample_labels, nha.hid_acts, 3)
     pca_3d.plot_ff(traj, os.path.join(SAVEDIR, 'pca3d_after_train'), False, digestor=dig,
-                   frame_time=1000, layer_names=layer_names)
+                   layer_names=layer_names)
 
     nha = mutils.get_hidacts_rnn(network, test_pwl, trainer.teacher.recurrent_times)
     nha.torch()
     traj = pca_ff.to_trajectory(nha.sample_labels, nha.hid_acts, 3)
     pca_3d.plot_ff(traj, os.path.join(SAVEDIR, 'pca3d_after_test'), False, digestor=dig,
-                   frame_time=1000, layer_names=layer_names)
+                   layer_names=layer_names)
 
     dig.join()
 

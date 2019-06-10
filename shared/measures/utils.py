@@ -283,19 +283,21 @@ def get_hidacts_rnn(network: NaturalRNN, pwl: PointWithLabelProducer, recur_time
     return get_hidacts_rnn_with_sample(network, sample_points, sample_labels, recur_times)
 
 def get_hidacts_with_sample(network: Network, sample_points: torch.tensor,
-                            sample_labels: torch.tensor) -> NetworkHiddenActivations:
+                            sample_labels: torch.tensor,
+                            recur_times: int = 10) -> NetworkHiddenActivations:
     """Runs the given tensors through the network and returns the networks hidden activations.
 
     Args:
         network (Network): the network
         sample_points (torch.tensor): the points to run through the network
         sample_labels (torch.tensor): the labels for the points
+        recur_times (int, optional): if its a recurrent network, how many recurrent timesteps
     """
 
     if isinstance(network, FeedforwardNetwork):
         return get_hidacts_ff_with_sample(network, sample_points, sample_labels)
     if isinstance(network, NaturalRNN):
-        return get_hidacts_rnn_with_sample(network, sample_points, sample_labels)
+        return get_hidacts_rnn_with_sample(network, sample_points, sample_labels, recur_times)
 
     raise ValueError(f'unknown network type {network} (type={type(network)})')
 
