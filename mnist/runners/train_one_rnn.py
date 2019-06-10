@@ -113,3 +113,6 @@ def main():
                    frame_time=1000, layer_names=layer_names)
 
     dig.join()
+
+if __name__ == '__main__':
+    main()
