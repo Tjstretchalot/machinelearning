@@ -68,11 +68,11 @@ def main():
     pca.plot_trajectory(traj, savepath, exist_ok=True)
     del traj
 
-    print('--saving distance through time before training--')
-    savepath = os.path.join(SAVEDIR, 'dtt_before_train')
-    dtt.measure_dtt(network, train_pwl, 10, savepath, verbose=True, exist_ok=True)
-    savepath = os.path.join(SAVEDIR, 'dtt_before_test')
-    dtt.measure_dtt(network, test_pwl, 10, savepath, verbose=True, exist_ok=True)
+    # print('--saving distance through time before training--')
+    # savepath = os.path.join(SAVEDIR, 'dtt_before_train')
+    # dtt.measure_dtt(network, train_pwl, 10, savepath, verbose=True, exist_ok=True)
+    # savepath = os.path.join(SAVEDIR, 'dtt_before_test')
+    # dtt.measure_dtt(network, test_pwl, 10, savepath, verbose=True, exist_ok=True)
 
 
     print('--training--')
@@ -89,24 +89,24 @@ def main():
     pca.plot_trajectory(traj, savepath, exist_ok=True)
     del traj
 
-    print('--saving distance through time after training--')
-    savepath = os.path.join(SAVEDIR, 'dtt_after_train')
-    dtt.measure_dtt(network, train_pwl, 10, savepath, verbose=True, exist_ok=True)
-    savepath = os.path.join(SAVEDIR, 'dtt_after_test')
-    dtt.measure_dtt(network, test_pwl, 10, savepath, verbose=True, exist_ok=True)
+    # print('--saving distance through time after training--')
+    # savepath = os.path.join(SAVEDIR, 'dtt_after_train')
+    # dtt.measure_dtt(network, train_pwl, 10, savepath, verbose=True, exist_ok=True)
+    # savepath = os.path.join(SAVEDIR, 'dtt_after_test')
+    # dtt.measure_dtt(network, test_pwl, 10, savepath, verbose=True, exist_ok=True)
 
     print('--saving 3d pca plots after training--')
     layer_names = ['Input']
     for i in range(trainer.teacher.recurrent_times + 1):
         layer_names.append(f'Timestep {i+1}')
     dig = npmp.NPDigestor('mnist_train_one_rnn', 2)
-    nha = mutils.get_hidacts_rnn(network, train_pwl)
+    nha = mutils.get_hidacts_rnn(network, train_pwl, trainer.teacher.recurrent_times)
     nha.torch()
     traj = pca_ff.to_trajectory(nha.sample_labels, nha.hid_acts, 3)
     pca_3d.plot_ff(traj, os.path.join(SAVEDIR, 'pca3d_after_train'), False, digestor=dig,
                    frame_time=1000, layer_names=layer_names)
 
-    nha = mutils.get_hidacts_rnn(network, test_pwl)
+    nha = mutils.get_hidacts_rnn(network, test_pwl, trainer.teacher.recurrent_times)
     nha.torch()
     traj = pca_ff.to_trajectory(nha.sample_labels, nha.hid_acts, 3)
     pca_3d.plot_ff(traj, os.path.join(SAVEDIR, 'pca3d_after_test'), False, digestor=dig,
