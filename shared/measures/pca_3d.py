@@ -40,7 +40,7 @@ FRAMES_PER_SYNC = 10
 PRINT_EVERY = 15
 
 def _plot_npmp(projected_sample_labels: np.ndarray, *args, outfile: str = None, exist_ok=False,
-               frame_time: float = 16.67, layer_names: typing.Optional[typing.List[str]] = None):
+               **kwargs):
     """Structured to be npmp friendly, however not very friendly to use compared
     to the public variants. Simply delegates to _plot_ff_real
 
@@ -75,7 +75,7 @@ def _plot_npmp(projected_sample_labels: np.ndarray, *args, outfile: str = None, 
         ))
 
     traj = pca_ff.PCTrajectoryFF(snapshots)
-    _plot_ff_real(traj, outfile, exist_ok, frame_time=frame_time, layer_names=layer_names)
+    _plot_ff_real(traj, outfile, exist_ok, **kwargs)
 
 class MPLData:
     """MPL references for the videos
@@ -424,13 +424,20 @@ class FrameWorkerConnection:
         self.send_queue.put(('img', frame_num))
 
 def _plot_ff_real(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool,
-                  frame_time: float = 16.67, layer_names: typing.Optional[typing.List] = None):
+                  frame_time: float = 16.67, layer_names: typing.Optional[typing.List] = None,
+                  snapshots: typing.Optional[typing.List[typing.Tuple[int, int, dict]]] = None,
+                  video: bool = True):
     """Plots the given feed-forward pc trajectory
 
     Args:
         traj (pca_ff.PCTrajectoryFF): the trajectory to plot
         outfile (str): a path to the zip file we should save the plots in
         exist_ok (bool): true to overwrite existing zip, false to keep it
+        snapshots (list[tuple[int, int, dict]]): a list of snapshots to take, where a snapshot
+            is described with (layer, angle, savefig_kwargs). Defaults to many many screenshots
+            with a reasonable balance between performance and aesthetics. May be set to an empty
+            list for no snapshots
+        video (bool): if True a video is rendered, if False, just snapshots are rendered
     """
     if not isinstance(traj, pca_ff.PCTrajectoryFF):
         raise ValueError(f'expected traj is pca_ff.PCTrajectoryFF, got {traj} (type={type(traj)})')
@@ -443,6 +450,15 @@ def _plot_ff_real(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool,
             raise ValueError(f'expected layer_names is tuple or list, got {layer_names} (type={type(layer_names)})')
         if len(layer_names) != traj.num_layers:
             raise ValueError(f'expected len(layer_names) = traj.num_layers = {traj.num_layers}, got {len(layer_names)}')
+
+    if snapshots is None:
+        for lyr in range(traj.num_layers):
+            for angle in (15, 0, -15, 90, 180, 270):
+                snapshots.append((lyr, angle, {'dpi': DPI}))
+    else:
+        for snap in snapshots:
+            if 'dpi' not in snap[2]:
+                snap[2]['dpi'] = DPI
 
     fps = int(round(1000 / frame_time))
     frame_time = 1000 / fps
@@ -527,13 +543,16 @@ def _plot_ff_real(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool,
     snapshotdir = os.path.join(outfile_wo_ext, 'snapshots')
     os.makedirs(snapshotdir)
 
-    for lyr in range(traj.num_layers):
-        for angle in (15, 0, -15, 90, 180, 270):
-            movetime(0, force=lyr, norotate=True)
-            rotate_xz(0, angle)
-            fig.savefig(os.path.join(snapshotdir, f'snapshot_{angle+45}_{lyr}.png'), dpi=DPI)
+    for lyr, angle, sf_kwargs in snapshots:
+        movetime(0, force=lyr, norotate=True)
+        rotate_xz(0, angle)
+        filetype = 'png' if ('format' not in sf_kwargs) else sf_kwargs['format']
+        fig.savefig(os.path.join(snapshotdir, f'snapshot_{angle+45}_{lyr}.{filetype}'), **sf_kwargs)
 
     plt.close(fig)
+
+    if not video:
+        return
 
     scenes = [
         RotationScene(INPUT_SPIN_TIME, layer_names[0] if layer_names is not None else '', 0)

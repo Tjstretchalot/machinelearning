@@ -112,6 +112,9 @@ def main():
     pca_3d.plot_ff(traj, os.path.join(SAVEDIR, 'pca3d_after_test'), False, digestor=dig,
                    layer_names=layer_names)
 
+    print('--saving model--')
+    torch.save(network, os.path.join(SAVEDIR, 'model.pt'))
+
     dig.join()
 
 if __name__ == '__main__':
