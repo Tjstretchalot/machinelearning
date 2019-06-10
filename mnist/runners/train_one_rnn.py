@@ -51,6 +51,7 @@ def main():
      .reg(tnr.EpochsTracker())
      .reg(tnr.EpochsStopper(0.1))
      .reg(tnr.InfOrNANDetecter())
+     .reg(tnr.InfOrNANDetecter())
      .reg(tnr.DecayTracker())
      .reg(tnr.DecayStopper(8))
      .reg(tnr.LRMultiplicativeDecayer())
