@@ -7,6 +7,7 @@ import shared.weight_inits as wi
 import shared.measures.pca as pca
 import shared.measures.dist_through_time as dtt
 import shared.filetools
+import shared.measures.participation_ratio as pr
 import torch
 from gaussian_spheres.pwl import GaussianSpheresPWLP
 import os
@@ -43,6 +44,7 @@ def main():
     (trainer
      .reg(tnr.EpochsTracker())
      .reg(tnr.EpochsStopper(150))
+     .reg(tnr.InfOrNANDetecter())
      .reg(tnr.DecayTracker())
      .reg(tnr.DecayStopper(8))
      .reg(tnr.LRMultiplicativeDecayer())
@@ -66,14 +68,19 @@ def main():
     print('--finished training--')
     print(result)
     print('--saving pcs after training--')
-    traj = pca.find_trajectory(network, pwl, 10, 2)
 
     print('--saving distance through time after training--')
     savepath = os.path.join(SAVEDIR, 'dtt_after')
     dtt.measure_dtt(network, pwl, 10, savepath, verbose=True, exist_ok=True)
 
+    print('--saving pcs after training--')
+    traj = pca.find_trajectory(network, pwl, 10, 2)
     savepath = os.path.join(SAVEDIR, 'pca_after')
     pca.plot_trajectory(traj, savepath, exist_ok=True)
+
+    print('--saving pr after training')
+    savepath = os.path.join(SAVEDIR, 'pr_after')
+    #pr.measure_pr_rnn() # TODO
 
 if __name__ == '__main__':
     main()

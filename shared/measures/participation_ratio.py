@@ -12,6 +12,7 @@ import sys
 import json
 import shared.measures.pca as pca
 from shared.models.ff import FeedforwardNetwork, FFHiddenActivations
+from shared.models.rnn import NaturalRNN, RNNHiddenActivations, RNNTeacher
 from shared.pwl import PointWithLabelProducer
 from shared.filetools import zipdir, unzip
 from shared.trainer import GenericTrainingContext
@@ -199,6 +200,46 @@ def measure_pr_ff(network: FeedforwardNetwork, pwl_prod: PointWithLabelProducer)
     network(sample_points, on_hidacts)
 
     return PRTrajectory(overall=pr_overall, by_label=pr_by_label, layers=True)
+
+def measure_pr_rnn(network: NaturalRNN, teacher: RNNTeacher, pwl_prod: PointWithLabelProducer) -> PRTrajectory:
+    """Measures the participation ratio through time for the given recurrent network
+
+    Args:
+        network (NaturalRNN): the network to measure
+        teacher (RNNTeacher): the teacher for the network
+        pwl_prod (PointWithLabelProducer): the point with label producer to generate points with
+
+    Returns:
+        PRTrajectory: the participation ratio trajectory for the network
+    """
+    if not isinstance(network, NaturalRNN):
+        raise ValueError(f'expected network is a NaturalRNN, got {network} (type={type(network)})')
+    if not isinstance(pwl_prod, PointWithLabelProducer):
+        raise ValueError(f'expected pwl_prod is PointWithLabelProducer, got {pwl_prod} (type={type(pwl_prod)})')
+
+    num_samples = min(pwl_prod.epoch_size, 100 * pwl_prod.output_dim)
+    sample_points = torch.zeros((num_samples, network.input_dim), dtype=torch.double)
+    sample_labels = torch.zeros((num_samples,), dtype=torch.long)
+
+    pr_overall = torch.zeros(teacher.recurrent_times + 1, dtype=torch.double)
+    pr_by_label = torch.zeros((pwl_prod.output_dim, teacher.recurrent_times + 1), dtype=torch.double)
+
+    pwl_prod.fill(sample_points, sample_labels)
+
+    masks_by_lbl = [sample_labels == lbl for lbl in range(pwl_prod.output_dim)]
+
+    def on_hidacts(acts_info: RNNHiddenActivations):
+        hid_acts = acts_info.hidden_acts.detach()
+        layer = acts_info.layer
+
+        pr_overall[layer] = measure_pr(hid_acts)
+        for lbl in range(pwl_prod.output_dim):
+            pr_by_label[lbl, layer] = measure_pr(hid_acts[masks_by_lbl[lbl]])
+
+    network(sample_points, on_hidacts)
+
+    return PRTrajectory(overall=pr_overall, by_label=pr_by_label, layers=False)
+
 
 def plot_pr_trajectory(traj: PRTrajectory, savepath: str, exist_ok: bool = False,
                        label_map: typing.Optional[typing.Dict[int, str]] = None):
