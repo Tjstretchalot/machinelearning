@@ -42,8 +42,8 @@ def main():
         test_pwl=test_pwl,
         teacher=RNNTeacher(recurrent_times=10, input_times=1),
         batch_size=30,
-        learning_rate=0.003,
-        optimizer=torch.optim.RMSprop([p for p in network.parameters() if p.requires_grad], lr=0.003, alpha=0.9),
+        learning_rate=0.0001,
+        optimizer=torch.optim.RMSprop([p for p in network.parameters() if p.requires_grad], lr=0.0001, alpha=0.9),
         criterion=torch.nn.CrossEntropyLoss()
     )
 
