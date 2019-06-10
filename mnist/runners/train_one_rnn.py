@@ -49,7 +49,7 @@ def main():
 
     (trainer
      .reg(tnr.EpochsTracker())
-     .reg(tnr.EpochsStopper(0.1))
+     .reg(tnr.EpochsStopper(150))
      .reg(tnr.InfOrNANDetecter())
      .reg(tnr.InfOrNANDetecter())
      .reg(tnr.DecayTracker())
@@ -98,7 +98,7 @@ def main():
     print('--saving 3d pca plots after training--')
     layer_names = ['Input']
     for i in range(1, trainer.teacher.recurrent_times + 1):
-        layer_names.append(f'Timestep {i+1}')
+        layer_names.append(f'Timestep {i}')
     dig = npmp.NPDigestor('mnist_train_one_rnn', 2)
     nha = mutils.get_hidacts_rnn(network, train_pwl, trainer.teacher.recurrent_times)
     nha.torch()
