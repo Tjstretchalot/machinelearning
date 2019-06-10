@@ -222,7 +222,7 @@ def get_hidacts_ff(network: FeedforwardNetwork, pwl: PointWithLabelProducer,
     return get_hidacts_ff_with_sample(network, sample_points, sample_labels)
 
 def get_hidacts_rnn_with_sample(network: NaturalRNN, sample_points: torch.tensor,
-                                sample_labels: torch.tensor) -> NetworkHiddenActivations:
+                                sample_labels: torch.tensor, recur_times: int) -> NetworkHiddenActivations:
     """Gets the hidden activations for a recurrent network when running the given sample
     points through it, at attaches the given sample labels to the result.
 
@@ -236,6 +236,8 @@ def get_hidacts_rnn_with_sample(network: NaturalRNN, sample_points: torch.tensor
     """
     if not isinstance(network, NaturalRNN):
         raise ValueError(f'expected network is NaturalRNN, got {network} (type={type(network)})')
+    if not isinstance(recur_times, int):
+        raise ValueError(f'expected recur_times is int, got {recur_times} (type={type(recur_times)})')
     verify_points_and_labels(sample_points, sample_labels)
 
     hid_acts = []
@@ -243,10 +245,10 @@ def get_hidacts_rnn_with_sample(network: NaturalRNN, sample_points: torch.tensor
     def on_hidacts(acts_info: RNNHiddenActivations):
         hid_acts.append(acts_info.hidden_acts.detach())
 
-    network(sample_points, sample_labels, on_hidacts)
+    network(sample_points, recur_times, on_hidacts)
     return NetworkHiddenActivations('recurrent', sample_points, sample_labels, hid_acts)
 
-def get_hidacts_rnn(network: NaturalRNN, pwl: PointWithLabelProducer,
+def get_hidacts_rnn(network: NaturalRNN, pwl: PointWithLabelProducer, recur_times: int,
                     num_points: typing.Optional[int] = None) -> NetworkHiddenActivations:
     """Gets the hidden activations for the given recurrent network, acquiring at most
     num_points from the producer.
@@ -269,6 +271,8 @@ def get_hidacts_rnn(network: NaturalRNN, pwl: PointWithLabelProducer,
         raise ValueError(f'expected pwl is PointWithLabelProducer, got {pwl} (type={type(pwl)})')
     if not isinstance(num_points, int):
         raise ValueError(f'expected num_points is int, got {num_points} (type={type(num_points)})')
+    if not isinstance(recur_times, int):
+        raise ValueError(f'expected recur_times is int, got {recur_times} (type={type(recur_times)})')
 
     sample_points = torch.zeros((num_points, pwl.input_dim), dtype=torch.double)
     sample_labels = torch.zeros(num_points, dtype=torch.int)
@@ -276,7 +280,7 @@ def get_hidacts_rnn(network: NaturalRNN, pwl: PointWithLabelProducer,
     pwl.mark()
     pwl.fill(sample_points, sample_labels)
     pwl.reset()
-    return get_hidacts_rnn_with_sample(network, sample_points, sample_labels)
+    return get_hidacts_rnn_with_sample(network, sample_points, sample_labels, recur_times)
 
 def get_hidacts_with_sample(network: Network, sample_points: torch.tensor,
                             sample_labels: torch.tensor) -> NetworkHiddenActivations:
