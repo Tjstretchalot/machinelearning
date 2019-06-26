@@ -159,7 +159,7 @@ def _start_spec(executable, port, create_flags):
         creationflags=create_flags
     )
 
-def _get_experiences(settings: TrainSettings, executable: str, port: int, create_flags: int, aggressive: bool, spec: bool):
+def _get_experiences(settings: TrainSettings, executable: str, port_chooser: typing.Callable, create_flags: int, aggressive: bool, spec: bool):
     session: SessionSettings = settings.current_session
     num_ticks_to_do = session.tar_ticks
     if os.path.exists(settings.replay_folder):
@@ -174,6 +174,7 @@ def _get_experiences(settings: TrainSettings, executable: str, port: int, create
         print(f'--starting game to get another {num_ticks_to_do} experiences--')
         secret1 = secrets.token_hex()
         secret2 = secrets.token_hex()
+        port = port_chooser()
         procs = []
         procs.append(_start_server(executable, secret1, secret2, port, session.tie_len, aggressive, create_flags))
         if random.random() < 0.5:
@@ -197,7 +198,7 @@ def _get_experiences(settings: TrainSettings, executable: str, port: int, create
         replay = rb.FileReadableReplayBuffer(settings.replay_folder)
         num_ticks_to_do = session.tar_ticks - len(replay)
         replay.close()
-        time.sleep(10)
+        time.sleep(2)
 
 
 def _train_experiences(settings: TrainSettings, executable: str):
@@ -232,11 +233,22 @@ def _run(args):
     create_flags = 0 if args.headless else subprocess.CREATE_NEW_CONSOLE
     spec = not args.headless
 
+    class PortChooser:
+        def __init__(self, start):
+            self.start = start
+            self.offset = 0
+
+        def __call__(self):
+            res = self.start + self.offset
+            self.offset = (self.offset + 1) % 50
+            return res
+
+    portc = PortChooser(port)
     if os.path.exists(settings.replay_folder):
         rb.FileWritableReplayBuffer(settings.replay_folder, exist_ok=True).close()
 
     while settings.cur_ind < len(settings.train_seq):
-        _get_experiences(settings, executable, port, create_flags, args.aggressive, spec)
+        _get_experiences(settings, executable, portc, create_flags, args.aggressive, spec)
         _train_experiences(settings, executable)
         _cleanup_session(settings)
         settings.cur_ind += 1
