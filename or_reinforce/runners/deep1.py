@@ -267,6 +267,9 @@ def _get_experiences_async(settings: TrainSettings, executable: str, port_min: i
 
     rb.merge_buffers(replay_paths, settings.replay_folder)
 
+    for path in replay_paths:
+        filetools.deldir(path)
+
 
 def _train_experiences(settings: TrainSettings, executable: str):
     print('--training--')
