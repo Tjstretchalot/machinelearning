@@ -159,7 +159,7 @@ def _start_spec(executable, port, create_flags):
         creationflags=create_flags
     )
 
-def _get_experiences(settings: TrainSettings, executable: str, port: int, create_flags: int, spec: bool):
+def _get_experiences(settings: TrainSettings, executable: str, port: int, create_flags: int, aggressive: bool, spec: bool):
     session: SessionSettings = settings.current_session
     num_ticks_to_do = session.tar_ticks
     if os.path.exists(settings.replay_folder):
@@ -175,7 +175,7 @@ def _get_experiences(settings: TrainSettings, executable: str, port: int, create
         secret1 = secrets.token_hex()
         secret2 = secrets.token_hex()
         procs = []
-        procs.append(_start_server(executable, secret1, secret2, port, session.tie_len, args.aggressive, create_flags))
+        procs.append(_start_server(executable, secret1, secret2, port, session.tie_len, aggressive, create_flags))
         if random.random() < 0.5:
             tmp = secret1
             secret1 = secret2
@@ -184,8 +184,8 @@ def _get_experiences(settings: TrainSettings, executable: str, port: int, create
 
         time.sleep(2)
 
-        procs.append(_start_bot(executable, settings.train_bot, secret1, port, create_flags, args.aggressive, 'train_bot.log'))
-        procs.append(_start_bot(executable, settings.adver_bot, secret2, port, create_flags, args.aggressive, 'adver_bot.log'))
+        procs.append(_start_bot(executable, settings.train_bot, secret1, port, create_flags, aggressive, 'train_bot.log'))
+        procs.append(_start_bot(executable, settings.adver_bot, secret2, port, create_flags, aggressive, 'adver_bot.log'))
         if spec:
             procs.append(_start_spec(executable, port, create_flags))
 
@@ -236,7 +236,7 @@ def _run(args):
         rb.FileWritableReplayBuffer(settings.replay_folder, exist_ok=True).close()
 
     while settings.cur_ind < len(settings.train_seq):
-        _get_experiences(settings, executable, port, create_flags, spec)
+        _get_experiences(settings, executable, port, create_flags, args.aggressive, spec)
         _train_experiences(settings, executable)
         _cleanup_session(settings)
         settings.cur_ind += 1
