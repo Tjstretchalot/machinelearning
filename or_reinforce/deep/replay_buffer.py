@@ -399,3 +399,50 @@ class FileReadableReplayBuffer(ReadableReplayBuffer):
             if mark.shuffle_counter not in deleted_counters:
                 deleted_counters.add(mark.shuffle_counter)
                 os.remove(self._shuffle_path(mark.shuffle_counter))
+
+def merge_buffers(inpaths: typing.List[str], outpath: str) -> None:
+    """Merges the replay buffers stored in the inpaths to the
+    outpath. The outpath must not already exist"""
+
+    outlen = 0
+    outflen = 0
+    outlongest_slen = 0
+    os.makedirs(outpath)
+    with open(os.path.join(outpath, EXPERIENCES_FILE), 'wb') as outfile:
+        for inpath in inpaths:
+            with open(os.path.join(inpath, META_FILE), 'r') as infile:
+                inmeta = json.load(infile)
+
+            inexppath = os.path.join(inpath, EXPERIENCES_FILE)
+            if os.path.getsize(inexppath) < inmeta['file_length']:
+                raise ValueError(f'{inexppath} is too short (meta file says should be ' + inmeta['file_length'] + ')')
+
+            block = bytearray(inmeta['largest_state_nbytes'])
+            blockmv = memoryview(block)
+            with open(inexppath, 'rb') as infile:
+                while infile.tell() < inmeta['file_length']:
+                    nextlen = int.from_bytes(infile.read(4), 'big', signed=False)
+                    nread = infile.readinto(blockmv[:nextlen])
+                    ctr = 0
+                    while nread < nextlen:
+                        nread += infile.readinto(blockmv[nread:nextlen])
+                        ctr += 1
+                        if ctr > 100:
+                            raise ValueError('infinite loop detected')
+
+                    outfile.write(nextlen.to_bytes(4, 'big', signed=False))
+                    ctr = 0
+                    nwritten = outfile.write(blockmv[:nextlen])
+                    while nwritten < nextlen:
+                        nwritten += outfile.write(blockmv[nwritten:nextlen])
+                        ctr += 1
+                        if ctr > 100:
+                            raise ValueError('infinite loop detected')
+
+                    outlen += 1
+                    outflen += 4 + nextlen
+                    outlongest_slen = max(outlongest_slen, nextlen)
+
+    with open(os.path.join(outpath, META_FILE), 'w') as outfile:
+        json.dump({'length': outlen, 'file_length': outflen,
+                   'largest_state_nbytes': outlongest_slen}, outfile)

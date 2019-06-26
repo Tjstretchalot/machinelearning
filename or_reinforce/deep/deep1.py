@@ -75,13 +75,13 @@ class DeepQBot(qbot.QBot):
 
         encoder (Encoder): the encoder
     """
-    def __init__(self, entity_iden: int):
+    def __init__(self, entity_iden: int, replay_path=REPLAY_FOLDER):
         self.entity_iden = entity_iden
         self.model = gen.init_or_load_model(_init_model, MODELFILE)
         self.teacher = FFTeacher()
         self.encoder = _init_encoder(entity_iden)
 
-        self.replay = replay_buffer.FileWritableReplayBuffer(REPLAY_FOLDER, exist_ok=True)
+        self.replay = replay_buffer.FileWritableReplayBuffer(replay_path, exist_ok=True)
 
     def __call__(self, entity_iden):
         self.entity_iden = entity_iden
@@ -114,17 +114,19 @@ class DeepQBot(qbot.QBot):
     def save(self) -> None:
         pass
 
-def deep1(entity_iden: int) -> 'Bot':
+def deep1(entity_iden: int, settings: str = None) -> 'Bot':
     """Creates a new simplebot2"""
-    if not os.path.exists(SETTINGS_FILE):
-        raise FileNotFoundError(SETTINGS_FILE)
+    if not settings:
+        settings = SETTINGS_FILE
+    if not os.path.exists(settings):
+        raise FileNotFoundError(settings)
 
-    with open(SETTINGS_FILE, 'r') as infile:
+    with open(settings, 'r') as infile:
         settings = json.load(infile)
 
     return qbot.QBotController(
         entity_iden,
-        DeepQBot(entity_iden),
+        DeepQBot(entity_iden, settings['replay_path']),
         rewarders.SCRewarder(),
         MOVE_MAP,
         move_selstyle=qbot.QBotMoveSelectionStyle.Greedy,

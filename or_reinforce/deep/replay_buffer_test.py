@@ -33,17 +33,29 @@ def main():
     if os.path.exists(FILEPATH):
         filetools.deldir(FILEPATH)
 
-    buf = rb.FileWritableReplayBuffer(FILEPATH, exist_ok=False)
+    buf = rb.FileWritableReplayBuffer(os.path.join(FILEPATH, '1'), exist_ok=False)
 
     sbuf = []
 
-    for _ in range(10):
+    for _ in range(5):
         exp = make_exp()
         buf.add(exp)
         sbuf.append(exp)
 
+    buf2 = rb.FileWritableReplayBuffer(os.path.join(FILEPATH, '2'), exist_ok=False)
+
+    for _ in range(5):
+        exp = make_exp()
+        buf2.add(exp)
+        sbuf.append(exp)
+
     buf.close()
-    buf = rb.FileReadableReplayBuffer(FILEPATH)
+    buf2.close()
+
+    rb.merge_buffers([os.path.join(FILEPATH, '2'), os.path.join(FILEPATH, '1')], os.path.join(FILEPATH, '3'))
+
+    buf.close()
+    buf = rb.FileReadableReplayBuffer(os.path.join(FILEPATH, '3'))
 
     for _ in range(3):
         missing = [exp for exp in sbuf]
@@ -63,6 +75,8 @@ def main():
     got2 = buf.sample(1)[0]
     if got != got2:
         raise ValueError(f'mark did not retrieve same experience: {got} vs {got2}')
+
+    buf.close()
 
 if __name__ == '__main__':
     main()
