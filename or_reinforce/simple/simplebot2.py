@@ -1,7 +1,6 @@
 """Same as simplebot but now done with the QBot interface!"""
 import os
 import torch
-import random
 
 from shared.models.ff import FeedforwardComplex, FFTeacher
 from shared.convutils import FluentShape

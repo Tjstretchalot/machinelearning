@@ -1,7 +1,6 @@
 """This is used for the replay buffer of experiences. The replay buffer is well-described
 in this article: https://medium.com/@jonathan_hui/rl-dqn-deep-q-network-e207751f7ae4
 """
-import enum
 import typing
 import os
 import json
@@ -10,7 +9,6 @@ import io
 import random
 
 import shared.typeutils as tus
-import shared.filetools as filetools
 from optimax_rogue.game.state import GameState
 from optimax_rogue.logic.moves import Move
 import optimax_rogue.networking.serializer as ser
@@ -415,7 +413,8 @@ def merge_buffers(inpaths: typing.List[str], outpath: str) -> None:
 
             inexppath = os.path.join(inpath, EXPERIENCES_FILE)
             if os.path.getsize(inexppath) < inmeta['file_length']:
-                raise ValueError(f'{inexppath} is too short (meta file says should be ' + inmeta['file_length'] + ')')
+                raise ValueError(f'{inexppath} is too short (meta file says should be '
+                                 + inmeta['file_length'] + ')')
 
             block = bytearray(inmeta['largest_state_nbytes'])
             blockmv = memoryview(block)
