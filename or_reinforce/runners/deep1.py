@@ -197,7 +197,7 @@ def _get_experiences(settings: TrainSettings, executable: str, port: int, create
         replay = rb.FileReadableReplayBuffer(settings.replay_folder)
         num_ticks_to_do = session.tar_ticks - len(replay)
         replay.close()
-        time.sleep(2)
+        time.sleep(10)
 
 
 def _train_experiences(settings: TrainSettings, executable: str):
