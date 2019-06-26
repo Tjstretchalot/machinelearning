@@ -117,20 +117,39 @@ def main():
     parser.add_argument('--headless', action='store_true', help='Use headless mode')
     parser.add_argument('--py3', action='store_true', help='changes executable to python3')
     parser.add_argument('--settings', type=str, default=os.path.join(SAVEDIR, 'settings.json'), help='path to the settings file')
+    parser.add_argument('--aggressive', action='store_true', help='no sleeps, use as much cpu as possible')
     args = parser.parse_args()
 
     _run(args)
 
-def _start_server(executable, secret1, secret2, port, max_ticks, create_flags):
+def _start_server(executable, secret1, secret2, port, max_ticks, aggressive, create_flags):
+    args = [
+        executable, '-u', '-m', 'optimax_rogue.server.main', secret1, secret2, '--port', str(port),
+        '--log', 'server_log.txt', '--dsunused', '--maxticks', str(max_ticks), '--tickrate'
+    ]
+    if aggressive:
+        args.append('0')
+        args.append('--aggressive')
+    else:
+        args.append('0.01')
+
     return subprocess.Popen(
-        [executable, '-u', '-m', 'optimax_rogue.server.main', secret1, secret2, '--port', str(port),
-         '--log', 'server_log.txt', '--tickrate', '0.01', '--dsunused', '--maxticks', str(max_ticks)],
+        args,
         creationflags=create_flags)
 
-def _start_bot(executable, bot, secret, port, create_flags, logfile):
+def _start_bot(executable, bot, secret, port, create_flags, aggressive, logfile):
+    args = [
+        executable, '-u', '-m', 'optimax_rogue_bots.main', 'localhost', str(port), bot, secret,
+        '--log', logfile, '--tickrate'
+    ]
+    if aggressive:
+        args.append('0')
+        args.append('--aggressive')
+    else:
+        args.append('0.01')
+
     return subprocess.Popen(
-        [executable, '-u', '-m', 'optimax_rogue_bots.main', 'localhost', str(port), bot, secret,
-         '--log', logfile, '--tickrate', '0.01'],
+        args,
         creationflags=create_flags
     )
 
@@ -156,7 +175,7 @@ def _get_experiences(settings: TrainSettings, executable: str, port: int, create
         secret1 = secrets.token_hex()
         secret2 = secrets.token_hex()
         procs = []
-        procs.append(_start_server(executable, secret1, secret2, port, session.tie_len, create_flags))
+        procs.append(_start_server(executable, secret1, secret2, port, session.tie_len, args.aggressive, create_flags))
         if random.random() < 0.5:
             tmp = secret1
             secret1 = secret2
@@ -165,8 +184,8 @@ def _get_experiences(settings: TrainSettings, executable: str, port: int, create
 
         time.sleep(2)
 
-        procs.append(_start_bot(executable, settings.train_bot, secret1, port, create_flags, 'train_bot.log'))
-        procs.append(_start_bot(executable, settings.adver_bot, secret2, port, create_flags, 'adver_bot.log'))
+        procs.append(_start_bot(executable, settings.train_bot, secret1, port, create_flags, args.aggressive, 'train_bot.log'))
+        procs.append(_start_bot(executable, settings.adver_bot, secret2, port, create_flags, args.aggressive, 'adver_bot.log'))
         if spec:
             procs.append(_start_spec(executable, port, create_flags))
 
