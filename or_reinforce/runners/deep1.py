@@ -216,9 +216,12 @@ def _get_experiences_sync(settings: TrainSettings, executable: str, port_chooser
 
         print('--finished game--')
         time.sleep(0.5)
-        replay = rb.FileReadableReplayBuffer(replaypath)
-        num_ticks_to_do = tar_num_ticks - len(replay)
-        replay.close()
+        if not os.path.exists(replaypath):
+            print('--game failed unexpectedly (no replay), waiting a bit and restarting--')
+        else:
+            replay = rb.FileReadableReplayBuffer(replaypath)
+            num_ticks_to_do = tar_num_ticks - len(replay)
+            replay.close()
         time.sleep(2)
 
 class _PortChooser:
@@ -253,6 +256,7 @@ def _get_experiences_async(settings: TrainSettings, executable: str, port_min: i
                              create_flags, aggressive, spec, replay_paths[worker], setting_paths[worker], ticks_per))
         proc.start()
         workers.append(proc)
+        time.sleep(1)
 
     for proc in workers:
         proc.join()
