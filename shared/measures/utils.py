@@ -3,6 +3,7 @@
 import typing
 import torch
 import numpy as np
+import json
 from shared.models.generic import Network
 from shared.models.ff import FeedforwardNetwork, FFHiddenActivations
 from shared.models.rnn import NaturalRNN, RNNHiddenActivations
@@ -156,6 +157,98 @@ class NetworkHiddenActivations:
             if ((not is_numpy and lyr.dtype not in (torch.float, torch.double))
                     or (is_numpy and lyr.dtype not in (np.float, np.float32, np.float64))):
                 raise ValueError(f'expected hid_acts[{idx}] is float-like but dtype={lyr.dtype}')
+
+    def save(self, folder: str) -> None:
+        """Saves these activations to the specified folder"""
+        os.makedirs(folder)
+
+        numpy_file = os.path.join(folder, 'raw.npz')
+        np.savez_compressed(numpy_file, *self.hid_acts, sample_points=self.sample_points, sample_labels=self.sample_labels)
+
+        meta_file = os.path.join(folder, 'meta.json')
+        with open(meta_file, 'w') as outfile:
+            json.dump({'netstyle': self.netstyle}, outfile)
+
+class StackedNetworkActivations:
+    """Acts very similarly to NetworkActivations, except that this supports adding more points
+    to the network with pre-allocation.
+
+    Attributes:
+        netstyle (str): one of 'feedforward' or 'recurrent'
+        capacity (int): the number of activations that can be stored
+        num_pts (int): the number of points that are actually in this
+        sample_points (tensor[capacity, input_dim]): the points which were used to sample
+        sample_labels (tensor[capacity]): the labels for those points
+        hid_acts (list[num layers of tensor[capacity, layer_size]]): the activations
+            through time or layers
+    """
+
+    def __init__(self, capacity: int):
+        self.netstyle: str = None
+        self.capacity = capacity
+        self.num_pts = 0
+        self.sample_points = None
+        self.sample_labels = None
+        self.hid_acts = None
+
+    def increase_capacity(self, new_capac):
+        """Increases the capacity of this network to the specified capacity, which
+        must be at least self.num_pts"""
+        if self.netstyle is None:
+            self.capacity = new_capac
+            return
+
+        num_pts = self.num_pts
+
+        new_sample_points = torch.zeros((new_capac, self.sample_points.shape[1]), dtype=self.sample_points.dtype)
+        new_sample_points[:num_pts] = self.sample_points[:num_pts]
+
+        new_sample_labels = torch.zeros((new_capac,), dtype=self.sample_labels.dtype)
+        new_sample_labels[:num_pts] = self.sample_labels[:num_pts]
+
+        new_hid_acts = []
+        for hacts in self.hid_acts:
+            new_hacts = torch.zeros((new_capac, hacts.shape[1]), dtype=hacts.dtype)
+            new_hacts[:num_pts] = hacts[:num_pts]
+            new_hid_acts.append(hacts)
+
+        self.sample_points = new_sample_points
+        self.sample_labels = new_sample_labels
+        self.hid_acts = new_hid_acts
+        self.capacity = new_capac
+
+    def append_acts(self, acts: NetworkHiddenActivations):
+        """Appends the given activations to the existing activations. This will only require a copy if there
+        is insufficient room in this list, which is not advisable since this will only do the minimum increase
+        to fit the new activations."""
+
+        acts.torch()
+        if self.netstyle is None:
+            self.netstyle = acts.netstyle
+            self.sample_points = torch.zeros((self.capacity, acts.sample_points.shape[1]), dtype=acts.sample_points.dtype)
+            self.sample_labels = torch.zeros((self.capacity,), dtype=acts.sample_labels.dtype)
+            self.hid_acts = []
+            for hacts in acts.hid_acts:
+                self.hid_acts.append(torch.zeros((self.capacity, hacts.shape[1]), dtype=hacts.dtype))
+
+        if self.num_pts + acts.num_pts > self.capacity:
+            self.increase_capacity(self.num_pts + acts.num_pts)
+
+        start = self.num_pts
+        end = start + acts.num_pts
+        self.sample_points[start:end] = acts.sample_points
+        self.sample_labels[start:end] = acts.sample_labels
+        for ind, mhacts in enumerate(self.hid_acts):
+            ohacts = acts.hid_acts[ind]
+            mhacts[start:end] = ohacts
+
+        self.num_pts = end
+
+    def to_nha(self) -> NetworkHiddenActivations:
+        """Converts this to the normal network hidden activations for usage, stripping unused memory"""
+        hid_acts = [hacts[:self.num_pts] for hacts in self.hid_acts]
+        return NetworkHiddenActivations(self.netstyle, self.sample_points[:self.num_pts], self.sample_labels[:self.num_pts], hid_acts)
+
 
 
 

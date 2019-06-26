@@ -121,6 +121,55 @@ class SurroundBarrierEncoder(FlatEncoder):
 
         return out.view(self.dim)
 
+class LocationEncoder(FlatEncoder):
+    """Encodes the location of the specified entity as an (x, y) pair
+
+    Attributes:
+        entity_iden (int): the iden for the entity
+    """
+    def __init__(self, entity_iden: int):
+        self.entity_iden = entity_iden
+
+    @property
+    def dim(self):
+        return 2
+
+    def encode(self, game_state: GameState, move: Move, out: torch.tensor = None) -> torch.tensor:
+        if out is None:
+            out = torch.zeros((self.dim,), dtype=torch.float)
+
+        ent = game_state.iden_lookup[self.entity_iden]
+        out[0] = ent.x
+        out[1] = ent.y
+        return out
+
+class StaircaseLocationEncoder(FlatEncoder):
+    """Encodes the location of the staircase on the same level as the entity as
+    an (x, y) pair
+
+    Attributes:
+        entity_iden (int): the entity whose depth is used to determine the location
+            of the staircase
+    """
+    def __init__(self, entity_iden: int):
+        self.entity_iden = entity_iden
+
+    @property
+    def dim(self):
+        return 2
+
+    def encode(self, game_state: GameState, move: Move, out: torch.tensor = None) -> torch.tensor:
+        if out is None:
+            out = torch.zeros((self.dim,), dtype=torch.float)
+
+        ent = game_state.iden_lookup[self.entity_iden]
+        dung = game_state.world.get_at_depth(ent.depth)
+        x, y = dung.staircase()
+        out[0] = x
+        out[1] = y
+        return out
+
+
 class StaircaseEncoder(FlatEncoder):
     """Encodes an 'arrow' to the staircase via an angle to the staircase from
     a given entity

@@ -373,6 +373,18 @@ class FluentShape:
         return ComplexLayer(style='layer', is_module=True, invokes_callback=invokes_callback,
                             action=ODEBlock(wrappable))
 
+    def batch_norm(self, invokes_callback=False):
+        """Uses the batch to approximate the mean and variance of each feature, then normalizes
+        to zero-mean and unit-variance. From there the mean and variance become trainable.
+        """
+        if len(self.dims) != 1:
+            raise ValueError(f'expected flattened before batch_norm, but dims={self.dims}')
+        if self._verbose:
+            print(f'batch_norm(invokes_callback={invokes_callback})')
+
+        return ComplexLayer(style='layer', is_module=True, invokes_callback=invokes_callback,
+                            action=torch.nn.BatchNorm1d(self.dims[0]))
+
     def nonlin(self, name: str, invokes_callback=True):
         """Convenience function to invoke a given nonlinearity by name;
         the nonlinearity names are defined in shared.nonlinearities"""

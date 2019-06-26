@@ -10,11 +10,17 @@ import enum
 import numpy as np
 import torch
 import time
+import os
+
+from shared.measures.utils import NetworkHiddenActivations, StackedNetworkActivations
+from shared.filetools import deldir
 
 from optimax_rogue_bots.bot import Bot
 from optimax_rogue.game.state import GameState
 from optimax_rogue.logic.moves import Move
 from optimax_rogue.logic.updater import UpdateResult
+from optimax_rogue_bots.gui.state_action_bot import StateActionBot
+import optimax_rogue_bots.gui.packets as gpackets
 
 from or_reinforce.utils.gstate_cache import GameStateCache
 
@@ -64,12 +70,23 @@ class QBot:
         """Should save the model"""
         raise NotImplementedError
 
+class HiddenStateQBot:
+    """An optional interface for the QBot that exposes its hidden state"""
+
+    def get_hidden(self, game_state: GameState, move: Move) -> NetworkHiddenActivations:
+        """Returns the hidden activations of the qbot as it evaluates the specified game
+        state and move. The activations may be recurrent or feedforward or some combination,
+        but it must be consistent (i.e., always have the same number of activations and each
+        activation block is the same size through different state-action pairs)
+        """
+        raise NotImplementedError
+
 class QBotMoveSelectionStyle(enum.IntEnum):
     """The various ways that a QBot could select its moves"""
     Greedy = 1 # always select the best move
     Stochastic = 2 # select moves according to likelihood
 
-class QBotController(Bot):
+class QBotController(StateActionBot):
     """The bot instance that is delegating to a single QBot instance. Optionally
     supports some percentage of teacher forcing, wherein the moves are replaced
     with a different bots moves some percentage of the time.
@@ -87,6 +104,20 @@ class QBotController(Bot):
         teacher_force_amt (float, optional): if specified, value between 0 and 1 for
             the amount of teacher forcing to do
 
+        frozen (bool): true if learning is not occuring right now, false otherwise. Should
+            be treated as read-only since freezing will stop the history from being updated
+
+        save_activations (bool): if the activations of the network should be saved. the network
+            must also implemenet HiddenStateQBot. Should be treated as readonly
+        activations_folder (str, optional): if save_activations is True, this is the folder to
+            which we save activations.
+        activations_per_block (int, optional): the maximum number of activations that we store in
+            memory. After reaching this number of activations in memory, they are dumped to file.
+        activations (StackedNetworkActivations, optional): the in-memory activations that we
+            currently have
+        activations_block (int, optional): the current block we are on, nonnegative. Determines
+            where we next save
+
         save_interval (float): seconds between saves
         last_save (float): last time we saved the model
 
@@ -99,7 +130,10 @@ class QBotController(Bot):
                  move_selstyle: QBotMoveSelectionStyle = QBotMoveSelectionStyle.Greedy,
                  teacher: Bot = None, teacher_force_amt: float = None,
                  gstate_cache: GameStateCache = None,
-                 save_interval=30.0):
+                 save_interval=30.0, frozen=False,
+                 save_activations: bool = False, activations_folder: str = None,
+                 overwrite_activations: bool = False,
+                 activations_per_block: int = 1000):
         super().__init__(entity_iden)
         self.qbot = qbot
         self.rewarder = rewarder
@@ -107,6 +141,25 @@ class QBotController(Bot):
         self.move_selstyle = move_selstyle
         self.teacher = teacher
         self.teacher_force_amt = teacher_force_amt
+        self.frozen = frozen
+
+        if save_activations:
+            if not isinstance(activations_folder, str):
+                raise ValueError(f'save_activations is set but activations_folder is {activations_folder} (str expected, got {type(activations_folder)})')
+            if not isinstance(qbot, HiddenStateQBot):
+                raise ValueError(f'save_activations is True but qbot {type(qbot)} does not expose hidden acts')
+
+        self.save_activations = save_activations
+        self.activations_folder = activations_folder
+        self.activations_per_block = activations_per_block
+        self.activations = None if not self.save_activations else StackedNetworkActivations(activations_per_block)
+        self.activations_block = None
+        if self.save_activations:
+            self.activations_block = 1
+            if not overwrite_activations:
+                while os.path.exists(os.path.join(self.activations_folder,
+                                                  str(self.activations_block))):
+                    self.activations_block += 1
 
         if gstate_cache is None:
             gstate_cache = GameStateCache()
@@ -114,6 +167,28 @@ class QBotController(Bot):
         self.save_interval = save_interval
         self.last_save = time.time()
         self.history = deque()
+
+    def __call__(self, entity_iden):
+        self.entity_iden = entity_iden
+        self.qbot(entity_iden)
+        return self
+
+    @classmethod
+    def scale_style(cls) -> gpackets.SetScaleStylePacket:
+        """Returns the scale style packet that the bot prefers"""
+        return gpackets.SetScaleStylePacket(gpackets.ScaleStyle.TemperatureSoftArgMax, 0.02)
+
+    @classmethod
+    def pitch(cls):
+        import warnings
+        warnings.warn('Should override pitch!', category=UserWarning)
+        return 'QBotController', 'This bot is missing a description. To add a description, subclass QBotController and override the classmethod pitch'
+
+    @classmethod
+    def supported_moves(cls):
+        import warnings
+        warnings.warn('Should override supported_moves!', category=UserWarning)
+        return [Move.Left, Move.Right, Move.Up, Move.Down]
 
     def move(self, game_state: GameState) -> Move:
         if self.teacher_force_amt and random.random() < self.teacher_force_amt:
@@ -130,17 +205,44 @@ class QBotController(Bot):
         else:
             raise NotImplementedError(f'unknown move sel style {self.move_selstyle}')
 
+    def evaluate(self, game_state: GameState, move: Move) -> float:
+        return self.qbot.evaluate(game_state, move)
+
     def on_move(self, game_state: GameState, move: Move) -> None:
         self.gstate_cache.put(game_state)
 
-        self.history.append((game_state.tick, move))
-        if len(self.history) >= self.qbot.cutoff + 1:
-            self._teach()
+        if self.save_activations:
+            qbot: HiddenStateQBot = self.qbot
+            acts = qbot.get_hidden(game_state, move)
+            self.activations.append_acts(acts)
+            if self.activations.num_pts == self.activations_per_block:
+                save_folder = os.path.join(self.activations_folder, self.activations_block)
+                if os.path.exists(save_folder):
+                    deldir(save_folder)
+
+                self.activations.save(save_folder)
+                self.activations_block += 1
+                self.activations.num_pts = 0
+
+        if not self.frozen:
+            self.history.append((game_state.tick, move))
+            if len(self.history) >= self.qbot.cutoff + 1:
+                self._teach()
+
+    def _det_move(self, game_state: GameState) -> Move:
+        """Deterministic greedy movement without teacher forcing"""
+        move_rewards = [self.qbot.evaluate(game_state, move) for move in self.moves]
+        best_ind = int(np.argmax(move_rewards))
+        return self.moves[best_ind]
 
     def think(self, max_time: float):
-        self.qbot.think(max_time)
+        if not self.frozen:
+            self.qbot.think(max_time)
 
     def _teach(self):
+        if self.frozen:
+            return
+
         reward = 0
         factor = 1
         for i in range(1, self.qbot.cutoff + 1):
@@ -151,6 +253,11 @@ class QBotController(Bot):
             )
             factor *= self.qbot.alpha
 
+        latest_gamestate = self.gstate_cache.fetch(self.history[self.qbot.cutoff][0])
+        reward += factor * (
+            self.qbot.evaluate(latest_gamestate, self._det_move(latest_gamestate))
+        )
+
         oldest = self.history.popleft()
         self.qbot.learn(self.gstate_cache.pop(oldest[0]), oldest[1], reward)
 
@@ -159,4 +266,6 @@ class QBotController(Bot):
             self.last_save = time.time()
 
     def finished(self, game_state: GameState, result: UpdateResult) -> None:
+        if self.frozen:
+            return
         self.qbot.save()

@@ -144,11 +144,13 @@ class GenericTrainer:
             _logger.setLevel(logging.DEBUG)
             logging.basicConfig(format='%(asctime)s %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p')
 
+        points_dtype = kwargs['point_dtype'] if 'point_dtype' in kwargs else torch.double
+        target_dtype = kwargs['target_dtype'] if 'target_dtype' in kwargs else torch.long
         context = GenericTrainingContext(
             model=model, teacher=self.teacher, train_pwl=self.train_pwl, test_pwl=self.test_pwl,
             batch_size=self.batch_size, optimizer=self.optimizer,
-            points=torch.zeros((self.batch_size, model.input_dim), dtype=torch.double),
-            labels=torch.zeros(self.batch_size, dtype=torch.long), shared=dict(),
+            points=torch.zeros((self.batch_size, model.input_dim), dtype=points_dtype),
+            labels=torch.zeros(self.batch_size, dtype=target_dtype), shared=dict(),
             logger=_logger
         )
         del _logger

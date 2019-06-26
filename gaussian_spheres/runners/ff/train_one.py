@@ -60,7 +60,7 @@ def main():
     trainer = tnr.GenericTrainer(
         train_pwl=pwl,
         test_pwl=pwl,
-        teacher=FFTeacher(True),
+        teacher=FFTeacher(),
         batch_size=20,
         learning_rate=0.001,
         optimizer=torch.optim.Adam([p for p in network.parameters() if p.requires_grad], lr=0.001),
