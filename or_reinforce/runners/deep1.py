@@ -207,6 +207,7 @@ def _run(args):
             rawsettings = json.load(infile)
             settings = ser.deserialize_embeddable(rawsettings)
 
+    os.makedirs(settings.bot_folder, exist_ok=True)
     executable = 'python3' if args.py3 else 'python'
     port = args.port
     create_flags = 0 if args.headless else subprocess.CREATE_NEW_CONSOLE
