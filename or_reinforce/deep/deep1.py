@@ -29,6 +29,7 @@ SAVEDIR = os.path.join('out', 'or_reinforce', 'simple', 'simplebot3')
 MODELFILE = os.path.join(SAVEDIR, 'model.pt')
 
 MOVE_MAP = [Move.Left, Move.Right, Move.Up, Move.Down]
+ALPHA = 0.9
 
 def _init_encoder(entity_iden):
     return encoders.MergedFlatEncoders(
@@ -57,6 +58,7 @@ def _init_model():
             nets.nonlin('tanh'),
             nets.batch_norm(),
             nets.linear_(1),
+            nets.nonlin('tanh')
         ])
 
 SAVEDIR = os.path.join('out', 'or_reinforce', 'deep', 'deep1')
@@ -99,7 +101,7 @@ class DeepQBot(qbot.QBot):
 
     @property
     def alpha(self):
-        return 0.9
+        return ALPHA
 
     def evaluate(self, game_state: GameState, move: Move):
         result = torch.tensor([0.0], dtype=torch.float)
@@ -135,7 +137,7 @@ def deep1(entity_iden: int, settings: str = None) -> 'Bot':
     return qbot.QBotController(
         entity_iden,
         DeepQBot(entity_iden, settings['replay_path'], (('eval' in settings) and settings['eval'])),
-        rewarders.SCRewarder(),
+        rewarders.SCRewarder(bigreward=(1 - ALPHA) / ALPHA), # biggest cumulative reward is 1
         MOVE_MAP,
         move_selstyle=qbot.QBotMoveSelectionStyle.Greedy,
         teacher=RandomBot(entity_iden, moves=MOVE_MAP),

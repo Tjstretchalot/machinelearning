@@ -46,7 +46,7 @@ class Experience(ser.Serializable):
         return arr.getvalue()
 
     @classmethod
-    def from_prims(cls, prims: bytes, perf: perf_stats.PerfStats = perf_stats.NoopPerfStats()) -> 'Experience':
+    def from_prims(cls, prims: bytes, perf: perf_stats.PerfStats = perf_stats.NoopPerfStats()) -> 'Experience': # pylint: disable=line-too-long, arguments-differ
         perf.enter('WRAP')
         arr = io.BytesIO(prims)
         arr.seek(0, 0)
