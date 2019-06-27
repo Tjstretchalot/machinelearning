@@ -9,6 +9,7 @@ import io
 import random
 
 import shared.typeutils as tus
+import shared.perf_stats as perf_stats
 from optimax_rogue.game.state import GameState
 from optimax_rogue.logic.moves import Move
 import optimax_rogue.networking.serializer as ser
@@ -45,14 +46,18 @@ class Experience(ser.Serializable):
         return arr.getvalue()
 
     @classmethod
-    def from_prims(cls, prims: bytes) -> 'Experience':
+    def from_prims(cls, prims: bytes, perf: perf_stats.PerfStats = perf_stats.NoopPerfStats()) -> 'Experience':
+        perf.enter('WRAP')
         arr = io.BytesIO(prims)
         arr.seek(0, 0)
+        perf.exit_then_enter('STATE')
         state_len = int.from_bytes(arr.read(4), 'big', signed=False)
         state = GameState.from_prims(arr.read(state_len))
+        perf.exit_then_enter('MISC')
         action = Move(int.from_bytes(arr.read(4), 'big', signed=False))
         reward = struct.unpack('>f', arr.read(4))[0]
         player_id = int.from_bytes(arr.read(4), 'big', signed=False)
+        perf.exit()
         return Experience(state, action, reward, player_id)
 
     def __eq__(self, other: 'Experience') -> bool:
@@ -232,17 +237,23 @@ class FileReadableReplayBuffer(ReadableReplayBuffer):
         marks (list[FileMark]): the marks that have been placed, where lower indices are older.
 
         _block (bytearray([self.padded_size])): used for reading
+        _blockmv (memoryview(_block)): memory view of block
+
+        perf (PerfStats): the performance tracker
     """
 
-    def __init__(self, dirname: str) -> None:
-        tus.check(dirname=(dirname, str))
+    def __init__(self, dirname: str, perf: typing.Optional[perf_stats.PerfStats] = None) -> None:
+        tus.check(dirname=(dirname, str), perf=(perf, (type(None), perf_stats.PerfStats)))
 
+        if not perf:
+            perf = perf_stats.NoopPerfStats()
         if not os.path.exists(dirname):
             raise FileNotFoundError(dirname)
         if not os.path.isdir(dirname):
             raise ValueError(f'{dirname} is not a folder')
 
         self.dirname = dirname
+        self.perf: perf_stats.PerfStats = perf
 
         with open(os.path.join(dirname, META_FILE), 'r') as infile:
             meta = json.load(infile)
@@ -255,6 +266,7 @@ class FileReadableReplayBuffer(ReadableReplayBuffer):
         self.shuffle_counter = 1
         self.marks = []
         self._block = bytearray(self.padded_size)
+        self._blockmv = memoryview(self._block)
 
     def _shuffle(self, counter: int) -> None:
         inpath = os.path.join(self.dirname, EXPERIENCES_FILE)
@@ -347,21 +359,25 @@ class FileReadableReplayBuffer(ReadableReplayBuffer):
         return self._len
 
     def __next__(self) -> Experience:
+        self.perf.enter('REPLAY_BUFFER_NEXT')
+        self.perf.enter('READ_BLOCK')
         bytes_read = self.handle.readinto(self._block)
         if bytes_read == 0:
             raise ValueError('am at end of file but ought not be')
 
 
         while bytes_read < self.padded_size:
-            amt = self.handle.readinto(self._block[bytes_read:])
+            amt = self.handle.readinto(self._blockmv[bytes_read:])
             if amt == 0:
                 raise ValueError('am at end of file but ought not be')
             bytes_read += amt
-
-        reqlen = int.from_bytes(self._block[:4], 'big', signed=False)
-        exp = Experience.from_prims(self._block[4:4 + reqlen])
+        self.perf.exit_then_enter('DECODE_BLOCK')
+        reqlen = int.from_bytes(self._blockmv[:4], 'big', signed=False)
+        exp = Experience.from_prims(self._blockmv[4:4 + reqlen], perf=self.perf)
+        self.perf.exit()
 
         if self.handle.tell() >= self._len * self.padded_size:
+            self.perf.enter('SHUFFLE')
             old_path = self._shuffle_path(self.shuffle_counter)
             next_path = self._shuffle_path(self.shuffle_counter + 1)
             if not os.path.exists(next_path):
@@ -379,7 +395,8 @@ class FileReadableReplayBuffer(ReadableReplayBuffer):
                 os.remove(old_path)
 
             self.shuffle_counter += 1
-
+            self.perf.exit()
+        self.perf.exit()
         return exp
 
 

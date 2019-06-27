@@ -14,6 +14,7 @@ import collections
 import json
 import numpy as np
 
+import shared.perf_stats as perf_stats
 from shared.models.generic import Network
 from shared.events import Event
 from shared.pwl import PointWithLabelProducer
@@ -146,6 +147,7 @@ class GenericTrainer:
 
         points_dtype = kwargs['point_dtype'] if 'point_dtype' in kwargs else torch.double
         target_dtype = kwargs['target_dtype'] if 'target_dtype' in kwargs else torch.long
+        perf: perf_stats.PerfStats = kwargs['perf'] if 'perf' in kwargs else perf_stats.NoopPerfStats()
         context = GenericTrainingContext(
             model=model, teacher=self.teacher, train_pwl=self.train_pwl, test_pwl=self.test_pwl,
             batch_size=self.batch_size, optimizer=self.optimizer,
@@ -162,17 +164,26 @@ class GenericTrainer:
         self.setup(context, **kwargs)
 
         while True:
+            perf.enter('PRE_LOOP')
             self.pre_loop(context)
+            perf.exit_then_enter('FILL')
             context.train_pwl.fill(context.points, context.labels)
+            perf.exit_then_enter('POST_POINTS')
             self.post_points(context)
+            perf.exit_then_enter('PRE_TRAIN')
             self.pre_train(context)
+            perf.exit_then_enter('TEACH_MANY')
             loss = context.teacher.teach_many(context.model, self.optimizer, self.criterion,
                                               context.points, context.labels)
+            perf.exit_then_enter('POST_TRAIN')
             self.post_train(context, loss)
+            perf.exit_then_enter('DECAY_SCHEDULER')
             if self.decay_scheduler(context, loss, False):
                 context = self.decay(context)
+            perf.exit_then_enter('STOPPER')
             if self.stopper(context):
                 break
+            perf.exit()
 
         result = dict()
         self.finished(context, result)

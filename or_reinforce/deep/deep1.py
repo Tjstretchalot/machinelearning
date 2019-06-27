@@ -10,6 +10,7 @@ from shared.teachers import NetworkTeacher, Network
 from shared.models.ff import FeedforwardComplex, FFTeacher
 from shared.convutils import FluentShape
 import shared.trainer as tnr
+import shared.perf_stats as perf_stats
 
 import or_reinforce.utils.qbot as qbot
 import or_reinforce.utils.rewarders as rewarders
@@ -215,7 +216,10 @@ class MyTeacher(NetworkTeacher):
 
 def offline_learning():
     """Loads the replay buffer and trains on it."""
-    replay = replay_buffer.FileReadableReplayBuffer(REPLAY_FOLDER)
+    perf_file = os.path.join(SAVEDIR, 'offline_learning_perf.log')
+    perf = perf_stats.LoggingPerfStats('deep1 offline learning', perf_file)
+
+    replay = replay_buffer.FileReadableReplayBuffer(REPLAY_FOLDER, perf=perf)
 
     print(f'loaded {len(replay)} experiences for replay...')
 
@@ -238,11 +242,11 @@ def offline_learning():
      .reg(tnr.EpochsStopper(100))
      .reg(tnr.InfOrNANDetecter())
      .reg(tnr.DecayTracker())
-     .reg(tnr.DecayStopper(8))
+     .reg(tnr.DecayStopper(3))
      .reg(tnr.LRMultiplicativeDecayer())
      .reg(tnr.DecayOnPlateau())
     )
-    trainer.train(network, target_dtype=torch.float32, point_dtype=torch.float32)
+    trainer.train(network, target_dtype=torch.float32, point_dtype=torch.float32, perf=perf)
 
     gen.save_model(network, MODELFILE)
 

@@ -11,6 +11,7 @@ import json
 import random
 import psutil
 import math
+import sys
 from multiprocessing import Process
 
 import shared.filetools as filetools
@@ -66,12 +67,12 @@ class TrainSettings(ser.Serializable):
     @classmethod
     def defaults(cls):
         train_seq = [
-            SessionSettings(tie_len=1000, tar_ticks=100000, train_force_amount=1), # need an extra one of these
+            SessionSettings(tie_len=100, tar_ticks=2000, train_force_amount=1), # need an extra one of these
         ]
         for i in range(20):
             train_seq.extend([
-                SessionSettings(tie_len=1000, tar_ticks=100000, train_force_amount=1-(i*0.05)),
-                SessionSettings(tie_len=5000, tar_ticks=100000, train_force_amount=1-(i*0.05))
+                SessionSettings(tie_len=1000, tar_ticks=20000, train_force_amount=1-(i*0.05)),
+                SessionSettings(tie_len=5000, tar_ticks=20000, train_force_amount=1-(i*0.05))
             ])
         return cls(
             train_bot='or_reinforce.deep.deep1.deep1',
@@ -193,6 +194,7 @@ def _get_experiences_sync(settings: TrainSettings, executable: str, port_chooser
 
     while num_ticks_to_do > 0:
         print(f'--starting game to get another {num_ticks_to_do} experiences--')
+        sys.stdout.flush()
         secret1 = secrets.token_hex()
         secret2 = secrets.token_hex()
         port = port_chooser()
@@ -215,9 +217,11 @@ def _get_experiences_sync(settings: TrainSettings, executable: str, port_chooser
             proc.wait()
 
         print('--finished game--')
+        sys.stdout.flush()
         time.sleep(0.5)
         if not os.path.exists(replaypath):
             print('--game failed unexpectedly (no replay), waiting a bit and restarting--')
+            sys.stdout.flush()
         else:
             replay = rb.FileReadableReplayBuffer(replaypath)
             num_ticks_to_do = tar_num_ticks - len(replay)
@@ -244,12 +248,22 @@ def _get_experiences_target(serd_settings: dict, executable: str, port_min: int,
 
 def _get_experiences_async(settings: TrainSettings, executable: str, port_min: int, port_max: int,
                            create_flags: int, aggressive: bool, spec: bool, nthreads: int):
+    num_ticks_to_do = settings.current_session.tar_ticks
+    if os.path.exists(settings.replay_folder):
+        replay = rb.FileReadableReplayBuffer(settings.replay_folder)
+        num_ticks_to_do -= len(replay)
+        replay.close()
+
+        if num_ticks_to_do <= 0:
+            print('get_experiences_async nothing to do')
+            return
+
     replay_paths = [os.path.join(settings.bot_folder, f'replay_{i}') for i in range(nthreads)]
     setting_paths = [os.path.join(settings.bot_folder, f'settings_{i}.json') for i in range(nthreads)]
     workers = []
     serd_settings = ser.serialize_embeddable(settings)
     ports_per = (port_max - port_min) // nthreads
-    ticks_per = int(math.ceil(settings.current_session.tar_ticks / nthreads))
+    ticks_per = int(math.ceil(num_ticks_to_do / nthreads))
     for worker in range(nthreads):
         proc = Process(target=_get_experiences_target,
                        args=(serd_settings, executable, port_min + worker*ports_per, port_min + (worker+1)*ports_per,
@@ -264,6 +278,11 @@ def _get_experiences_async(settings: TrainSettings, executable: str, port_min: i
     print('get_experiences_async finished')
     if os.path.exists(settings.replay_folder):
         filetools.deldir(settings.replay_folder)
+
+    if os.path.exists(settings.replay_folder):
+        tmp_replay_folder = settings.replay_folder + '_tmp'
+        os.rename(settings.replay_folder, tmp_replay_folder)
+        replay_paths.append(tmp_replay_folder)
 
     rb.merge_buffers(replay_paths, settings.replay_folder)
 
@@ -317,6 +336,8 @@ def _run(args):
         _train_experiences(settings, executable)
         _cleanup_session(settings)
         settings.cur_ind += 1
+        with open(args.settings, 'w') as outfile:
+            json.dump(ser.serialize_embeddable(settings), outfile)
 
 if __name__ == '__main__':
     main()
