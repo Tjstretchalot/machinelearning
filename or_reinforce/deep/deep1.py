@@ -71,18 +71,23 @@ class DeepQBot(qbot.QBot):
         entity_iden (int): the entity we are controlling
         model (FeedforwardComplex): the model that does the evaluating
         teacher (FFTeacher): the teacher for the model
+        evaluation (bool): True to not store experiences, False to store experiences
 
         write_replay_buffer (WritableReplayBuffer, optional): the buffer for replays
 
         encoder (Encoder): the encoder
     """
-    def __init__(self, entity_iden: int, replay_path=REPLAY_FOLDER):
+    def __init__(self, entity_iden: int, replay_path=REPLAY_FOLDER, evaluation=False):
         self.entity_iden = entity_iden
         self.model = gen.init_or_load_model(_init_model, MODELFILE)
         self.teacher = FFTeacher()
+        self.evaluation = evaluation
         self.encoder = _init_encoder(entity_iden)
 
-        self.replay = replay_buffer.FileWritableReplayBuffer(replay_path, exist_ok=True)
+        if not evaluation:
+            self.replay = replay_buffer.FileWritableReplayBuffer(replay_path, exist_ok=True)
+        else:
+            self.replay = None
 
     def __call__(self, entity_iden):
         self.entity_iden = entity_iden
@@ -106,6 +111,8 @@ class DeepQBot(qbot.QBot):
         return float(result.item())
 
     def learn(self, game_state: GameState, move: Move, reward: float) -> None:
+        if self.evaluation:
+            return
         player_id = 1 if self.entity_iden == game_state.player_1_iden else 2
         self.replay.add(replay_buffer.Experience(game_state, move, reward, player_id))
 
@@ -127,7 +134,7 @@ def deep1(entity_iden: int, settings: str = None) -> 'Bot':
 
     return qbot.QBotController(
         entity_iden,
-        DeepQBot(entity_iden, settings['replay_path']),
+        DeepQBot(entity_iden, settings['replay_path'], (('eval' in settings) and settings['eval'])),
         rewarders.SCRewarder(),
         MOVE_MAP,
         move_selstyle=qbot.QBotMoveSelectionStyle.Greedy,
