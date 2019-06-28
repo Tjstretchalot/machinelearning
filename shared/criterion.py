@@ -45,5 +45,17 @@ def create_meansqerr_regul(noise_strength=0):
         loss_noise = (np.pi*noise_strength*noise_strength)/2 * torch.sum(output ** 2)
 
         return loss_mse + loss_noise
+    return result
 
+def create_measqerr_regul_direct(noise_strength=0):
+    """Analagous to create_meansqerr_regul but does not assume the labels are labels,
+    just takes them as the actual target tensor"""
+
+    def result(output: torch.tensor, labels: torch.tensor):
+        adj_output = output - labels
+
+        loss_mse = torch.mean(adj_output ** 2)
+        loss_noise = (np.pi*noise_strength*noise_strength)/2 * torch.sum(output ** 2)
+
+        return loss_mse + loss_noise
     return result

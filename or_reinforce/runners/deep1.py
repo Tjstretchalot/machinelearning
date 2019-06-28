@@ -66,13 +66,14 @@ class TrainSettings(ser.Serializable):
 
     @classmethod
     def defaults(cls):
-        train_seq = [
-            SessionSettings(tie_len=100, tar_ticks=2000, train_force_amount=1), # need an extra one of these
-        ]
-        for i in range(20):
+        train_seq = []
+        for i in range(10):
+            train_seq.append(SessionSettings(tie_len=111, tar_ticks=20000, train_force_amount=1))
+
+        for i in range(80):
             train_seq.extend([
-                SessionSettings(tie_len=1000, tar_ticks=20000, train_force_amount=1-(i*0.05)),
-                SessionSettings(tie_len=5000, tar_ticks=20000, train_force_amount=1-(i*0.05))
+                SessionSettings(tie_len=111, tar_ticks=20000, train_force_amount=1-(i*0.01)),
+                SessionSettings(tie_len=111, tar_ticks=20000, train_force_amount=1-(i*0.01))
             ])
         return cls(
             train_bot='or_reinforce.deep.deep1.deep1',
@@ -103,22 +104,27 @@ class TrainSettings(ser.Serializable):
 
     @property
     def replay_folder(self):
+        """Gets the folder which replays are stored by default for the bot"""
         return os.path.join(self.bot_folder, 'replay')
 
     @property
     def model_file(self):
+        """Gets the file where the bots model is stored"""
         return os.path.join(self.bot_folder, 'model.pt')
 
     @property
     def bot_settings_file(self):
+        """Gets the default file for the bots settings"""
         return os.path.join(self.bot_folder, 'settings.json')
 
     @property
     def current_session(self) -> SessionSettings:
+        """Gets the current session settings"""
         return self.train_seq[self.cur_ind]
 
     @property
     def bot_module(self) -> str:
+        """Get the module that the bot resides in, i.e., optimax_rogue_bots.randombot"""
         return '.'.join(self.train_bot.split('.')[:-1])
 
 ser.register(TrainSettings)
@@ -255,7 +261,7 @@ def _get_experiences_async(settings: TrainSettings, executable: str, port_min: i
         replay.close()
 
         if num_ticks_to_do <= 0:
-            print('get_experiences_async nothing to do')
+            print(f'get_experiences_async nothing to do (already at {settings.replay_folder}')
             return
 
     replay_paths = [os.path.join(settings.bot_folder, f'replay_{i}') for i in range(nthreads)]
@@ -275,7 +281,7 @@ def _get_experiences_async(settings: TrainSettings, executable: str, port_min: i
     for proc in workers:
         proc.join()
 
-    print('get_experiences_async finished')
+    print(f'get_experiences_async finished, storing in {settings.replay_folder}')
     if os.path.exists(settings.replay_folder):
         filetools.deldir(settings.replay_folder)
 
@@ -338,6 +344,8 @@ def _run(args):
         settings.cur_ind += 1
         with open(args.settings, 'w') as outfile:
             json.dump(ser.serialize_embeddable(settings), outfile)
+
+    print('--finished--')
 
 if __name__ == '__main__':
     main()

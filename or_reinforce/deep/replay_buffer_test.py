@@ -24,7 +24,8 @@ def make_state() -> state.GameState:
 def make_exp() -> rb.Experience:
     """Creates a semi-random experience"""
     lmoves = list(moves.Move)
-    return rb.Experience(make_state(), random.choice(lmoves), random.random(), 1)
+    return rb.Experience(make_state(), random.choice(lmoves), random.randint(1, 3),
+                         make_state(), random.random(), random.randint(1, 2))
 
 FILEPATH = os.path.join('out', 'or_reinforce', 'deep', 'tests', 'replay_buffer_test')
 def main():
@@ -52,7 +53,8 @@ def main():
     buf.close()
     buf2.close()
 
-    rb.merge_buffers([os.path.join(FILEPATH, '2'), os.path.join(FILEPATH, '1')], os.path.join(FILEPATH, '3'))
+    rb.merge_buffers([os.path.join(FILEPATH, '2'), os.path.join(FILEPATH, '1')],
+                     os.path.join(FILEPATH, '3'))
 
     buf.close()
     buf = rb.FileReadableReplayBuffer(os.path.join(FILEPATH, '3'))
@@ -67,7 +69,7 @@ def main():
                     break
             else:
                 raise ValueError(f'got bad value: {got} expected one of \n'
-                        + '\n'.join(repr(exp) for exp in missing))
+                                 + '\n'.join(repr(exp) for exp in missing))
 
     buf.mark()
     got = buf.sample(1)[0]

@@ -5,12 +5,14 @@ import os
 import torch
 import typing
 import json
+import math
 
 from shared.teachers import NetworkTeacher, Network
 from shared.models.ff import FeedforwardComplex, FFTeacher
 from shared.convutils import FluentShape
 import shared.trainer as tnr
 import shared.perf_stats as perf_stats
+import shared.criterion as crits
 
 import or_reinforce.utils.qbot as qbot
 import or_reinforce.utils.rewarders as rewarders
@@ -29,7 +31,9 @@ SAVEDIR = os.path.join('out', 'or_reinforce', 'simple', 'simplebot3')
 MODELFILE = os.path.join(SAVEDIR, 'model.pt')
 
 MOVE_MAP = [Move.Left, Move.Right, Move.Up, Move.Down]
-ALPHA = 0.9
+ALPHA = 0.5
+CUTOFF = 10
+PRED_WEIGHT = ALPHA ** CUTOFF
 
 def _init_encoder(entity_iden):
     return encoders.MergedFlatEncoders(
@@ -97,7 +101,7 @@ class DeepQBot(qbot.QBot):
 
     @property
     def cutoff(self):
-        return 1
+        return CUTOFF
 
     @property
     def alpha(self):
@@ -112,17 +116,31 @@ class DeepQBot(qbot.QBot):
             )
         return float(result.item())
 
-    def learn(self, game_state: GameState, move: Move, reward: float) -> None:
+    def learn(self, game_state: GameState, move: Move, new_state: GameState,
+              reward_raw: float, reward_pred: float) -> None:
         if self.evaluation:
+            print(f'predicted reward: {self.evaluate(game_state, move):.2f} vs actual reward '
+                  + f'{reward_raw:.2f} + {reward_pred:.2f} = {reward_raw + reward_pred:.2f}')
             return
         player_id = 1 if self.entity_iden == game_state.player_1_iden else 2
-        self.replay.add(replay_buffer.Experience(game_state, move, reward, player_id))
-
-        if len(self.replay) % 1000 == 0:
-            print(f'[DeepQBot] replay size = {len(self.replay)}')
+        self.replay.add(replay_buffer.Experience(game_state, move, self.cutoff,
+                                                 new_state, reward_raw, player_id))
 
     def save(self) -> None:
         pass
+
+class MyQBotController(qbot.QBotController):
+    """Adds the pitch and supported moves for this to the qbot controller"""
+    @classmethod
+    def pitch(cls):
+        return (
+            'DeepQBot',
+            'Learns through offline replay of moves with a target network',
+        )
+
+    @classmethod
+    def supported_moves(cls):
+        return MOVE_MAP
 
 def deep1(entity_iden: int, settings: str = None) -> 'Bot':
     """Creates a new simplebot2"""
@@ -134,10 +152,10 @@ def deep1(entity_iden: int, settings: str = None) -> 'Bot':
     with open(settings, 'r') as infile:
         settings = json.load(infile)
 
-    return qbot.QBotController(
+    return MyQBotController(
         entity_iden,
         DeepQBot(entity_iden, settings['replay_path'], (('eval' in settings) and settings['eval'])),
-        rewarders.SCRewarder(bigreward=(1 - ALPHA) / ALPHA), # biggest cumulative reward is 1
+        rewarders.SCRewarder(bigreward=(1 - ALPHA)), # biggest cumulative reward is 1
         MOVE_MAP,
         move_selstyle=qbot.QBotMoveSelectionStyle.Greedy,
         teacher=RandomBot(entity_iden, moves=MOVE_MAP),
@@ -150,12 +168,25 @@ class MyPWL(pwl.PointWithLabelProducer):
 
     Attributes:
         replay (ReplayBuffer): the buffer we are loading experiences from
+        target_model (Network): the network we use to evaluate states
+        target_teacher (NetworkTeacher): the teacher we can use to evaluate states
         encoders_by_id (dict[int, Encoder]): the encoders by player id
+
+        _buffer [torch.tensor[n x ENCODE_DIM]]: where n is len(MOVE_MAP) times the largest batch
+            size we've seen so far. Used to calculate the predicted reward using our target network
+
+        _outbuffer [torch.tensor[n]]: used for storing the rewards
     """
-    def __init__(self, replay: replay_buffer.ReadableReplayBuffer):
+    def __init__(self, replay: replay_buffer.ReadableReplayBuffer, target_model: Network,
+                 target_teacher: NetworkTeacher):
         super().__init__(len(replay), ENCODE_DIM, 1)
         self.replay = replay
+        self.target_model = target_model
+        self.target_teacher = target_teacher
         self.encoders_by_id = dict()
+
+        self._buffer = torch.zeros(len(MOVE_MAP), ENCODE_DIM, dtype=torch.float32)
+        self._outbuffer = torch.zeros(len(MOVE_MAP), dtype=torch.float32)
 
     def mark(self):
         self.replay.mark()
@@ -184,10 +215,31 @@ class MyPWL(pwl.PointWithLabelProducer):
 
         enc: encoders.FlatEncoder = self.encoders_by_id[ent_id]
         point_tens = enc.encode(exp.game_state, exp.action)
-        return pwl.PointWithLabel(point=point_tens, label=exp.reward)
+
+        for i, move in enumerate(MOVE_MAP):
+            enc.encode(exp.new_state, move, out=self._buffer[i])
+
+        self.target_teacher.classify_many(self.target_model, self._buffer[:len(MOVE_MAP)],
+                                          self._outbuffer[:len(MOVE_MAP)])
+
+        return pwl.PointWithLabel(
+            point=point_tens,
+            label=exp.reward_rec + float(self._outbuffer[:len(MOVE_MAP)].max().item()) * PRED_WEIGHT
+        )
+
+    def _ensure_buffers(self, batch_size):
+        req_size = batch_size * len(MOVE_MAP)
+        if self._outbuffer.shape[0] >= req_size:
+            return
+
+        self._buffer = torch.zeros((req_size, ENCODE_DIM), dtype=torch.float32)
+        self._outbuffer = torch.zeros(req_size, dtype=torch.float32)
 
     def fill(self, points: torch.tensor, labels: torch.tensor) -> None:
         batch_size = points.shape[0]
+        self._ensure_buffers(batch_size)
+        lmmap = len(MOVE_MAP)
+
         exps = self.replay.sample(batch_size)
         for i, exp in enumerate(exps):
             ent_id = exp.state.player_1_iden if exp.player_id == 1 else exp.state.player_2_iden
@@ -196,7 +248,18 @@ class MyPWL(pwl.PointWithLabelProducer):
 
             enc: encoders.FlatEncoder = self.encoders_by_id[ent_id]
             enc.encode(exp.state, exp.action, out=points[i])
-            labels[i] = exp.reward
+
+            for j, move in enumerate(MOVE_MAP):
+                enc.encode(exp.new_state, move, out=self._buffer[i * lmmap + j])
+            labels[i] = exp.reward_rec
+
+        self.target_teacher.classify_many(self.target_model, self._buffer[:batch_size * lmmap],
+                                          self._outbuffer[:batch_size * lmmap].unsqueeze(1))
+
+        best_preds, _ = self._outbuffer[:batch_size * lmmap].reshape(batch_size, lmmap).max(dim=1)
+        labels += best_preds * PRED_WEIGHT
+
+
 
     def _fill(self, points, labels):
         raise NotImplementedError
@@ -232,27 +295,34 @@ def offline_learning():
 
     print(f'loaded {len(replay)} experiences for replay...')
 
-    train_pwl = MyPWL(replay)
+    network = gen.init_or_load_model(_init_model, MODELFILE)
+    teacher = MyTeacher(FFTeacher())
+
+
+    train_pwl = MyPWL(replay, gen.load_model(MODELFILE), teacher)
     test_pwl = train_pwl
 
-    network = gen.init_or_load_model(_init_model, MODELFILE)
+    def update_target(ctx: tnr.GenericTrainingContext, hint: str):
+        ctx.logger.info('swapping target network, hint=%s', hint)
+        gen.save_model(network, MODELFILE)
+        train_pwl.target_model = gen.load_model(MODELFILE)
 
     trainer = tnr.GenericTrainer(
         train_pwl=train_pwl,
         test_pwl=test_pwl,
-        teacher=MyTeacher(FFTeacher()),
+        teacher=teacher,
         batch_size=32,
-        learning_rate=0.003,
-        optimizer=torch.optim.Adam([p for p in network.parameters() if p.requires_grad], lr=0.003),
-        criterion=torch.nn.SmoothL1Loss()
+        learning_rate=0.001,
+        optimizer=torch.optim.Adam([p for p in network.parameters() if p.requires_grad], lr=0.001),
+        criterion=torch.nn.MSELoss()
     )
     (trainer
      .reg(tnr.EpochsTracker())
      .reg(tnr.EpochsStopper(100))
      .reg(tnr.InfOrNANDetecter())
      .reg(tnr.DecayTracker())
-     .reg(tnr.DecayStopper(3))
-     .reg(tnr.LRMultiplicativeDecayer())
+     .reg(tnr.DecayStopper(1))
+     .reg(tnr.OnEpochCaller.create_every(update_target, start=2, skip=2))
      .reg(tnr.DecayOnPlateau())
     )
     trainer.train(network, target_dtype=torch.float32, point_dtype=torch.float32, perf=perf)

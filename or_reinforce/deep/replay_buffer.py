@@ -20,16 +20,21 @@ class Experience(ser.Serializable):
     Attributes:
         state (GameState): the state of the game
         action (Move): the action that was taken from the state
-        reward (float): the cumulative discounted reward for the policy from the state-action pair
+        delay (int): the number of ticks we simulated
+        new_state (GameState): the new state that we were in after
+        reward_rec (float): the reward that we actually received in the delay ticks
         player_id (int): either 1 or 2 for the player the bot is controlling
     """
-    def __init__(self, state: GameState, action: Move, reward: float, player_id: int):
-        tus.check(state=(state, GameState), action=(action, Move), reward=(reward, float),
-                  player_id=(player_id, int))
+    def __init__(self, state: GameState, action: Move, delay: int, new_state: GameState,
+                 reward_rec: float, player_id: int):
+        tus.check(state=(state, GameState), action=(action, Move), delay=(delay, int),
+                  reward_rec=(reward_rec, float), player_id=(player_id, int))
 
         self.state = state
         self.action = action
-        self.reward = reward
+        self.delay = delay
+        self.new_state = new_state
+        self.reward_rec = reward_rec
         self.player_id = player_id
 
     def has_custom_serializer(self):
@@ -41,24 +46,27 @@ class Experience(ser.Serializable):
         arr.write(len(serd_state).to_bytes(4, 'big', signed=False))
         arr.write(serd_state)
         arr.write(int(self.action).to_bytes(4, 'big', signed=False))
-        arr.write(struct.pack('>f', self.reward))
+        arr.write(self.delay.to_bytes(4, 'big', signed=False))
+        serd_state = self.new_state.to_prims()
+        arr.write(len(serd_state).to_bytes(4, 'big', signed=False))
+        arr.write(serd_state)
+        arr.write(struct.pack('>f', self.reward_rec))
         arr.write(self.player_id.to_bytes(4, 'big', signed=False))
         return arr.getvalue()
 
     @classmethod
-    def from_prims(cls, prims: bytes, perf: perf_stats.PerfStats = perf_stats.NoopPerfStats()) -> 'Experience': # pylint: disable=line-too-long, arguments-differ
-        perf.enter('WRAP')
+    def from_prims(cls, prims: bytes) -> 'Experience': # pylint: disable=line-too-long, arguments-differ
         arr = io.BytesIO(prims)
         arr.seek(0, 0)
-        perf.exit_then_enter('STATE')
         state_len = int.from_bytes(arr.read(4), 'big', signed=False)
         state = GameState.from_prims(arr.read(state_len))
-        perf.exit_then_enter('MISC')
         action = Move(int.from_bytes(arr.read(4), 'big', signed=False))
+        delay = int.from_bytes(arr.read(4), 'big', signed=False)
+        state_len = int.from_bytes(arr.read(4), 'big', signed=False)
+        new_state = GameState.from_prims(arr.read(state_len))
         reward = struct.unpack('>f', arr.read(4))[0]
         player_id = int.from_bytes(arr.read(4), 'big', signed=False)
-        perf.exit()
-        return Experience(state, action, reward, player_id)
+        return Experience(state, action, delay, new_state, reward, player_id)
 
     def __eq__(self, other: 'Experience') -> bool:
         if not isinstance(other, Experience):
@@ -67,14 +75,20 @@ class Experience(ser.Serializable):
             return False
         if self.action != other.action:
             return False
-        if abs(self.reward - other.reward) > 1e-6:
+        if self.delay != other.delay:
+            return False
+        if self.new_state != other.new_state:
+            return False
+        if abs(self.reward_rec - other.reward_rec) > 1e-6:
             return False
         if self.player_id != other.player_id:
             return False
         return True
 
     def __repr__(self) -> str:
-        return f'Experience [state={repr(self.state)}, action={repr(self.action)}, reward={repr(self.reward)}, player_id={self.player_id}]'
+        return (f'Experience [state={repr(self.state)}, action={repr(self.action)}, '
+                + f'new_state={repr(self.new_state)}, '
+                + f'reward_rec={repr(self.reward_rec)}, player_id={self.player_id}]')
 
 ser.register(Experience)
 
@@ -142,7 +156,8 @@ class FileWritableReplayBuffer(WritableReplayBuffer):
             self._largest_state_nbytes = 0
             self._write_meta()
         elif not os.path.isdir(dirname):
-            raise ValueError(f'dirname must be a path to a directory, but {dirname} exists and is not a directory')
+            raise ValueError(f'dirname must be a path to a directory, but {dirname} '
+                             + f'exists and is not a directory')
         else:
             with open(os.path.join(self.dirname, META_FILE), 'r') as infile:
                 meta = json.load(infile)
@@ -153,15 +168,19 @@ class FileWritableReplayBuffer(WritableReplayBuffer):
             exp_len = os.path.getsize(expfile)
             if self._flen != exp_len:
                 import warnings
-                warnings.warn(f'experiences file corrupted - written up to {exp_len}, valid up to {self._flen}. will discard bad data')
+                warnings.warn(f'experiences file corrupted - written up to {exp_len}, '
+                              + f'valid up to {self._flen}. will discard bad data')
                 if exp_len < self._flen:
-                    raise ValueError(f'cannot recover experience file smaller than expected (got {exp_len}, expected {self._flen})')
+                    raise ValueError(f'cannot recover experience file smaller than '
+                                     + f'expected (got {exp_len}, expected {self._flen})')
 
                 counter = 1
-                cp_loc = os.path.join(self.dirname, EXPERIENCES_FILE + '.' + str(counter) + '.corrupted')
+                cp_loc = os.path.join(self.dirname,
+                                      EXPERIENCES_FILE + '.' + str(counter) + '.corrupted')
                 while os.path.exists(cp_loc):
                     counter += 1
-                    cp_loc = os.path.join(self.dirname, EXPERIENCES_FILE + '.' + str(counter) + '.corrupted')
+                    cp_loc = os.path.join(self.dirname,
+                                          EXPERIENCES_FILE + '.' + str(counter) + '.corrupted')
 
                 os.rename(expfile, cp_loc)
                 with open(cp_loc, 'rb') as infile:
@@ -259,7 +278,8 @@ class FileReadableReplayBuffer(ReadableReplayBuffer):
             meta = json.load(infile)
             self._len = meta['length']
             largest_nbytes = meta['largest_state_nbytes']
-            self.padded_size = ((largest_nbytes + 4 + 4095) // 4096) * 4096 # need 4 bytes for length
+            self.padded_size = (
+                (largest_nbytes + 4 + 4095) // 4096) * 4096 # need 4 bytes for length
 
         self._shuffle(1)
         self.handle = open(self._shuffle_path(1), 'rb', buffering=0)
@@ -287,7 +307,8 @@ class FileReadableReplayBuffer(ReadableReplayBuffer):
 
                 for i in range(self._len):
                     if outfile.tell() != i * self.padded_size:
-                        raise ValueError(f'should not get here; outfile loc = {outfile.tell()}, expected = {i * self.padded_size}')
+                        raise ValueError(f'should not get here; outfile loc = {outfile.tell()}, '
+                                         + f'expected = {i * self.padded_size}')
 
                     inlen = int.from_bytes(infile.read(4), 'big', signed=False)
                     block[0:4] = inlen.to_bytes(4, 'big', signed=False)
@@ -297,14 +318,16 @@ class FileReadableReplayBuffer(ReadableReplayBuffer):
                         bytes_read += infile.readinto(blockmv[4 + bytes_read:4 + inlen])
                         _ctr += 1
                         if _ctr > 100:
-                            raise ValueError(f'infinite loop detected: bytes_read={bytes_read}, expected = {inlen}')
+                            raise ValueError(f'infinite loop detected: bytes_read={bytes_read}, '
+                                             + f'expected = {inlen}')
                     if lastlen > inlen:
                         blockmv[4 + inlen:4 + lastlen] = bytes(lastlen - inlen)
                     lastlen = inlen
 
                     j = random.randint(0, i)
                     if i != j:
-                        # goal: at position i (current file location), write the value at position j (old file location)
+                        # goal: at position i (current file location), write the value at
+                        # position j (old file location)
                         ipos = outfile.tell() # store pos at i
                         outfile.seek(j * self.padded_size, 0) # seek to j
                         bytesread = outfile.readinto(block2) # read from j
@@ -313,7 +336,8 @@ class FileReadableReplayBuffer(ReadableReplayBuffer):
                             bytesread += outfile.readinto(block2mv[bytesread:])
                             _ctr += 1
                             if _ctr > 100:
-                                raise ValueError(f'infinite loop detected; bytesread = {bytesread}, expected = {self.padded_size}')
+                                raise ValueError(f'infinite loop detected; bytesread = {bytesread}'
+                                                 + f', expected = {self.padded_size}')
                         outfile.seek(ipos) # seek to i
                         outfile.write(block2) # write from j
                         outfile.seek(j * self.padded_size, 0) # seek to j
@@ -328,8 +352,8 @@ class FileReadableReplayBuffer(ReadableReplayBuffer):
 
     @property
     def position(self):
-        """Gets were we are in the current epoch. The same position will not generally correspond with the
-        same experience due to shuffling"""
+        """Gets were we are in the current epoch. The same position will not generally correspond
+        with the same experience due to shuffling"""
         return self.handle.tell() // self.padded_size
 
     @property
@@ -338,7 +362,8 @@ class FileReadableReplayBuffer(ReadableReplayBuffer):
         return self._len - self.position
 
     def mark(self):
-        self.marks.append(FileMark(shuffle_counter=self.shuffle_counter, file_loc=self.handle.tell()))
+        self.marks.append(FileMark(shuffle_counter=self.shuffle_counter,
+                                   file_loc=self.handle.tell()))
 
     def reset(self):
         to_mark = self.marks.pop()
@@ -373,7 +398,7 @@ class FileReadableReplayBuffer(ReadableReplayBuffer):
             bytes_read += amt
         self.perf.exit_then_enter('DECODE_BLOCK')
         reqlen = int.from_bytes(self._blockmv[:4], 'big', signed=False)
-        exp = Experience.from_prims(self._blockmv[4:4 + reqlen], perf=self.perf)
+        exp = Experience.from_prims(self._blockmv[4:4 + reqlen])
         self.perf.exit()
 
         if self.handle.tell() >= self._len * self.padded_size:

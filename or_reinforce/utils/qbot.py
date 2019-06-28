@@ -51,14 +51,28 @@ class QBot:
         """
         raise NotImplementedError
 
+    def started(self, game_state: GameState) -> None:
+        """Called when we first connect"""
+        pass
+
     def evaluate(self, game_state: GameState, move: Move) -> float:
         """Evaluate the given move and return the anticipated (diminished)
         rewards"""
         raise NotImplementedError
 
-    def learn(self, game_state: GameState, move: Move, reward: float) -> None:
+    def learn(self, game_state: GameState, move: Move, new_state: GameState,
+              reward_raw: float, reward_pred: float) -> None:
         """Teach the underling model that it should have predicted the specified
         diminished reward from making the specified move in the given game state
+
+        Arguments:
+            game_state (GameState): the state of the game when we made the given move
+            move (Move): the move that we made
+            new_state (GameState): the state of the game we ended up in after cutoff moves
+            reward_raw (float): the reward that we actually got from the cutoff timesteps
+                after the reward (cumulative and discounted)
+            reward_pred (float): the reward that we predict that we will get in the state
+                that we ended up to (discounted appropriately)
         """
         raise NotImplementedError
 
@@ -145,14 +159,21 @@ class QBotController(StateActionBot):
 
         if save_activations:
             if not isinstance(activations_folder, str):
-                raise ValueError(f'save_activations is set but activations_folder is {activations_folder} (str expected, got {type(activations_folder)})')
+                raise ValueError('save_activations is set but activations_folder is '
+                                 + f'{activations_folder} (str expected, got '
+                                 + f'{type(activations_folder)})')
             if not isinstance(qbot, HiddenStateQBot):
-                raise ValueError(f'save_activations is True but qbot {type(qbot)} does not expose hidden acts')
+                raise ValueError(f'save_activations is True but qbot {type(qbot)} does '
+                                 + 'not expose hidden acts')
 
         self.save_activations = save_activations
         self.activations_folder = activations_folder
         self.activations_per_block = activations_per_block
-        self.activations = None if not self.save_activations else StackedNetworkActivations(activations_per_block)
+        self.activations = (
+            None
+            if not self.save_activations
+            else StackedNetworkActivations(activations_per_block)
+        )
         self.activations_block = None
         if self.save_activations:
             self.activations_block = 1
@@ -182,13 +203,20 @@ class QBotController(StateActionBot):
     def pitch(cls):
         import warnings
         warnings.warn('Should override pitch!', category=UserWarning)
-        return 'QBotController', 'This bot is missing a description. To add a description, subclass QBotController and override the classmethod pitch'
+        return (
+            'QBotController',
+            'This bot is missing a description. To add a description, subclass QBotController '
+            + 'and override the classmethod pitch'
+        )
 
     @classmethod
     def supported_moves(cls):
         import warnings
         warnings.warn('Should override supported_moves!', category=UserWarning)
         return [Move.Left, Move.Right, Move.Up, Move.Down]
+
+    def started(self, game_state: GameState) -> Move:
+        self.qbot.started(game_state)
 
     def move(self, game_state: GameState) -> Move:
         if self.teacher_force_amt and random.random() < self.teacher_force_amt:
@@ -254,12 +282,16 @@ class QBotController(StateActionBot):
             factor *= self.qbot.alpha
 
         latest_gamestate = self.gstate_cache.fetch(self.history[self.qbot.cutoff][0])
-        reward += factor * (
+        reward_pred = factor * (
             self.qbot.evaluate(latest_gamestate, self._det_move(latest_gamestate))
         )
 
+        latest = self.history[self.qbot.cutoff]
+        latest_state = self.gstate_cache.fetch(latest[0])
         oldest = self.history.popleft()
-        self.qbot.learn(self.gstate_cache.pop(oldest[0]), oldest[1], reward)
+        oldest_state = self.gstate_cache.pop(oldest[0])
+        self.qbot.learn(
+            oldest_state, oldest[1], latest_state, reward, reward_pred)
 
         if time.time() - self.last_save >= self.save_interval:
             self.qbot.save()
