@@ -11,9 +11,11 @@ def check(**kwargs):
         if not isinstance(val, expected_types):
             if isinstance(expected_types, tuple):
                 joined = ', '.join(expected_types)
-                raise ValueError(f'expected {key} is one of {joined} but got {val} (type={type(val)})')
+                raise ValueError(f'expected {key} is one of {joined} but got {val} '
+                                 + f'(type={type(val)})')
             else:
-                raise ValueError(f'expected {key} is {expected_types} but got {val} (type={type(val)})')
+                raise ValueError(f'expected {key} is {expected_types} but got {val} '
+                                 + f'(type={type(val)})')
 
 def check_list(expected_types, **kwargs):
     """Verifies that val is list-like and contains only the specified types. The val
@@ -70,6 +72,8 @@ def _check_shape(actual, expected) -> bool:
 
 def check_tensors(**kwargs):
     """Every keyword argument should be a tuple in the form (val, expected_shape, expected_dtype).
+    The expected dtype may be None or a list or tuple of types.
+
     Each shape component may be one of:
         int (interpreted as a specific value)
         None (interpreted as any value is ok)
@@ -88,5 +92,13 @@ def check_tensors(**kwargs):
         if not _check_shape(val.shape, expected_shape):
             raise ValueError(f'expected {key} has shape {_make_shape_str(expected_shape)} '
                              + f'but has shape {str(tuple(val.shape))}')
-        if val.dtype != expected_dtype:
-            raise ValueError(f'expected {key} has dtype {expected_dtype} but has dtype {val.dtype}')
+        if expected_dtype is not None:
+            if isinstance(expected_dtype, (tuple, list)):
+                if val.dtype not in expected_dtype:
+                    raise ValueError(
+                        f'expected {key} has dtype in '
+                        + ', '.join(str(dt) for dt in expected_dtype)
+                        + f' but has dtype {val.dtype}')
+            elif val.dtype != expected_dtype:
+                raise ValueError(f'expected {key} has dtype {expected_dtype} '
+                                 + f'but has dtype {val.dtype}')

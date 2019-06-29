@@ -6,13 +6,20 @@ import torch
 import typing
 import json
 import math
+import filetools
+import numpy as np
+import scipy.io
+import datetime
 
 from shared.teachers import NetworkTeacher, Network
-from shared.models.ff import FeedforwardComplex, FFTeacher
+from shared.models.ff import FeedforwardNetwork, FeedforwardComplex, FFTeacher, FFHiddenActivations
 from shared.convutils import FluentShape
+from shared.layers.norm import EvaluatingAbsoluteNormLayer, LearningAbsoluteNormLayer
 import shared.trainer as tnr
 import shared.perf_stats as perf_stats
 import shared.criterion as crits
+import shared.typeutils as tus
+import shared.cp_utils as cp_utils
 
 import or_reinforce.utils.qbot as qbot
 import or_reinforce.utils.rewarders as rewarders
@@ -45,6 +52,300 @@ def _init_encoder(entity_iden):
     )
 
 ENCODE_DIM = _init_encoder(None).dim
+HIDDEN_DIM = 50
+
+def _noop(*args, **kwargs):
+    pass
+
+def forward_with(fc_layers, norms, learning, inp, acts_cb):
+    tus.check_tensors(inp=(inp, (('batch', None), ('input_dim', ENCODE_DIM)), torch.float32))
+    if acts_cb:
+        tus.check_callable(acts_cb=acts_cb)
+        acts_cb(FFHiddenActivations(layer=0, hidden_acts=inp))
+
+    if learning:
+        learning[0](inp)
+    res = norms[0](inp)
+    res = fc_layers[0](res)
+    res = torch.tanh(res)
+    if learning:
+        learning[1](res)
+    res = norms[1](res)
+    if acts_cb:
+        acts_cb(FFHiddenActivations(layer=1, hidden_acts=res))
+    res = fc_layers[1](res)
+    res = torch.tanh(res)
+    if learning:
+        learning[2](res)
+    res = norms[2](res)
+    if acts_cb:
+        acts_cb(FFHiddenActivations(layer=2, hidden_acts=res))
+    res = fc_layers[2](res)
+    res = torch.tanh(res)
+    if acts_cb:
+        acts_cb(FFHiddenActivations(layer=3, hidden_acts=res))
+    return res
+
+class Deep1ModelTrain(FeedforwardNetwork):
+    """The deep1 model we use for training. This is a feed forward network with the following shape:
+
+    input (ENCODE_DIM)
+    batch_norm
+    linear (ENCODE_DIM -> HIDDEN_DIM)
+    tanh
+    batch_norm
+    linear (HIDDEN_DIM -> HIDDEN_DIM)
+    tanh
+    batch_norm
+    linear (HIDDEN_DIM -> 1)
+    tanh
+
+    This network can be swapped to Deep1ModelEval, which is the same except the batch norms are
+    fixed to assume a specific mean and variance. The means and variances will be calculated
+    using the Deep1ModelEval class.
+
+    Attributes:
+        fc_layers (list[nn.Linear]): the linear layers in the order that they are used
+        bnorms (list[nn.BatchNorm1d]): the batch norms in the order that they are used
+    """
+    def __init__(self, fc_layers):
+        super().__init__(ENCODE_DIM, 1, 3)
+
+        self.fc_layers = fc_layers
+        self.bnorms = [
+            torch.nn.BatchNorm1d(ENCODE_DIM),
+            torch.nn.BatchNorm1d(HIDDEN_DIM),
+            torch.nn.BatchNorm1d(HIDDEN_DIM)
+        ]
+
+        for i, lyr in self.fc_layers:
+            self.add_module(f'layer{i}', lyr)
+
+    def forward(self, inp: torch.tensor, acts_cb: typing.Callable = None):
+        forward_with(self.fc_layers, self.bnorms, None, inp, acts_cb)
+
+    def save(self, outpath: str, exist_ok: bool = False):
+        """Saves this network to the given path. The path should be a folder, because inside
+        the folder we will store:
+            model.pt - an equivalent network which can be shared and loaded with just pytorch
+            layers.npz - the fully connected layer weights and biases in numpy form
+                Each fully connected layer i has its weights stored in lyr_weight_i and its biases
+                stored in lyr_bias_i
+            layers.mat - the fully connected layer weights and biases in matlab form
+                Same variable names as layers.npz
+            readme.txt - stores relevant documentation for loading this model
+        """
+        if os.path.exists(outpath):
+            if not exist_ok:
+                raise FileExistsError(outpath)
+            if not os.path.isdir(outpath):
+                raise ValueError(f'expected outpath is directory, got {outpath} (not isdir)')
+            filetools.deldir(outpath)
+
+        os.makedirs(outpath)
+
+        equiv_net = torch.nn.Sequential(
+            torch.nn.BatchNorm1d(ENCODE_DIM),
+            cp_utils.copy_linear(self.fc_layers[0]),
+            torch.nn.Tanh(),
+            torch.nn.BatchNorm1d(HIDDEN_DIM),
+            cp_utils.copy_linear(self.fc_layers[1]),
+            torch.nn.Tanh(),
+            torch.nn.BatchNorm1d(HIDDEN_DIM),
+            cp_utils.copy_linear(self.fc_layers[2]),
+            torch.nn.Tanh()
+        )
+        torch.save(equiv_net, os.path.join(outpath, 'model.pt'))
+        del equiv_net
+
+        layer_data = {}
+        for i, lyr in enumerate(self.fc_layers):
+            layer_data[f'lyr_weight_{i}'] = lyr.weight.data.clone().numpy()
+            layer_data[f'lyr_bias_{i}'] = lyr.bias.data.clone().numpy()
+        np.savez_compressed(os.path.join(outpath, 'layers.npz'), **layer_data)
+        scipy.io.savemat(os.path.join(outpath, 'layers.mat'), layer_data)
+
+        with open(os.path.join(outpath, 'readme.txt'), 'w') as outfile:
+            print('Model: Deep1ModelTrain', file=outfile)
+            print(f'Date: {datetime.datetime.now()}', file=outfile)
+            print('Constants:', file=outfile)
+            for nm, const in {'ALPHA': ALPHA, 'CUTOFF': CUTOFF,
+                              'ENCODE_DIM': ENCODE_DIM,
+                              'HIDDEN_DIM': HIDDEN_DIM}.items():
+                print(f'  {nm}: {const}', file=outfile)
+            print('Class Documentation:', file=outfile)
+            print(Deep1ModelTrain.__doc__, file=outfile)
+            print()
+            print('Function Documentation: ', file=outfile)
+            print(Deep1ModelTrain.save.__doc__)
+
+    @classmethod
+    def load(cls, inpath: str) -> 'Deep1ModelTrain':
+        """Loads the model that is stored in the given folder. It should have been stored there
+        as if by save(inpath)."""
+        tus.check(inpath=(inpath, str))
+        if not os.path.exists(inpath):
+            raise FileNotFoundError(inpath)
+        lyr_data_path = os.path.join(inpath, 'layers.npz')
+        if not os.path.exists(lyr_data_path):
+            raise FileNotFoundError(lyr_data_path)
+
+        fc_layers = []
+        with np.load(lyr_data_path) as lyr_data:
+            for i in range(3):
+                weights_np = lyr_data[f'lyr_weight_{i}']
+                bias_np = lyr_data[f'lyr_bias_{i}']
+                lin_lyr = torch.nn.Linear(weights_np.shape[0], weights_np.shape[1])
+                lin_lyr.weight.data[:] = torch.from_numpy(weights_np)
+                lin_lyr.bias.data[:] = torch.from_numpy(bias_np)
+                fc_layers.append(lin_lyr)
+        return cls(fc_layers)
+
+class Deep1ModelEval(FeedforwardNetwork):
+    """The deep1 model we can use for evaluating and as a target network. Instead of using the
+    batch as the calculation for mean and variance, this uses a fixed value for each feature
+    that is acquired in a earlier, potentially larger sample. This ensures we can evaluate the
+    network effectively on the very first tick of a game, for example.
+
+    Attributes:
+        fc_layers (list[nn.Linear]): the same fully connected layers as the train model
+        anorms (list[EvaluatingAbsoluteNormLayer]): replaces the batch norm layers
+    """
+    def __init__(self, fc_layers: typing.List[torch.nn.Linear],
+                 anorms: typing.List[EvaluatingAbsoluteNormLayer]):
+        self.fc_layers = fc_layers
+        self.anorms = anorms
+
+    def forward(self, inp: torch.tensor, acts_cb: typing.Callable = None):
+        forward_with(self.fc_layers, self.anorms, None, inp, acts_cb)
+
+    def save(self, outpath: str, exist_ok: bool = False):
+        """Saves this model to the given outpath. The outpath should be a folder. This will
+        store the following things:
+            model.pt - an equivalent network which can be loaded with just pytorch. This is
+                accomplished by replacing the more memory efficient EvaluatingAbsoluteNormLayer
+                with a linear layer with lots of 0s
+            layers.npz - stores the fully connected layers with lyr_weight_i and lyr_bias_i, storing
+                the norms in norm_means_i and norm_inv_std_i, where norm_inv_std_i is 1/std(feature)
+            layers.mat - stores the equivalent data as layers.npz in matlab format
+            readme.txt - relevant documentation for loading the model
+        """
+        if os.path.exists(outpath):
+            if not exist_ok:
+                raise FileExistsError(outpath)
+            if not os.path.isdir(outpath):
+                raise ValueError(f'expected outpath is dir, got {outpath} (not isdir)')
+            filetools.deldir(outpath)
+
+        os.makedirs(outpath)
+        equiv_net = torch.nn.Sequential(
+            self.anorms[0].to_linear(),
+            cp_utils.copy_linear(self.fc_layers[0]),
+            torch.nn.Tanh(),
+            self.anorms[1].to_linear(),
+            cp_utils.copy_linear(self.fc_layers[1]),
+            torch.nn.Tanh(),
+            self.anorms[2].to_linear(),
+            cp_utils.copy_linear(self.fc_layers[2]),
+            torch.nn.Tanh()
+        )
+        torch.save(equiv_net, os.path.join(outpath, 'model.pt'))
+        del equiv_net
+
+        layers = {}
+        for i, norm in enumerate(self.anorms):
+            layers[f'norm_means_{i}'] = self.anorms[i].means.clone().numpy()
+            layers[f'norm_inv_std_{i}'] = self.anorms[i].inv_std.clone().numpy()
+        for i, lyr in enumerate(self.fc_layers):
+            layers[f'lyr_weight_{i}'] = lyr.weight.data.clone().numpy()
+            layers[f'lyr_bias_{i}'] = lyr.bias.data.clone().numpy()
+        np.savez_compressed(os.path.join(outpath, 'layers.npz'), **layers)
+        scipy.io.savemat(os.path.join(outpath, 'layers.mat'), layers)
+
+        with open(os.path.join(outpath, 'readme.txt')) as outfile:
+            print('Model: Deep1ModelEval', file=outfile)
+            print(f'Date: {datetime.datetime.now()}', file=outfile)
+            print('Constants:', file=outfile)
+            for nm, const in {'ALPHA': ALPHA, 'CUTOFF': CUTOFF,
+                              'ENCODE_DIM': ENCODE_DIM,
+                              'HIDDEN_DIM': HIDDEN_DIM}.items():
+                print(f'  {nm}: {const}', file=outfile)
+            print('Class Documentation:', file=outfile)
+            print(Deep1ModelEval.__doc__, file=outfile)
+            print()
+            print('Function Documentation: ', file=outfile)
+            print(Deep1ModelEval.save.__doc__)
+
+    @classmethod
+    def load(cls, inpath: str) -> 'Deep1ModelEval':
+        """Loads the model in the specified directory, where the directory exists as if it was
+        created by a call to save(inpath).
+        """
+        if not os.path.exists(inpath):
+            raise FileNotFoundError(inpath)
+        lyr_data_path = os.path.join(inpath, 'layers.npz')
+        if not os.path.exists(lyr_data_path):
+            raise FileNotFoundError(lyr_data_path)
+
+        fc_layers = []
+        anorms = []
+        with np.load(lyr_data_path) as lyr_data:
+            for i in range(3):
+                weights_np = lyr_data[f'lyr_weight_{i}']
+                bias_np = lyr_data[f'lyr_bias_{i}']
+                lin_lyr = torch.nn.Linear(weights_np.shape[0], weights_np.shape[1])
+                lin_lyr.weight.data[:] = torch.from_numpy(weights_np)
+                lin_lyr.bias.data[:] = torch.from_numpy(bias_np)
+                fc_layers.append(lin_lyr)
+
+                means_np = lyr_data[f'norm_means_{i}']
+                inv_std_np = lyr_data[f'norm_inv_std_{i}']
+                anorms.append(EvaluatingAbsoluteNormLayer(
+                    means_np.shape[0], torch.from_numpy(means_np), torch.from_numpy(inv_std_np)))
+
+        return cls(fc_layers, anorms)
+
+class Deep1ModelToEval(FeedforwardNetwork):
+    """A deep1 model that was using a batch norm but is in the process of being converted to an
+    absolute norm.
+
+    Attributes:
+        fc_layers (list[nn.Linear]): the fully connected layers that we learned
+        cur_norms (list[union[BatchNorm1d, EvaluatingAbsoluteNormLayer]]): the current norm we use
+        learning (list[LearningAbsoluteNormLayer]): the new approximation for the norms
+    """
+    def __init__(self, fc_layers: typing.List[torch.nn.Linear]):
+        self.fc_layers = fc_layers
+        self.cur_norms = [
+            torch.nn.BatchNorm1d(ENCODE_DIM),
+            torch.nn.BatchNorm1d(HIDDEN_DIM),
+            torch.nn.BatchNorm1d(HIDDEN_DIM)
+        ]
+        self.learning = [
+            LearningAbsoluteNormLayer(ENCODE_DIM),
+            LearningAbsoluteNormLayer(HIDDEN_DIM),
+            LearningAbsoluteNormLayer(HIDDEN_DIM)
+        ]
+
+    def forward(self, inp: torch.tensor, acts_cb: typing.Callable = None):
+        forward_with(self.fc_layers, self.cur_norms, self.learning, inp, acts_cb)
+
+    def learning_to_current(self):
+        """Replaces the current norms with the learned norms and resets the
+        learning norms.
+        """
+        self.cur_norms = [learn.to_evaluative() for learn in self.learning]
+        self.learning = [
+            LearningAbsoluteNormLayer(ENCODE_DIM),
+            LearningAbsoluteNormLayer(HIDDEN_DIM),
+            LearningAbsoluteNormLayer(HIDDEN_DIM)
+        ]
+
+    def to_evaluative(self) -> Deep1ModelEval:
+        if not isinstance(self.cur_norms[0], EvaluatingAbsoluteNormLayer):
+            raise ValueError('learning_to_current must be called at least once')
+
+        return Deep1ModelEval(self.fc_layers, self.cur_norms)
 
 def _init_model():
     nets = FluentShape(ENCODE_DIM)
@@ -113,7 +414,7 @@ class DeepQBot(qbot.QBot):
             self.model,
             self.encoder.encode(game_state, move),
             result
-            )
+        )
         return float(result.item())
 
     def learn(self, game_state: GameState, move: Move, new_state: GameState,
@@ -142,7 +443,7 @@ class MyQBotController(qbot.QBotController):
     def supported_moves(cls):
         return MOVE_MAP
 
-def deep1(entity_iden: int, settings: str = None) -> 'Bot':
+def deep1(entity_iden: int, settings: str = None) -> 'Bot':  # noqa: F821
     """Creates a new simplebot2"""
     if not settings:
         settings = SETTINGS_FILE
@@ -155,7 +456,7 @@ def deep1(entity_iden: int, settings: str = None) -> 'Bot':
     return MyQBotController(
         entity_iden,
         DeepQBot(entity_iden, settings['replay_path'], (('eval' in settings) and settings['eval'])),
-        rewarders.SCRewarder(bigreward=(1 - ALPHA)), # biggest cumulative reward is 1
+        rewarders.SCRewarder(bigreward=(1 - ALPHA)),  # biggest cumulative reward is 1
         MOVE_MAP,
         move_selstyle=qbot.QBotMoveSelectionStyle.Greedy,
         teacher=RandomBot(entity_iden, moves=MOVE_MAP),
@@ -259,8 +560,6 @@ class MyPWL(pwl.PointWithLabelProducer):
         best_preds, _ = self._outbuffer[:batch_size * lmmap].reshape(batch_size, lmmap).max(dim=1)
         labels += best_preds * PRED_WEIGHT
 
-
-
     def _fill(self, points, labels):
         raise NotImplementedError
 
@@ -298,7 +597,6 @@ def offline_learning():
     network = gen.init_or_load_model(_init_model, MODELFILE)
     teacher = MyTeacher(FFTeacher())
 
-
     train_pwl = MyPWL(replay, gen.load_model(MODELFILE), teacher)
     test_pwl = train_pwl
 
@@ -324,7 +622,7 @@ def offline_learning():
      .reg(tnr.DecayStopper(1))
      .reg(tnr.OnEpochCaller.create_every(update_target, start=2, skip=2))
      .reg(tnr.DecayOnPlateau())
-    )
+     )
     trainer.train(network, target_dtype=torch.float32, point_dtype=torch.float32, perf=perf)
 
     gen.save_model(network, MODELFILE)
