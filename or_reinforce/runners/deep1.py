@@ -12,6 +12,8 @@ import random
 import psutil
 import math
 import sys
+import numpy as np
+
 from multiprocessing import Process
 
 import shared.filetools as filetools
@@ -72,10 +74,10 @@ class TrainSettings(ser.Serializable):
         for _ in range(5): # 5 * 20k = 100k samples random
             train_seq.append(SessionSettings(tie_len=111, tar_ticks=20000, train_force_amount=1))
 
-        for tfa in range(1, 0.1, 25): # 25*40k = 1m samples linearly decreasing train force amount
+        for tfa in np.linspace(1, 0.1, 25): # 25*40k = 1m samples linearly decreasing train force amount
             train_seq.extend([
-                SessionSettings(tie_len=111, tar_ticks=20000, train_force_amount=tfa),
-                SessionSettings(tie_len=111, tar_ticks=20000, train_force_amount=tfa)
+                SessionSettings(tie_len=111, tar_ticks=20000, train_force_amount=float(tfa)),
+                SessionSettings(tie_len=111, tar_ticks=20000, train_force_amount=float(tfa))
             ])
         return cls(
             train_bot='or_reinforce.deep.deep1.deep1',
