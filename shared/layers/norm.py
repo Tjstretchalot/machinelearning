@@ -102,15 +102,23 @@ class LearningAbsoluteNormLayer:
 
         self.initial = None
 
-    def to_evaluative(self) -> EvaluatingAbsoluteNormLayer:
+    def to_evaluative(self, like_batchnorm=False) -> EvaluatingAbsoluteNormLayer:
         """Gets the fixed absolute norm layer using the current estimate of mean and variance.
         Requires we have seen at least num_initial values.
+
+        Args:
+            like_batchnorm (bool): if True, 1e-5 is added to the variance before taking the sqrt
+                to determine the standard deviation. This happens by default for the batch norm
+                for numerical stability
         """
         if self.num_seen < self.num_initial:
             raise ValueError('have not seen enough data to convert to evaluative '
                              + f'({self.num_seen}/{self.num_initial})')
         means = self.means.clone()
-        inv_std = (1 / self.variances.clone()).sqrt()
+        inv_var = (1 / self.variances.clone())
+        if like_batchnorm:
+            inv_var += 1e-5
+        inv_std = inv_var.sqrt()
         return EvaluatingAbsoluteNormLayer(self.features, means, inv_std)
 
     def __call__(self, inps: torch.tensor):

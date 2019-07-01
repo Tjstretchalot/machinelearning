@@ -355,7 +355,7 @@ class Deep1ModelToEval(FeedforwardNetwork):
         """Replaces the current norms with the learned norms and resets the
         learning norms.
         """
-        self.cur_norms = [learn.to_evaluative() for learn in self.learning]
+        self.cur_norms = [learn.to_evaluative(True) for learn in self.learning]
         self.learning = [
             LearningAbsoluteNormLayer(ENCODE_DIM),
             LearningAbsoluteNormLayer(HIDDEN_DIM),
