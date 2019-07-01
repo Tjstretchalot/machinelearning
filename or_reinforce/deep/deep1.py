@@ -123,9 +123,9 @@ class Deep1ModelTrain(FeedforwardNetwork):
 
         self.fc_layers = fc_layers
         self.bnorms = [
-            torch.nn.BatchNorm1d(ENCODE_DIM),
-            torch.nn.BatchNorm1d(HIDDEN_DIM),
-            torch.nn.BatchNorm1d(HIDDEN_DIM)
+            torch.nn.BatchNorm1d(ENCODE_DIM, affine=False, track_running_stats=False),
+            torch.nn.BatchNorm1d(HIDDEN_DIM, affine=False, track_running_stats=False),
+            torch.nn.BatchNorm1d(HIDDEN_DIM, affine=False, track_running_stats=False)
         ]
 
         for i, lyr in enumerate(self.fc_layers):
@@ -155,13 +155,13 @@ class Deep1ModelTrain(FeedforwardNetwork):
         os.makedirs(outpath)
 
         equiv_net = torch.nn.Sequential(
-            torch.nn.BatchNorm1d(ENCODE_DIM),
+            torch.nn.BatchNorm1d(ENCODE_DIM, affine=False, track_running_stats=False),
             cp_utils.copy_linear(self.fc_layers[0]),
             torch.nn.Tanh(),
-            torch.nn.BatchNorm1d(HIDDEN_DIM),
+            torch.nn.BatchNorm1d(HIDDEN_DIM, affine=False, track_running_stats=False),
             cp_utils.copy_linear(self.fc_layers[1]),
             torch.nn.Tanh(),
-            torch.nn.BatchNorm1d(HIDDEN_DIM),
+            torch.nn.BatchNorm1d(HIDDEN_DIM, affine=False, track_running_stats=False),
             cp_utils.copy_linear(self.fc_layers[2]),
             torch.nn.Tanh()
         )
@@ -338,9 +338,9 @@ class Deep1ModelToEval(FeedforwardNetwork):
         super().__init__(ENCODE_DIM, 1, 3)
         self.fc_layers = fc_layers
         self.cur_norms = [
-            torch.nn.BatchNorm1d(ENCODE_DIM),
-            torch.nn.BatchNorm1d(HIDDEN_DIM),
-            torch.nn.BatchNorm1d(HIDDEN_DIM)
+            torch.nn.BatchNorm1d(ENCODE_DIM, affine=False, track_running_stats=False),
+            torch.nn.BatchNorm1d(HIDDEN_DIM, affine=False, track_running_stats=False),
+            torch.nn.BatchNorm1d(HIDDEN_DIM, affine=False, track_running_stats=False),
         ]
         self.learning = [
             LearningAbsoluteNormLayer(ENCODE_DIM),

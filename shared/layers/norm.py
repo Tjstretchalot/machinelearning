@@ -36,14 +36,21 @@ class EvaluatingAbsoluteNormLayer:
 
     def to_linear(self) -> torch.nn.Linear:
         """Creates an equivalent version of this layer using torch.nn.Linear. It is much
-        less memory efficient."""
-        lyr = torch.nn.Linear(self.features, self.features,)
+        less memory efficient.
+
+        Our version:
+            a = (a - a_mean) / a_std
+
+        Converting to linear:
+            a = a / a_std - a_mean / a_std
+        """
+        lyr = torch.nn.Linear(self.features, self.features)
         lyr.weight.requires_grad = False
         lyr.bias.requires_grad = False
 
         lyr.weight.data[:] = 0
         lyr.weight.data[torch.eye(self.features, dtype=torch.uint8)] = self.inv_std
-        lyr.bias.data[:] = -self.means
+        lyr.bias.data[:] = -self.means * self.inv_std
         return lyr
 
     @classmethod
