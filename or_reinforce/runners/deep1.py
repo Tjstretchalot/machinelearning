@@ -66,6 +66,8 @@ class TrainSettings(ser.Serializable):
 
     @classmethod
     def defaults(cls):
+        """Gets the current recommended settings for training the deep1 bot as well as possible.
+        This can take some time."""
         train_seq = []
         for i in range(10):
             train_seq.append(SessionSettings(tie_len=111, tar_ticks=20000, train_force_amount=1))
@@ -234,7 +236,15 @@ def _get_experiences_sync(settings: TrainSettings, executable: str, port_chooser
             replay.close()
         time.sleep(2)
 
-class _PortChooser:
+class PortChooser:
+    """Selects a port between the specified minimum and the minimum plus the specified amount
+
+    Attributes:
+        port_min (int): the minimum port to select
+        nports (int): the number of ports this has available to it
+        offset (int): the current offset from port_min for the next result
+    """
+
     def __init__(self, port_min: int, nports: int):
         self.port_min = port_min
         self.nports = nports
@@ -249,7 +259,7 @@ def _get_experiences_target(serd_settings: dict, executable: str, port_min: int,
                             create_flags: int, aggressive: bool, spec: bool, replay_path: str,
                             settings_path: str, tar_num_ticks: int):
     settings = ser.deserialize_embeddable(serd_settings)
-    _get_experiences_sync(settings, executable, _PortChooser(port_min, port_max-port_min),
+    _get_experiences_sync(settings, executable, PortChooser(port_min, port_max-port_min),
                           create_flags, aggressive, spec, replay_path, settings_path, tar_num_ticks)
 
 def _get_experiences_async(settings: TrainSettings, executable: str, port_min: int, port_max: int,

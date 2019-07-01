@@ -42,7 +42,8 @@ ALPHA = 0.5
 CUTOFF = 10
 PRED_WEIGHT = ALPHA ** CUTOFF
 
-def _init_encoder(entity_iden):
+def init_encoder(entity_iden):
+    """Create an instance of the encoder for this model attached to the given entity"""
     return encoders.MergedFlatEncoders(
         (
             encoders.MoveEncoder(MOVE_MAP),
@@ -348,6 +349,7 @@ class Deep1ModelToEval(FeedforwardNetwork):
         return Deep1ModelEval(self.fc_layers, self.cur_norms)
 
 def _init_model():
+    """Creates a fresh instance of the model for this qbot"""
     nets = FluentShape(ENCODE_DIM)
     return FeedforwardComplex(
         ENCODE_DIM, 1,
@@ -389,7 +391,7 @@ class DeepQBot(qbot.QBot):
         self.model = gen.init_or_load_model(_init_model, MODELFILE)
         self.teacher = FFTeacher()
         self.evaluation = evaluation
-        self.encoder = _init_encoder(entity_iden)
+        self.encoder = init_encoder(entity_iden)
 
         if not evaluation:
             self.replay = replay_buffer.FileWritableReplayBuffer(replay_path, exist_ok=True)
@@ -398,7 +400,7 @@ class DeepQBot(qbot.QBot):
 
     def __call__(self, entity_iden):
         self.entity_iden = entity_iden
-        self.encoder = _init_encoder(entity_iden)
+        self.encoder = init_encoder(entity_iden)
 
     @property
     def cutoff(self):
@@ -512,7 +514,7 @@ class MyPWL(pwl.PointWithLabelProducer):
 
         ent_id = exp.state.player_1_iden if exp.player_id == 1 else exp.state.player_2_iden
         if ent_id not in self.encoders_by_id:
-            self.encoders_by_id[ent_id] = _init_encoder(ent_id)
+            self.encoders_by_id[ent_id] = init_encoder(ent_id)
 
         enc: encoders.FlatEncoder = self.encoders_by_id[ent_id]
         point_tens = enc.encode(exp.game_state, exp.action)
@@ -545,7 +547,7 @@ class MyPWL(pwl.PointWithLabelProducer):
         for i, exp in enumerate(exps):
             ent_id = exp.state.player_1_iden if exp.player_id == 1 else exp.state.player_2_iden
             if ent_id not in self.encoders_by_id:
-                self.encoders_by_id[ent_id] = _init_encoder(ent_id)
+                self.encoders_by_id[ent_id] = init_encoder(ent_id)
 
             enc: encoders.FlatEncoder = self.encoders_by_id[ent_id]
             enc.encode(exp.state, exp.action, out=points[i])
