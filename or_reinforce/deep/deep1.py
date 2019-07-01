@@ -630,7 +630,7 @@ def offline_learning():
         new_target = Deep1ModelToEval(network.fc_layers)
         for _ in range(3):
             train_pwl.mark()
-            for _ in range(0, len(replay), ctx.batch_size):
+            for _ in range(0, 1024, ctx.batch_size):
                 train_pwl.fill(ctx.points, ctx.labels)
                 teacher.classify_many(new_target, ctx.points, ctx.labels.unsqueeze(1))
             new_target.learning_to_current()
