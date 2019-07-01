@@ -52,7 +52,7 @@ def init_encoder(entity_iden):
         )
     )
 
-ENCODE_DIM = _init_encoder(None).dim
+ENCODE_DIM = init_encoder(None).dim
 HIDDEN_DIM = 50
 
 def _noop(*args, **kwargs):
