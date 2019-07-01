@@ -115,9 +115,10 @@ class LearningAbsoluteNormLayer:
             raise ValueError('have not seen enough data to convert to evaluative '
                              + f'({self.num_seen}/{self.num_initial})')
         means = self.means.clone()
-        inv_var = (1 / self.variances.clone())
         if like_batchnorm:
-            inv_var += 1e-5
+            inv_var = 1 / (self.variances.clone() + 1e-5)
+        else:
+            inv_var = 1 / self.variances.clone()
         inv_std = inv_var.sqrt()
         return EvaluatingAbsoluteNormLayer(self.features, means, inv_std)
 
