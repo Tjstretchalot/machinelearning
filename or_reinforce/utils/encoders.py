@@ -68,6 +68,7 @@ class MoveEncoder(FlatEncoder):
         if out is None:
             out = torch.zeros((self.dim,), dtype=torch.float)
 
+        out[:] = 0
         out[self._lookup[move]] = 1
         return out
 
@@ -97,6 +98,8 @@ class SurroundBarrierEncoder(FlatEncoder):
     def encode(self, game_state: GameState, move: Move, out: torch.tensor = None) -> torch.tensor:
         if out is None:
             out = torch.zeros((self.dim,), dtype=torch.float)
+        else:
+            out[:] = 0
 
         if self.entity_iden not in game_state.iden_lookup:
             return out

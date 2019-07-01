@@ -69,13 +69,13 @@ class TrainSettings(ser.Serializable):
         """Gets the current recommended settings for training the deep1 bot as well as possible.
         This can take some time."""
         train_seq = []
-        for i in range(10):
+        for _ in range(5): # 5 * 20k = 100k samples random
             train_seq.append(SessionSettings(tie_len=111, tar_ticks=20000, train_force_amount=1))
 
-        for i in range(80):
+        for tfa in range(1, 0.1, 25): # 25*40k = 1m samples linearly decreasing train force amount
             train_seq.extend([
-                SessionSettings(tie_len=111, tar_ticks=20000, train_force_amount=1-(i*0.01)),
-                SessionSettings(tie_len=111, tar_ticks=20000, train_force_amount=1-(i*0.01))
+                SessionSettings(tie_len=111, tar_ticks=20000, train_force_amount=tfa),
+                SessionSettings(tie_len=111, tar_ticks=20000, train_force_amount=tfa)
             ])
         return cls(
             train_bot='or_reinforce.deep.deep1.deep1',

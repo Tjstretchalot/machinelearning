@@ -21,8 +21,8 @@ class EvaluatingAbsoluteNormLayer:
     def __init__(self, features: int, means: torch.tensor, inv_std: torch.tensor):
         tus.check(features=(features, int))
         tus.check_tensors(
-            means=(means, ('features', features), (torch.float, torch.double)),
-            inv_std=(inv_std, ('features', features), means.dtype)
+            means=(means, (('features', features),), (torch.float, torch.double)),
+            inv_std=(inv_std, (('features', features),), means.dtype)
         )
         self.features = features
         self.means = means
@@ -30,7 +30,7 @@ class EvaluatingAbsoluteNormLayer:
 
     def __call__(self, inp: torch.tensor):
         tus.check_tensors(
-            inp=(inp, (('batch', None), ('features', self.features), self.means.dtype))
+            inp=(inp, (('batch', None), ('features', self.features)), self.means.dtype)
         )
         return (inp - self.means) * self.inv_std
 
@@ -45,6 +45,12 @@ class EvaluatingAbsoluteNormLayer:
         lyr.weight.data[torch.eye(self.features, dtype=torch.uint8)] = self.inv_std
         lyr.bias.data[:] = -self.means
         return lyr
+
+    @classmethod
+    def create_identity(cls, features: int, dtype = torch.float):
+        """Creates an identity layer (does nothing) with the given number of features. Helpful
+        when you are first initializing the network"""
+        return cls(features, torch.zeros(features, dtype=dtype), torch.ones(features, dtype=dtype))
 
 class LearningAbsoluteNormLayer:
     """A tracking layer, not meant to be trainable via back propagation. Instead, this simply
@@ -108,7 +114,7 @@ class LearningAbsoluteNormLayer:
         )
         inps = inps.detach()
         if self.num_seen < self.num_initial:
-            if not self.initial:
+            if self.initial is None:
                 self.initial = torch.zeros((self.num_initial, self.features), dtype=inps.dtype)
             elif inps.dtype != self.initial.dtype:
                 raise ValueError(f'dtype of inps changed from {self.initial.dtype} to {inps.dtype}')
@@ -126,11 +132,10 @@ class LearningAbsoluteNormLayer:
             self(inps[num_for_initial:])
             return
 
-        # todo this can probably be optimized
         prev_means = self.means.clone()
         for i in range(inps.shape[0]):
-            self.means += (inps[i] - self.means) / self.num_seen
-            vari_sum = (inps[i] - prev_means)(inps[i] - self.means)  # this could be negative
+            self.means += (inps[i] - self.means) / (self.num_seen + 1)
+            vari_sum = (inps[i] - prev_means) * (inps[i] - self.means)  # this could be negative
             self.variances += vari_sum.abs()
             prev_means[:] = self.means
             self.num_seen += 1

@@ -367,6 +367,7 @@ class FileReadableReplayBuffer(ReadableReplayBuffer):
 
     def reset(self):
         to_mark = self.marks.pop()
+        self.shuffle_counter = to_mark.shuffle_counter
         if self.shuffle_counter != to_mark.shuffle_counter:
             self.handle.close()
             self.handle = open(self._shuffle_path(to_mark.shuffle_counter), 'rb', buffering=0)
@@ -432,13 +433,16 @@ class FileReadableReplayBuffer(ReadableReplayBuffer):
         self.handle.close()
         self.handle = None
 
-        os.remove(self._shuffle_path(self.shuffle_counter))
-        deleted_counters = set([self.shuffle_counter])
+        earliest_file = self.shuffle_counter
+        if self.marks:
+            import warnings
+            warnings.warn('replay buffer leaking marks', UserWarning)
+
         for mark in self.marks:
-            mark: FileMark
-            if mark.shuffle_counter not in deleted_counters:
-                deleted_counters.add(mark.shuffle_counter)
-                os.remove(self._shuffle_path(mark.shuffle_counter))
+            earliest_file = min(earliest_file, mark.shuffle_counter)
+
+        for i in range(earliest_file, self.shuffle_counter + 1):
+            os.remove(self._shuffle_path(i))
 
 def merge_buffers(inpaths: typing.List[str], outpath: str) -> None:
     """Merges the replay buffers stored in the inpaths to the

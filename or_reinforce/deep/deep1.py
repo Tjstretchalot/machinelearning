@@ -5,21 +5,18 @@ import os
 import torch
 import typing
 import json
-import math
-import filetools
 import numpy as np
 import scipy.io
 import datetime
 
 from shared.teachers import NetworkTeacher, Network
-from shared.models.ff import FeedforwardNetwork, FeedforwardComplex, FFTeacher, FFHiddenActivations
-from shared.convutils import FluentShape
+from shared.models.ff import FeedforwardNetwork, FFTeacher, FFHiddenActivations
 from shared.layers.norm import EvaluatingAbsoluteNormLayer, LearningAbsoluteNormLayer
 import shared.trainer as tnr
 import shared.perf_stats as perf_stats
-import shared.criterion as crits
 import shared.typeutils as tus
 import shared.cp_utils as cp_utils
+import shared.filetools as filetools
 
 import or_reinforce.utils.qbot as qbot
 import or_reinforce.utils.rewarders as rewarders
@@ -56,9 +53,21 @@ ENCODE_DIM = init_encoder(None).dim
 HIDDEN_DIM = 50
 
 def _noop(*args, **kwargs):
+
     pass
 
 def forward_with(fc_layers, norms, learning, inp, acts_cb):
+    """Applies the forward pass to the given input data using the given
+    fully connected layers and norms. If learning is set, it is invoked
+    prior to the norms.
+
+    Args:
+        fc_layers (list[nn.Linear]): the three linear layers in the order they are invoked
+        norms (list[nn.BatchNorm1d]): Or equivalent callables.
+        learning (list[LearningAbsoluteNormLayer], optional): learning absolute norms or None
+        inp (torch.tensor[batch_size, encode_dim]): the encoded game state
+        acts_cb (callable, optional): passed FFHiddenActivations 4 times at times 0-3 respectively
+    """
     tus.check_tensors(inp=(inp, (('batch', None), ('input_dim', ENCODE_DIM)), torch.float32))
     if acts_cb:
         tus.check_callable(acts_cb=acts_cb)
@@ -109,7 +118,7 @@ class Deep1ModelTrain(FeedforwardNetwork):
         fc_layers (list[nn.Linear]): the linear layers in the order that they are used
         bnorms (list[nn.BatchNorm1d]): the batch norms in the order that they are used
     """
-    def __init__(self, fc_layers):
+    def __init__(self, fc_layers: typing.List[torch.nn.Linear]):
         super().__init__(ENCODE_DIM, 1, 3)
 
         self.fc_layers = fc_layers
@@ -119,11 +128,11 @@ class Deep1ModelTrain(FeedforwardNetwork):
             torch.nn.BatchNorm1d(HIDDEN_DIM)
         ]
 
-        for i, lyr in self.fc_layers:
+        for i, lyr in enumerate(self.fc_layers):
             self.add_module(f'layer{i}', lyr)
 
-    def forward(self, inp: torch.tensor, acts_cb: typing.Callable = None):
-        forward_with(self.fc_layers, self.bnorms, None, inp, acts_cb)
+    def forward(self, inp: torch.tensor, acts_cb: typing.Callable = None): # pylint: disable=arguments-differ
+        return forward_with(self.fc_layers, self.bnorms, None, inp, acts_cb)
 
     def save(self, outpath: str, exist_ok: bool = False):
         """Saves this network to the given path. The path should be a folder, because inside
@@ -176,9 +185,9 @@ class Deep1ModelTrain(FeedforwardNetwork):
                 print(f'  {nm}: {const}', file=outfile)
             print('Class Documentation:', file=outfile)
             print(Deep1ModelTrain.__doc__, file=outfile)
-            print()
+            print(file=outfile)
             print('Function Documentation: ', file=outfile)
-            print(Deep1ModelTrain.save.__doc__)
+            print(Deep1ModelTrain.save.__doc__, file=outfile)
 
     @classmethod
     def load(cls, inpath: str) -> 'Deep1ModelTrain':
@@ -196,11 +205,20 @@ class Deep1ModelTrain(FeedforwardNetwork):
             for i in range(3):
                 weights_np = lyr_data[f'lyr_weight_{i}']
                 bias_np = lyr_data[f'lyr_bias_{i}']
-                lin_lyr = torch.nn.Linear(weights_np.shape[0], weights_np.shape[1])
+                lin_lyr = torch.nn.Linear(weights_np.shape[1], weights_np.shape[0])
                 lin_lyr.weight.data[:] = torch.from_numpy(weights_np)
                 lin_lyr.bias.data[:] = torch.from_numpy(bias_np)
                 fc_layers.append(lin_lyr)
         return cls(fc_layers)
+
+    @classmethod
+    def create(cls) -> 'Deep1ModelTrain':
+        """Creates a new random instance of this model"""
+        return cls([
+            torch.nn.Linear(ENCODE_DIM, HIDDEN_DIM),
+            torch.nn.Linear(HIDDEN_DIM, HIDDEN_DIM),
+            torch.nn.Linear(HIDDEN_DIM, 1)
+        ])
 
 class Deep1ModelEval(FeedforwardNetwork):
     """The deep1 model we can use for evaluating and as a target network. Instead of using the
@@ -214,11 +232,12 @@ class Deep1ModelEval(FeedforwardNetwork):
     """
     def __init__(self, fc_layers: typing.List[torch.nn.Linear],
                  anorms: typing.List[EvaluatingAbsoluteNormLayer]):
+        super().__init__(ENCODE_DIM, 1, 3)
         self.fc_layers = fc_layers
         self.anorms = anorms
 
-    def forward(self, inp: torch.tensor, acts_cb: typing.Callable = None):
-        forward_with(self.fc_layers, self.anorms, None, inp, acts_cb)
+    def forward(self, inp: torch.tensor, acts_cb: typing.Callable = None): # pylint: disable=arguments-differ
+        return forward_with(self.fc_layers, self.anorms, None, inp, acts_cb)
 
     def save(self, outpath: str, exist_ok: bool = False):
         """Saves this model to the given outpath. The outpath should be a folder. This will
@@ -255,15 +274,15 @@ class Deep1ModelEval(FeedforwardNetwork):
 
         layers = {}
         for i, norm in enumerate(self.anorms):
-            layers[f'norm_means_{i}'] = self.anorms[i].means.clone().numpy()
-            layers[f'norm_inv_std_{i}'] = self.anorms[i].inv_std.clone().numpy()
+            layers[f'norm_means_{i}'] = norm.means.clone().numpy()
+            layers[f'norm_inv_std_{i}'] = norm.inv_std.clone().numpy()
         for i, lyr in enumerate(self.fc_layers):
             layers[f'lyr_weight_{i}'] = lyr.weight.data.clone().numpy()
             layers[f'lyr_bias_{i}'] = lyr.bias.data.clone().numpy()
         np.savez_compressed(os.path.join(outpath, 'layers.npz'), **layers)
         scipy.io.savemat(os.path.join(outpath, 'layers.mat'), layers)
 
-        with open(os.path.join(outpath, 'readme.txt')) as outfile:
+        with open(os.path.join(outpath, 'readme.txt'), 'w') as outfile:
             print('Model: Deep1ModelEval', file=outfile)
             print(f'Date: {datetime.datetime.now()}', file=outfile)
             print('Constants:', file=outfile)
@@ -273,9 +292,9 @@ class Deep1ModelEval(FeedforwardNetwork):
                 print(f'  {nm}: {const}', file=outfile)
             print('Class Documentation:', file=outfile)
             print(Deep1ModelEval.__doc__, file=outfile)
-            print()
+            print(file=outfile)
             print('Function Documentation: ', file=outfile)
-            print(Deep1ModelEval.save.__doc__)
+            print(Deep1ModelEval.save.__doc__, file=outfile)
 
     @classmethod
     def load(cls, inpath: str) -> 'Deep1ModelEval':
@@ -294,7 +313,7 @@ class Deep1ModelEval(FeedforwardNetwork):
             for i in range(3):
                 weights_np = lyr_data[f'lyr_weight_{i}']
                 bias_np = lyr_data[f'lyr_bias_{i}']
-                lin_lyr = torch.nn.Linear(weights_np.shape[0], weights_np.shape[1])
+                lin_lyr = torch.nn.Linear(weights_np.shape[1], weights_np.shape[0])
                 lin_lyr.weight.data[:] = torch.from_numpy(weights_np)
                 lin_lyr.bias.data[:] = torch.from_numpy(bias_np)
                 fc_layers.append(lin_lyr)
@@ -316,6 +335,7 @@ class Deep1ModelToEval(FeedforwardNetwork):
         learning (list[LearningAbsoluteNormLayer]): the new approximation for the norms
     """
     def __init__(self, fc_layers: typing.List[torch.nn.Linear]):
+        super().__init__(ENCODE_DIM, 1, 3)
         self.fc_layers = fc_layers
         self.cur_norms = [
             torch.nn.BatchNorm1d(ENCODE_DIM),
@@ -328,8 +348,8 @@ class Deep1ModelToEval(FeedforwardNetwork):
             LearningAbsoluteNormLayer(HIDDEN_DIM)
         ]
 
-    def forward(self, inp: torch.tensor, acts_cb: typing.Callable = None):
-        forward_with(self.fc_layers, self.cur_norms, self.learning, inp, acts_cb)
+    def forward(self, inp: torch.tensor, acts_cb: typing.Callable = None): # pylint: disable=arguments-differ
+        return forward_with(self.fc_layers, self.cur_norms, self.learning, inp, acts_cb)
 
     def learning_to_current(self):
         """Replaces the current norms with the learned norms and resets the
@@ -349,27 +369,22 @@ class Deep1ModelToEval(FeedforwardNetwork):
         return Deep1ModelEval(self.fc_layers, self.cur_norms)
 
 def _init_model():
-    """Creates a fresh instance of the model for this qbot"""
-    nets = FluentShape(ENCODE_DIM)
-    return FeedforwardComplex(
-        ENCODE_DIM, 1,
-        [
-            nets.batch_norm(),
-            nets.linear_(50),
-            nets.nonlin('tanh'),
-            nets.batch_norm(),
-            nets.linear_(50),
-            nets.nonlin('tanh'),
-            nets.batch_norm(),
-            nets.linear_(50),
-            nets.nonlin('tanh'),
-            nets.batch_norm(),
-            nets.linear_(1),
-            nets.nonlin('tanh')
-        ])
+    if os.path.exists(EVAL_MODELFILE):
+        raise FileExistsError(EVAL_MODELFILE)
+
+    train_model = Deep1ModelTrain.create()
+    train_model.save(MODELFILE)
+    model = Deep1ModelEval(train_model.fc_layers, [
+        EvaluatingAbsoluteNormLayer.create_identity(ENCODE_DIM),
+        EvaluatingAbsoluteNormLayer.create_identity(HIDDEN_DIM),
+        EvaluatingAbsoluteNormLayer.create_identity(HIDDEN_DIM)
+    ])
+    model.save(EVAL_MODELFILE)
+    return model
 
 SAVEDIR = os.path.join('out', 'or_reinforce', 'deep', 'deep1')
-MODELFILE = os.path.join(SAVEDIR, 'model.pt')
+MODELFILE = os.path.join(SAVEDIR, 'model')
+EVAL_MODELFILE = os.path.join(SAVEDIR, 'model_eval')
 REPLAY_FOLDER = os.path.join(SAVEDIR, 'replay')
 SETTINGS_FILE = os.path.join(SAVEDIR, 'settings.json')
 
@@ -382,13 +397,17 @@ class DeepQBot(qbot.QBot):
         teacher (FFTeacher): the teacher for the model
         evaluation (bool): True to not store experiences, False to store experiences
 
-        write_replay_buffer (WritableReplayBuffer, optional): the buffer for replays
+        replay (WritableReplayBuffer, optional): the buffer for replays
 
         encoder (Encoder): the encoder
     """
     def __init__(self, entity_iden: int, replay_path=REPLAY_FOLDER, evaluation=False):
         self.entity_iden = entity_iden
-        self.model = gen.init_or_load_model(_init_model, MODELFILE)
+        if not os.path.exists(EVAL_MODELFILE):
+            _init_model()
+
+        self.model = Deep1ModelEval.load(EVAL_MODELFILE)
+
         self.teacher = FFTeacher()
         self.evaluation = evaluation
         self.encoder = init_encoder(entity_iden)
@@ -446,7 +465,7 @@ class MyQBotController(qbot.QBotController):
         return MOVE_MAP
 
 def deep1(entity_iden: int, settings: str = None) -> 'Bot':  # noqa: F821
-    """Creates a new simplebot2"""
+    """Creates a new deep1 bot"""
     if not settings:
         settings = SETTINGS_FILE
     if not os.path.exists(settings):
@@ -595,17 +614,32 @@ def offline_learning():
     replay = replay_buffer.FileReadableReplayBuffer(REPLAY_FOLDER, perf=perf)
 
     print(f'loaded {len(replay)} experiences for replay...')
+    if not os.path.exists(MODELFILE):
+        _init_model()
 
-    network = gen.init_or_load_model(_init_model, MODELFILE)
+    network = Deep1ModelTrain.load(MODELFILE)
     teacher = MyTeacher(FFTeacher())
 
-    train_pwl = MyPWL(replay, gen.load_model(MODELFILE), teacher)
+    train_pwl = MyPWL(replay, Deep1ModelEval.load(EVAL_MODELFILE), teacher)
     test_pwl = train_pwl
 
     def update_target(ctx: tnr.GenericTrainingContext, hint: str):
         ctx.logger.info('swapping target network, hint=%s', hint)
-        gen.save_model(network, MODELFILE)
-        train_pwl.target_model = gen.load_model(MODELFILE)
+        network.save(MODELFILE, exist_ok=True)
+
+        new_target = Deep1ModelToEval(network.fc_layers)
+        for _ in range(3):
+            train_pwl.mark()
+            for _ in range(0, len(replay), ctx.batch_size):
+                train_pwl.fill(ctx.points, ctx.labels)
+                teacher.classify_many(new_target, ctx.points, ctx.labels.unsqueeze(1))
+            new_target.learning_to_current()
+            train_pwl.reset()
+
+        new_target = new_target.to_evaluative()
+        new_target.save(EVAL_MODELFILE, exist_ok=True)
+
+        train_pwl.target_model = new_target
 
     trainer = tnr.GenericTrainer(
         train_pwl=train_pwl,
@@ -620,14 +654,15 @@ def offline_learning():
      .reg(tnr.EpochsTracker())
      .reg(tnr.EpochsStopper(100))
      .reg(tnr.InfOrNANDetecter())
+     .reg(tnr.InfOrNANStopper())
      .reg(tnr.DecayTracker())
      .reg(tnr.DecayStopper(1))
-     .reg(tnr.OnEpochCaller.create_every(update_target, start=2, skip=2))
+     .reg(tnr.OnEpochCaller.create_every(update_target, skip=2))
      .reg(tnr.DecayOnPlateau())
      )
-    trainer.train(network, target_dtype=torch.float32, point_dtype=torch.float32, perf=perf)
-
-    gen.save_model(network, MODELFILE)
+    res = trainer.train(network, target_dtype=torch.float32, point_dtype=torch.float32, perf=perf)
+    if res['inf_or_nan']:
+        print('training failed! inf or nan!')
 
     replay.close()
 
