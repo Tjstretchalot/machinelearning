@@ -46,6 +46,9 @@ def init_encoder(entity_iden):
             encoders.MoveEncoder(MOVE_MAP),
             encoders.LocationEncoder(entity_iden),
             encoders.StaircaseLocationEncoder(entity_iden),
+
+            # encoders.SurroundBarrierEncoder(entity_iden, 1),
+            # encoders.StaircaseDeltaEncoder(entity_iden)
         )
     )
 
@@ -479,7 +482,7 @@ def deep1(entity_iden: int, settings: str = None) -> 'Bot':  # noqa: F821
     return MyQBotController(
         entity_iden,
         DeepQBot(entity_iden, settings['replay_path'], (('eval' in settings) and settings['eval'])),
-        rewarders.SCRewarder(bigreward=(1 - ALPHA)),  # biggest cumulative reward is 1
+        rewarders.PureSCRewarder(bigreward=(1 - ALPHA)),  # biggest cumulative reward is 1
         MOVE_MAP,
         move_selstyle=qbot.QBotMoveSelectionStyle.Greedy,
         teacher=RandomBot(entity_iden, moves=MOVE_MAP),

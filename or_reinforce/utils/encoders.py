@@ -206,3 +206,34 @@ class StaircaseEncoder(FlatEncoder):
         delx, dely = scx - ent.x, scy - ent.y
         out[0] = float(np.arctan2(dely, delx))
         return out
+
+class StaircaseDeltaEncoder(FlatEncoder):
+    """Encodes an 'arrow' to the staircase via a vector from a given entity
+
+    Attributes:
+        entity_iden (int): the iden for the entity the arrow points from
+    """
+    def __init__(self, entity_iden: int):
+        self.entity_iden = entity_iden
+
+    @property
+    def dim(self):
+        return 2
+
+    def encode(self, game_state: GameState, move: Move, out: torch.tensor = None) -> torch.tensor:
+        if out is None:
+            out = torch.zeros((self.dim,), dtype=torch.float)
+
+        ent = game_state.iden_lookup[self.entity_iden]
+
+        if ent.depth not in game_state.world.dungeons:
+            return out
+
+        dung: Dungeon = game_state.world.get_at_depth(ent.depth)
+
+        scx, scy = dung.staircase()
+
+        delx, dely = scx - ent.x, scy - ent.y
+        out[0] = delx
+        out[1] = dely
+        return out
