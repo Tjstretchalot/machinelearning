@@ -33,9 +33,12 @@ class SCRewarder(qbot.Rewarder):
 class PureSCRewarder(qbot.Rewarder):
     """A pure staircase rewarder. The actor gets a reward of 1 for increasing depth and 0 in all
     other cases"""
+    def __init__(self, bigreward: float):
+        self.bigreward = bigreward
+
     def reward(self, entity_iden: int, oldstate: GameState, newstate: GameState) -> float:
         ent_old = oldstate.iden_lookup[entity_iden]
         ent_new = newstate.iden_lookup[entity_iden]
         if ent_new.depth > ent_old.depth:
-            return 1
+            return self.bigreward
         return 0
