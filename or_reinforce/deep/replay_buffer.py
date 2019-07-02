@@ -491,3 +491,72 @@ def merge_buffers(inpaths: typing.List[str], outpath: str) -> None:
     with open(os.path.join(outpath, META_FILE), 'w') as outfile:
         json.dump({'length': outlen, 'file_length': outflen,
                    'largest_state_nbytes': outlongest_slen}, outfile)
+
+class ExperienceType:
+    """Describes a type of experience. Just a specific type of callable"""
+    def __call__(self, exp: Experience) -> bool:
+        """Returns True if the given experience is an example of this experience type,
+        false otherwise"""
+        raise NotImplementedError
+
+class PositiveExperience(ExperienceType):
+    """Describes a positive experience"""
+    def __call__(self, exp: Experience) -> bool:
+        return exp.reward_rec > 0
+
+class NegativeExperience(ExperienceType):
+    """Describes a negative experience"""
+    def __call__(self, exp: Experience) -> bool:
+        return exp.reward_rec <= 0
+
+def balance_experiences(replay_path: str, exp_types: typing.List[ExperienceType]) -> int:
+    """Loads the replay folder and filters it such that it has the same number of each
+    type of experience. The experience types must be mutually exclusive. If they are not,
+    then the order of the list will matter, but the result will be deterministic.
+
+    Args:
+        replay_path (str): the path to the replay folder to balance
+        exp_types (typing.List[ExperienceType]): the experience types you want an equal number of.
+
+    Returns:
+        The number of each type of experience in the dataset
+    """
+
+    outpath = os.path.join(replay_path, 'tmp')
+    inwriter = FileReadableReplayBuffer(replay_path)
+    outwriter = FileWritableReplayBuffer(outpath, exist_ok=True)
+    result = 0
+    try:
+        counters = dict((i, 0) for i in range(len(exp_types)))
+        for _ in range(len(inwriter)):
+            exp: Experience = next(inwriter)
+            for i, exp_type in enumerate(exp_types):
+                if exp_type(exp):
+                    counters[i] += 1
+                    break
+
+        result = counters[0]
+        for _, (_, ctr) in enumerate(counters.items()):
+            result = min(result, ctr)
+
+        counters = dict((i, result) for i in range(len(exp_types)))
+        for _ in range(len(inwriter)):
+            exp: Experience = next(inwriter)
+            typ: int = -1
+            for i, exp_type in enumerate(exp_types):
+                if exp_type(exp):
+                    typ = i
+                    break
+            if typ >= 0 and counters[typ] > 0:
+                counters[typ] -= 1
+                outwriter.add(exp)
+    finally:
+        outwriter.close()
+        inwriter.close()
+
+    os.remove(os.path.join(replay_path, EXPERIENCES_FILE))
+    os.remove(os.path.join(replay_path, META_FILE))
+    os.rename(os.path.join(outpath, EXPERIENCES_FILE), os.path.join(replay_path, EXPERIENCES_FILE))
+    os.rename(os.path.join(outpath, META_FILE), os.path.join(replay_path, META_FILE))
+    os.rmdir(outpath)
+    return result

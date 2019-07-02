@@ -386,6 +386,7 @@ SAVEDIR = os.path.join('out', 'or_reinforce', 'deep', 'deep1')
 MODELFILE = os.path.join(SAVEDIR, 'model')
 EVAL_MODELFILE = os.path.join(SAVEDIR, 'model_eval')
 REPLAY_FOLDER = os.path.join(SAVEDIR, 'replay')
+REPLAY_FOLDER_2 = os.path.join(SAVEDIR, 'replay_tmp')
 SETTINGS_FILE = os.path.join(SAVEDIR, 'settings.json')
 
 class DeepQBot(qbot.QBot):
@@ -605,66 +606,66 @@ class MyTeacher(NetworkTeacher):
     def classify_many(self, network: Network, points: torch.tensor, out: torch.tensor):
         return self.teacher.classify_many(network, points, out)
 
-
 def offline_learning():
     """Loads the replay buffer and trains on it."""
     perf_file = os.path.join(SAVEDIR, 'offline_learning_perf.log')
     perf = perf_stats.LoggingPerfStats('deep1 offline learning', perf_file)
 
+    replay_buffer.balance_experiences(REPLAY_FOLDER, [replay_buffer.PositiveExperience(), replay_buffer.NegativeExperience()])
     replay = replay_buffer.FileReadableReplayBuffer(REPLAY_FOLDER, perf=perf)
+    try:
+        print(f'loaded {len(replay)} experiences for replay...')
+        if not os.path.exists(MODELFILE):
+            _init_model()
 
-    print(f'loaded {len(replay)} experiences for replay...')
-    if not os.path.exists(MODELFILE):
-        _init_model()
+        network = Deep1ModelTrain.load(MODELFILE)
+        teacher = MyTeacher(FFTeacher())
 
-    network = Deep1ModelTrain.load(MODELFILE)
-    teacher = MyTeacher(FFTeacher())
+        train_pwl = MyPWL(replay, Deep1ModelEval.load(EVAL_MODELFILE), teacher)
+        test_pwl = train_pwl
 
-    train_pwl = MyPWL(replay, Deep1ModelEval.load(EVAL_MODELFILE), teacher)
-    test_pwl = train_pwl
+        def update_target(ctx: tnr.GenericTrainingContext, hint: str):
+            ctx.logger.info('swapping target network, hint=%s', hint)
+            network.save(MODELFILE, exist_ok=True)
 
-    def update_target(ctx: tnr.GenericTrainingContext, hint: str):
-        ctx.logger.info('swapping target network, hint=%s', hint)
-        network.save(MODELFILE, exist_ok=True)
+            new_target = Deep1ModelToEval(network.fc_layers)
+            for _ in range(3):
+                train_pwl.mark()
+                for _ in range(0, 1024, ctx.batch_size):
+                    train_pwl.fill(ctx.points, ctx.labels)
+                    teacher.classify_many(new_target, ctx.points, ctx.labels.unsqueeze(1))
+                new_target.learning_to_current()
+                train_pwl.reset()
 
-        new_target = Deep1ModelToEval(network.fc_layers)
-        for _ in range(3):
-            train_pwl.mark()
-            for _ in range(0, 1024, ctx.batch_size):
-                train_pwl.fill(ctx.points, ctx.labels)
-                teacher.classify_many(new_target, ctx.points, ctx.labels.unsqueeze(1))
-            new_target.learning_to_current()
-            train_pwl.reset()
+            new_target = new_target.to_evaluative()
+            new_target.save(EVAL_MODELFILE, exist_ok=True)
 
-        new_target = new_target.to_evaluative()
-        new_target.save(EVAL_MODELFILE, exist_ok=True)
+            train_pwl.target_model = new_target
 
-        train_pwl.target_model = new_target
-
-    trainer = tnr.GenericTrainer(
-        train_pwl=train_pwl,
-        test_pwl=test_pwl,
-        teacher=teacher,
-        batch_size=32,
-        learning_rate=0.001,
-        optimizer=torch.optim.Adam([p for p in network.parameters() if p.requires_grad], lr=0.001),
-        criterion=torch.nn.MSELoss()
-    )
-    (trainer
-     .reg(tnr.EpochsTracker())
-     .reg(tnr.EpochsStopper(100))
-     .reg(tnr.InfOrNANDetecter())
-     .reg(tnr.InfOrNANStopper())
-     .reg(tnr.DecayTracker())
-     .reg(tnr.DecayStopper(1))
-     .reg(tnr.OnEpochCaller.create_every(update_target, skip=2))
-     .reg(tnr.DecayOnPlateau())
-     )
-    res = trainer.train(network, target_dtype=torch.float32, point_dtype=torch.float32, perf=perf)
-    if res['inf_or_nan']:
-        print('training failed! inf or nan!')
-
-    replay.close()
+        trainer = tnr.GenericTrainer(
+            train_pwl=train_pwl,
+            test_pwl=test_pwl,
+            teacher=teacher,
+            batch_size=32,
+            learning_rate=0.0001,
+            optimizer=torch.optim.Adam([p for p in network.parameters() if p.requires_grad], lr=0.0001),
+            criterion=torch.nn.MSELoss()
+        )
+        (trainer
+        .reg(tnr.EpochsTracker())
+        .reg(tnr.EpochsStopper(100))
+        .reg(tnr.InfOrNANDetecter())
+        .reg(tnr.InfOrNANStopper())
+        .reg(tnr.DecayTracker())
+        .reg(tnr.DecayStopper(1))
+        .reg(tnr.OnEpochCaller.create_every(update_target, skip=CUTOFF)) # smaller cutoffs require more bootstrapping
+        .reg(tnr.DecayOnPlateau())
+        )
+        res = trainer.train(network, target_dtype=torch.float32, point_dtype=torch.float32, perf=perf)
+        if res['inf_or_nan']:
+            print('training failed! inf or nan!')
+    finally:
+        replay.close()
 
 if __name__ == '__main__':
     offline_learning()

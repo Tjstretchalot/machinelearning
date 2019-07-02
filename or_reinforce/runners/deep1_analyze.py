@@ -3,14 +3,12 @@ import argparse
 import os
 
 from shared.models.ff import FFTeacher
-import shared.measures.pca_ff as pca_ff
-import shared.measures.pca_3d as pca_3d
+import shared.measures.pca_gen as pca_gen
 import shared.filetools as filetools
 
 import or_reinforce.deep.replay_buffer as replay_buffer
 import or_reinforce.runners.deep1 as deep1_runner
 import or_reinforce.deep.deep1 as deep1
-import or_reinforce.utils.general as gen
 
 SAVEDIR = filetools.savepath()
 
@@ -38,38 +36,32 @@ def _run(args):
         bot_folder=os.path.join('out', 'or_reinforce', 'deep', 'deep1'),
         train_seq=[
             deep1_runner.SessionSettings(
-                tie_len=111, tar_ticks=20000,
+                tie_len=111, tar_ticks=2000,
                 train_force_amount=args.train_force_amount)
         ],
         cur_ind=0
     )
     deep1_runner._get_experiences_async( # pylint: disable=protected-access
-        settings, executable, port, nthreads*10, 0,
+        settings, executable, port, port+nthreads*10, 0,
         False, False, nthreads)
 
     replay = replay_buffer.FileReadableReplayBuffer(deep1.REPLAY_FOLDER)
+    try:
+        print(f'loaded {len(replay)} experiences for analysis...')
 
-    print(f'loaded {len(replay)} experiences for analysis...')
+        network = deep1.Deep1ModelEval.load(deep1.EVAL_MODELFILE)
+        teacher = deep1.MyTeacher(FFTeacher())
 
-    network = gen.load_model(deep1.MODELFILE)
-    teacher = deep1.MyTeacher(FFTeacher())
+        pwl = deep1.MyPWL(replay, deep1.Deep1ModelEval.load(deep1.EVAL_MODELFILE), teacher)
 
-    pwl = deep1.MyPWL(replay, gen.load_model(deep1.MODELFILE), teacher)
-
-    # todo: discretize the output space for analysis such that we assign
-    # a particular label to perhaps 0.9-1, then 0.8-0.9, etc, so we can
-    # use our normal classification tools for analysis. This just
-    # requires wrapping the PWL. For the technique above, it would literally
-    # be labels -> floor(labels * 10)
-
-    # print('--fetching top 3 pcs--')
-    # traj: pca_ff.PCTrajectoryFF = pca_ff.find_trajectory(network, pwl, 3)
-    # print('--plotting top 2 pcs--')
-    # pca_ff.plot_trajectory(traj, os.path.join(SAVEDIR, 'pca'), exist_ok=True)
-    # print('--plotting top 3 pcs--')
-    # pca_3d.plot_ff(traj, os.path.join(SAVEDIR, 'pca_3d'), exist_ok=True,
-    #               layer_names=['Input', 'Layer 1', 'Layer 2', 'Layer 3', 'Output'])
-    print('--finished--')
+        print('--fetching top 2 pcs--')
+        traj: pca_gen.PCTrajectoryGen = pca_gen.find_trajectory(network, pwl, 2)
+        print('--plotting top 2 pcs--')
+        pca_gen.plot_trajectory(traj, os.path.join(SAVEDIR, 'pca'), exist_ok=True, transparent=False, compress=False,
+                                s=16)
+        print('--finished--')
+    finally:
+        replay.close()
 
 if __name__ == '__main__':
     main()

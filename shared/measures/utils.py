@@ -395,13 +395,14 @@ def get_hidacts_with_sample(network: Network, sample_points: torch.tensor,
     raise ValueError(f'unknown network type {network} (type={type(network)})')
 
 
-def process_outfile(outfile: str, exist_ok: bool) -> typing.Tuple[str, str]:
+def process_outfile(outfile: str, exist_ok: bool, compress: bool = True) -> typing.Tuple[str, str]:
     """Checks if the given outfile and exist_ok combination is valid. Returns
     the outfile and the outfile_wo_ext, one of which will be the outfile passed.
 
     Args:
         outfile (str): the file you were told to output to
         exist_ok (bool): True if the file should be overwritten, False otherwise
+        compress (bool): if the output will be compressed
 
     Returns:
         outfile (str): the filepath with extension '.zip' to save to
@@ -416,10 +417,14 @@ def process_outfile(outfile: str, exist_ok: bool) -> typing.Tuple[str, str]:
     if ext not in ('', '.zip'):
         raise ValueError(f'expected outfile is .zip (extension may be excluded), got {outfile} (ext={ext})')
 
-    if os.path.exists(outfile_wo_ext):
+    if compress and os.path.exists(outfile_wo_ext):
         raise FileExistsError(f'in order to save to {outfile} need {outfile_wo_ext} as working space')
 
+
     outfile = outfile_wo_ext + '.zip'
+    if not compress:
+        return outfile, outfile_wo_ext
+
     if not exist_ok and os.path.exists(outfile):
         raise FileExistsError(f'cannot save to {outfile} (already exists) (set exist_ok=True to overwrite)')
 

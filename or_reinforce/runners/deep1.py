@@ -145,6 +145,7 @@ def main():
     parser.add_argument('--settings', type=str, default=os.path.join(SAVEDIR, 'settings.json'), help='path to the settings file')
     parser.add_argument('--aggressive', action='store_true', help='no sleeps, use as much cpu as possible')
     parser.add_argument('--numthreads', type=int, default=8, help='number of threads to use for gathering experiences')
+    parser.add_argument('--debug', action='store_true', help='stop after first training session completes')
     args = parser.parse_args()
 
     _run(args)
@@ -236,6 +237,12 @@ def _get_experiences_sync(settings: TrainSettings, executable: str, port_chooser
             replay = rb.FileReadableReplayBuffer(replaypath)
             num_ticks_to_do = tar_num_ticks - len(replay)
             replay.close()
+            if num_ticks_to_do <= 0:
+                rb.balance_experiences(
+                    replaypath, [rb.PositiveExperience(), rb.NegativeExperience()])
+                replay = rb.FileReadableReplayBuffer(replaypath)
+                num_ticks_to_do = tar_num_ticks - len(replay)
+                replay.close()
         time.sleep(2)
 
 class PortChooser:
@@ -281,6 +288,8 @@ def _get_experiences_async(settings: TrainSettings, executable: str, port_min: i
     workers = []
     serd_settings = ser.serialize_embeddable(settings)
     ports_per = (port_max - port_min) // nthreads
+    if ports_per < 3:
+        raise ValueError(f'not enough ports assigned ({nthreads} threads, {port_max-port_min} ports)')
     ticks_per = int(math.ceil(num_ticks_to_do / nthreads))
     for worker in range(nthreads):
         proc = Process(target=_get_experiences_target,
@@ -352,6 +361,8 @@ def _run(args):
     while settings.cur_ind < len(settings.train_seq):
         _get_experiences_async(settings, executable, port, port + 10*nthreads, create_flags, args.aggressive, spec, nthreads)
         _train_experiences(settings, executable)
+        if args.debug:
+            break
         _cleanup_session(settings)
         settings.cur_ind += 1
         with open(args.settings, 'w') as outfile:
