@@ -363,6 +363,7 @@ class Deep1ModelToEval(FeedforwardNetwork):
         ]
 
     def to_evaluative(self) -> Deep1ModelEval:
+        """Uses the current norm layers to create a corresponding evaluation model"""
         if not isinstance(self.cur_norms[0], EvaluatingAbsoluteNormLayer):
             raise ValueError('learning_to_current must be called at least once')
 

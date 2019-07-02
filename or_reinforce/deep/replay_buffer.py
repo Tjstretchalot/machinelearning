@@ -510,13 +510,21 @@ class NegativeExperience(ExperienceType):
         return exp.reward_rec <= 0
 
 def balance_experiences(replay_path: str, exp_types: typing.List[ExperienceType]) -> int:
-    """Loads the replay folder and filters it such that it has the same number of each
-    type of experience. The experience types must be mutually exclusive. If they are not,
-    then the order of the list will matter, but the result will be deterministic.
+    """Loads the replay folder and filters it such that it has at least as many of the
+    first experience type as the second experience type, and at least as much of the second
+    experience type as the third, etc.
+
+    Note that balancing experiences may not be possible in all situations - for example, an
+    optimal algorithm for a deterministic game will *always* select experiences with positive
+    reward, so it is not possible to balance positive and negative rewards.
+
+    However, for a network which is trying to get positive experiences and does achieve some
+    positive experiences, it will never not receive any positive experiences. Thus, we can
+    always ensure we have at least as many positive experiences as negative experiences.
 
     Args:
         replay_path (str): the path to the replay folder to balance
-        exp_types (typing.List[ExperienceType]): the experience types you want an equal number of.
+        exp_types (typing.List[ExperienceType]): the experience types you want in descending order
 
     Returns:
         The number of each type of experience in the dataset
@@ -527,7 +535,7 @@ def balance_experiences(replay_path: str, exp_types: typing.List[ExperienceType]
     outwriter = FileWritableReplayBuffer(outpath, exist_ok=True)
     result = 0
     try:
-        counters = dict((i, 0) for i in range(len(exp_types)))
+        counters = list(0 for i in range(len(exp_types)))
         for _ in range(len(inwriter)):
             exp: Experience = next(inwriter)
             for i, exp_type in enumerate(exp_types):
@@ -535,11 +543,10 @@ def balance_experiences(replay_path: str, exp_types: typing.List[ExperienceType]
                     counters[i] += 1
                     break
 
-        result = counters[0]
-        for _, (_, ctr) in enumerate(counters.items()):
-            result = min(result, ctr)
+        new_counters = [counters[0]]
+        for i in range(1, len(exp_types)):
+            new_counters.append(min(new_counters[i - 1], counters[i]))
 
-        counters = dict((i, result) for i in range(len(exp_types)))
         for _ in range(len(inwriter)):
             exp: Experience = next(inwriter)
             typ: int = -1
@@ -547,8 +554,8 @@ def balance_experiences(replay_path: str, exp_types: typing.List[ExperienceType]
                 if exp_type(exp):
                     typ = i
                     break
-            if typ >= 0 and counters[typ] > 0:
-                counters[typ] -= 1
+            if typ >= 0 and new_counters[typ] > 0:
+                new_counters[typ] -= 1
                 outwriter.add(exp)
     finally:
         outwriter.close()
