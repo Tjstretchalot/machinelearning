@@ -9,7 +9,7 @@ import torch
 
 import shared.typeutils as tus
 
-class EvaluatingAbsoluteNormLayer:
+class EvaluatingAbsoluteNormLayer(torch.nn.Module):
     """A very simple 1-to-1 layer which subtracts of the precomputed mean and divides
     by the standard deviation
 
@@ -19,6 +19,7 @@ class EvaluatingAbsoluteNormLayer:
         inv_std (tensor[features]): the reciprical of the standard deviation
     """
     def __init__(self, features: int, means: torch.tensor, inv_std: torch.tensor):
+        super().__init__()
         tus.check(features=(features, int))
         tus.check_tensors(
             means=(means, (('features', features),), (torch.float, torch.double)),
@@ -28,7 +29,7 @@ class EvaluatingAbsoluteNormLayer:
         self.means = means
         self.inv_std = inv_std
 
-    def __call__(self, inp: torch.tensor):
+    def forward(self, inp: torch.tensor): # pylint: disable=arguments-differ
         tus.check_tensors(
             inp=(inp, (('batch', None), ('features', self.features)), self.means.dtype)
         )
@@ -59,7 +60,7 @@ class EvaluatingAbsoluteNormLayer:
         when you are first initializing the network"""
         return cls(features, torch.zeros(features, dtype=dtype), torch.ones(features, dtype=dtype))
 
-class LearningAbsoluteNormLayer:
+class LearningAbsoluteNormLayer(torch.nn.Module):
     """A tracking layer, not meant to be trainable via back propagation. Instead, this simply
     tracks all of its inputs using the method described at https://math.stackexchange.com/q/116344,
     with the modification that we store the first 100 values in memory to get a better estimate of
@@ -92,6 +93,7 @@ class LearningAbsoluteNormLayer:
             to calculate the first set of means and variances
     """
     def __init__(self, features: int, num_initial: int = 100):
+        super().__init__()
         tus.check(features=(features, int), num_initial=(num_initial, int))
         self.features = features
         self.num_initial = num_initial
@@ -122,7 +124,7 @@ class LearningAbsoluteNormLayer:
         inv_std = inv_var.sqrt()
         return EvaluatingAbsoluteNormLayer(self.features, means, inv_std)
 
-    def __call__(self, inps: torch.tensor):
+    def forward(self, inps: torch.tensor): # pylint: disable=arguments-differ
         """Updates the running mean and variance using the given inputs"""
         tus.check_tensors(
             inps=(inps, (('batch', None), ('features', self.features)),

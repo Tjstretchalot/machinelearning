@@ -51,6 +51,7 @@ class GenericTrainingContext(typing.NamedTuple):
     batch_size: int
     points: torch.tensor
     labels: torch.tensor
+
     shared: dict
     logger: logging.Logger
 
@@ -135,7 +136,16 @@ class GenericTrainer:
 
     def train(self, model: Network, **kwargs):
         """Trains the given network. Returns an output dict. The kwargs are passed to the setup
-        functions. If 'logger' is in kwargs, it is used as the logger and not passed further"""
+        functions. If 'logger' is in kwargs, it is used as the logger and not passed further.
+
+        Other keywords:
+            point_dtype (dtype, optional): the torch data type for the points. Default torch.float
+            target_dtype (dtype, optional): the torch data type for the targets.
+                Default torch.float
+            target_style (dtype, optional): the style for the targets, one of 'labels' or 'hot'.
+                If 'hot' then its assumed that the shape that the pwl is expecting is
+                (batch_size, output_dim), if 'labels' then assumed (batch_size,)
+        """
 
         if 'logger' in kwargs:
             _logger = kwargs['logger']
@@ -147,12 +157,19 @@ class GenericTrainer:
 
         points_dtype = kwargs['point_dtype'] if 'point_dtype' in kwargs else torch.double
         target_dtype = kwargs['target_dtype'] if 'target_dtype' in kwargs else torch.long
+        target_style = kwargs['target_style'] if 'target_style' in kwargs else 'labels'
+
         perf: perf_stats.PerfStats = kwargs['perf'] if 'perf' in kwargs else perf_stats.NoopPerfStats()
         context = GenericTrainingContext(
             model=model, teacher=self.teacher, train_pwl=self.train_pwl, test_pwl=self.test_pwl,
             batch_size=self.batch_size, optimizer=self.optimizer,
             points=torch.zeros((self.batch_size, model.input_dim), dtype=points_dtype),
-            labels=torch.zeros(self.batch_size, dtype=target_dtype), shared=dict(),
+            labels=(
+                torch.zeros(self.batch_size, dtype=target_dtype)
+                if target_style == 'labels' else
+                torch.zeros((self.batch_size, self.train_pwl.output_dim), dtype=target_dtype)
+            ),
+            shared=dict(),
             logger=_logger
         )
         del _logger

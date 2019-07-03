@@ -21,7 +21,6 @@ import shared.filetools as filetools
 import optimax_rogue.networking.serializer as ser
 import or_reinforce.deep.replay_buffer as rb
 
-
 class SessionSettings(ser.Serializable):
     """The settings for a single training session
 
@@ -37,7 +36,7 @@ class SessionSettings(ser.Serializable):
 
     @classmethod
     def identifier(cls):
-        return 'or_reinforce.runners.deep1.session_settings'
+        return 'or_reinforce.runners.deep_trainer.session_settings'
 
     def __repr__(self):
         return (f'SessionSettings [tie_len={self.tie_len}, tar_ticks={self.tar_ticks}'
@@ -46,7 +45,7 @@ class SessionSettings(ser.Serializable):
 ser.register(SessionSettings)
 
 class TrainSettings(ser.Serializable):
-    """The settings for training the deep1 bot
+    """The settings for training the deep bot
 
     Attributes:
         train_bot (str): the path to the bot to train module, including the callable
@@ -55,7 +54,8 @@ class TrainSettings(ser.Serializable):
         train_seq (list[SessionSettings]): the list of training sessions to complete
         cur_ind (int): the index in train_seq that we are currently at.
     """
-    def __init__(self, train_bot: str, adver_bot: str, bot_folder: str, train_seq: typing.List[SessionSettings], cur_ind: int):
+    def __init__(self, train_bot: str, adver_bot: str, bot_folder: str,
+                 train_seq: typing.List[SessionSettings], cur_ind: int):
         self.train_bot = train_bot
         self.adver_bot = adver_bot
         self.bot_folder = bot_folder
@@ -64,25 +64,27 @@ class TrainSettings(ser.Serializable):
 
     @classmethod
     def identifier(cls):
-        return 'or_reinforce.runners.deep1.train_settings'
+        return 'or_reinforce.runners.deep_trainer.train_settings'
 
     @classmethod
-    def defaults(cls):
-        """Gets the current recommended settings for training the deep1 bot as well as possible.
+    def defaults(cls, train_bot: str):
+        """Gets the current recommended settings for training the deep bot as well as possible.
         This can take some time."""
         train_seq = []
+        # first session short to avoid norms being way off
+        train_seq.append(SessionSettings(tie_len=111, tar_ticks=1000, train_force_amount=1))
         for _ in range(5): # 5 * 20k = 100k samples random
             train_seq.append(SessionSettings(tie_len=111, tar_ticks=20000, train_force_amount=1))
 
-        for tfa in np.linspace(1, 0.1, 25): # 25*40k = 1m samples linearly decreasing train force amount
+        for tfa in np.linspace(1, 0.1, 25): # 25*40k = 1m samples linearly decreasing tfa
             train_seq.extend([
                 SessionSettings(tie_len=111, tar_ticks=20000, train_force_amount=float(tfa)),
                 SessionSettings(tie_len=111, tar_ticks=20000, train_force_amount=float(tfa))
             ])
         return cls(
-            train_bot='or_reinforce.deep.deep1.deep1',
+            train_bot=train_bot,
             adver_bot='optimax_rogue_bots.randombot.RandomBot',
-            bot_folder=os.path.join('out', 'or_reinforce', 'deep', 'deep1'),
+            bot_folder=os.path.join('out', *train_bot.split('.')[:-1]),
             train_seq=train_seq,
             cur_ind=0
         )
@@ -138,14 +140,19 @@ SAVEDIR = shared.filetools.savepath()
 
 def main():
     """Main entry"""
-    parser = argparse.ArgumentParser(description='Trains the deep.deep1 bot against a random bot')
+    parser = argparse.ArgumentParser(description='Trains the deep bot against a random bot')
     parser.add_argument('--port', type=int, default=1769, help='port to use')
     parser.add_argument('--headless', action='store_true', help='Use headless mode')
     parser.add_argument('--py3', action='store_true', help='changes executable to python3')
-    parser.add_argument('--settings', type=str, default=os.path.join(SAVEDIR, 'settings.json'), help='path to the settings file')
-    parser.add_argument('--aggressive', action='store_true', help='no sleeps, use as much cpu as possible')
-    parser.add_argument('--numthreads', type=int, default=8, help='number of threads to use for gathering experiences')
-    parser.add_argument('--debug', action='store_true', help='stop after first training session completes')
+    parser.add_argument('--settings', type=str, default=os.path.join(SAVEDIR, 'settings.json'),
+                        help='path to the settings file')
+    parser.add_argument('--aggressive', action='store_true',
+                        help='no sleeps, use as much cpu as possible')
+    parser.add_argument('--numthreads', type=int, default=10,
+                        help='number of threads to use for gathering experiences')
+    parser.add_argument('--debug', action='store_true',
+                        help='stop after first training session completes')
+    parser.add_argument('bot', type=str, help='the bot to train, including the callable')
     args = parser.parse_args()
 
     _run(args)
@@ -190,7 +197,8 @@ def _start_spec(executable, port, create_flags):
         creationflags=create_flags
     )
 
-def _get_experiences_sync(settings: TrainSettings, executable: str, port_chooser: typing.Callable, create_flags: int, aggressive: bool, spec: bool,
+def _get_experiences_sync(settings: TrainSettings, executable: str, port_chooser: typing.Callable,
+                          create_flags: int, aggressive: bool, spec: bool,
                           replaypath: str, settings_path: str, tar_num_ticks: int):
     session: SessionSettings = settings.current_session
     num_ticks_to_do = tar_num_ticks
@@ -210,7 +218,8 @@ def _get_experiences_sync(settings: TrainSettings, executable: str, port_chooser
         secret2 = secrets.token_hex()
         port = port_chooser()
         procs = []
-        procs.append(_start_server(executable, secret1, secret2, port, session.tie_len, aggressive, create_flags))
+        procs.append(_start_server(executable, secret1, secret2, port, session.tie_len,
+                                   aggressive, create_flags))
         if random.random() < 0.5:
             tmp = secret1
             secret1 = secret2
@@ -219,8 +228,10 @@ def _get_experiences_sync(settings: TrainSettings, executable: str, port_chooser
 
         time.sleep(2)
 
-        procs.append(_start_bot(executable, settings.train_bot, secret1, port, create_flags, aggressive, 'train_bot.log', ['--settings', settings_path]))
-        procs.append(_start_bot(executable, settings.adver_bot, secret2, port, create_flags, aggressive, 'adver_bot.log'))
+        procs.append(_start_bot(executable, settings.train_bot, secret1, port, create_flags,
+                                aggressive, 'train_bot.log', ['--settings', settings_path]))
+        procs.append(_start_bot(executable, settings.adver_bot, secret2, port, create_flags,
+                                aggressive, 'adver_bot.log'))
         if spec:
             procs.append(_start_spec(executable, port, create_flags))
 
@@ -293,8 +304,9 @@ def _get_experiences_async(settings: TrainSettings, executable: str, port_min: i
     ticks_per = int(math.ceil(num_ticks_to_do / nthreads))
     for worker in range(nthreads):
         proc = Process(target=_get_experiences_target,
-                       args=(serd_settings, executable, port_min + worker*ports_per, port_min + (worker+1)*ports_per,
-                             create_flags, aggressive, spec, replay_paths[worker], setting_paths[worker], ticks_per))
+                       args=(serd_settings, executable, port_min + worker*ports_per,
+                             port_min + (worker+1)*ports_per, create_flags, aggressive, spec,
+                             replay_paths[worker], setting_paths[worker], ticks_per))
         proc.start()
         workers.append(proc)
         time.sleep(1)
@@ -335,7 +347,7 @@ def _run(args):
     settings: TrainSettings = None
     if not os.path.exists(args.settings):
         os.makedirs(os.path.dirname(args.settings))
-        settings = TrainSettings.defaults()
+        settings = TrainSettings.defaults(args.bot)
         with open(args.settings, 'w') as outfile:
             json.dump(ser.serialize_embeddable(settings), outfile)
     else:
@@ -352,14 +364,16 @@ def _run(args):
 
     ncores = psutil.cpu_count(logical=False)
     if args.aggressive and nthreads > (ncores // 3):
-        print(f'auto-reducing simultaneous servers to {ncores // 3} since there are {ncores} cores and we need 3 cores per server')
+        print(f'auto-reducing simultaneous servers to {ncores // 3} since there are {ncores} '
+              + 'cores and we need 3 cores per server')
         nthreads = ncores // 3
 
     if os.path.exists(settings.replay_folder):
         rb.FileWritableReplayBuffer(settings.replay_folder, exist_ok=True).close()
 
     while settings.cur_ind < len(settings.train_seq):
-        _get_experiences_async(settings, executable, port, port + 10*nthreads, create_flags, args.aggressive, spec, nthreads)
+        _get_experiences_async(settings, executable, port, port + 10*nthreads, create_flags,
+                               args.aggressive, spec, nthreads)
         _train_experiences(settings, executable)
         if args.debug:
             break

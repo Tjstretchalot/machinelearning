@@ -60,6 +60,14 @@ class QBot:
         rewards"""
         raise NotImplementedError
 
+    def evaluate_all(self, game_state: GameState,
+                     moves: typing.List[Move]) -> typing.Iterable[float]:
+        """Evaluates all the moves available to this bot and returns them in the order
+        that the QBotController moves was initialized to. The moves is provided for
+        generic implementations, but can be assumed to be the same as the move map.
+        """
+        return [self.evaluate(game_state, move) for move in moves]
+
     def learn(self, game_state: GameState, move: Move, new_state: GameState,
               reward_raw: float, reward_pred: float) -> None:
         """Teach the underling model that it should have predicted the specified
@@ -189,6 +197,8 @@ class QBotController(StateActionBot):
         self.last_save = time.time()
         self.history = deque()
 
+        self._has_evaluate_all = hasattr(self, 'evaluate_all')
+
     def __call__(self, entity_iden):
         self.entity_iden = entity_iden
         self.qbot(entity_iden)
@@ -222,7 +232,7 @@ class QBotController(StateActionBot):
         if self.teacher_force_amt and random.random() < self.teacher_force_amt:
             return self.teacher.move(game_state)
 
-        move_rewards = [self.qbot.evaluate(game_state, move) for move in self.moves]
+        move_rewards = [float(pred) for pred in self.qbot.evaluate_all(game_state, self.moves)]
 
         if self.move_selstyle == QBotMoveSelectionStyle.Greedy:
             best_ind = int(np.argmax(move_rewards))

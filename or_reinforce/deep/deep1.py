@@ -462,7 +462,7 @@ class MyQBotController(qbot.QBotController):
     def pitch(cls):
         return (
             'DeepQBot',
-            'Learns through offline replay of moves with a target network',
+            'Learns through offline replay of moves with a target network. Encodes the move as input',
         )
 
     @classmethod
@@ -615,7 +615,6 @@ def offline_learning():
     perf_file = os.path.join(SAVEDIR, 'offline_learning_perf.log')
     perf = perf_stats.LoggingPerfStats('deep1 offline learning', perf_file)
 
-    replay_buffer.balance_experiences(REPLAY_FOLDER, [replay_buffer.PositiveExperience(), replay_buffer.NegativeExperience()])
     replay = replay_buffer.FileReadableReplayBuffer(REPLAY_FOLDER, perf=perf)
     try:
         print(f'loaded {len(replay)} experiences for replay...')
