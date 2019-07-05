@@ -18,8 +18,23 @@ from multiprocessing import Process
 
 import shared.filetools as filetools
 
+import optimax_rogue.logic.moves as moves
 import optimax_rogue.networking.serializer as ser
 import or_reinforce.deep.replay_buffer as rb
+
+MOVES = list(moves.Move)
+MOVES.remove(moves.Move.Stay)
+
+BALANCE_LOOKUP = {
+    'reward': {
+        'exp_types': [rb.PositiveExperience(), rb.NegativeExperience()],
+        'style': 'desc'
+    },
+    'action': {
+        'exp_types': [rb.ActionExperience(mv) for mv in MOVES],
+        'style': 'exact'
+    }
+}
 
 class SessionSettings(ser.Serializable):
     """The settings for a single training session
@@ -28,11 +43,19 @@ class SessionSettings(ser.Serializable):
         tie_len (int): number of ticks before a tie is declared
         tar_ticks (int): the number of replay experiences that we are looking for
         train_force_amount (float): the percent of movements that are forced
+
+        balance (bool): True if the dataset is balanced somehow, False otherwise
+        balance_technique (str, optional): one of 'reward' or 'action'. Reward
+            balances the positive/negative experiences, action balances the move
+            selected
     """
-    def __init__(self, tie_len: int, tar_ticks: int, train_force_amount: float):
+    def __init__(self, tie_len: int, tar_ticks: int, train_force_amount: float,
+                 balance: bool, balance_technique: typing.Optional[str] = None):
         self.tie_len = tie_len
         self.tar_ticks = tar_ticks
         self.train_force_amount = train_force_amount
+        self.balance = balance
+        self.balance_technique = balance_technique
 
     @classmethod
     def identifier(cls):
@@ -40,7 +63,8 @@ class SessionSettings(ser.Serializable):
 
     def __repr__(self):
         return (f'SessionSettings [tie_len={self.tie_len}, tar_ticks={self.tar_ticks}'
-                + f', train_force_amount={self.train_force_amount}]')
+                + f', train_force_amount={self.train_force_amount}, balance={self.balance}'
+                + f', balance_technique={self.balance_technique}]')
 
 ser.register(SessionSettings)
 
@@ -72,14 +96,18 @@ class TrainSettings(ser.Serializable):
         This can take some time."""
         train_seq = []
         # first session short to avoid norms being way off
-        train_seq.append(SessionSettings(tie_len=111, tar_ticks=1000, train_force_amount=1))
-        for _ in range(5): # 5 * 20k = 100k samples random
-            train_seq.append(SessionSettings(tie_len=111, tar_ticks=20000, train_force_amount=1))
+        train_seq.append(SessionSettings(tie_len=111, tar_ticks=1000, train_force_amount=1,
+                                         balance=True, balance_technique='action'))
+        for _ in range(5): # 5 * 2k = 10k samples random
+            train_seq.append(SessionSettings(tie_len=111, tar_ticks=2000, train_force_amount=1,
+                                             balance=True, balance_technique='action'))
 
-        for tfa in np.linspace(1, 0.1, 25): # 25*40k = 1m samples linearly decreasing tfa
+        for tfa in np.linspace(1, 0.1, 25): # 25*4k = 100k samples linearly decreasing tfa
             train_seq.extend([
-                SessionSettings(tie_len=111, tar_ticks=20000, train_force_amount=float(tfa)),
-                SessionSettings(tie_len=111, tar_ticks=20000, train_force_amount=float(tfa))
+                SessionSettings(tie_len=111, tar_ticks=2000, train_force_amount=float(tfa),
+                                balance=True, balance_technique='action'),
+                SessionSettings(tie_len=111, tar_ticks=2000, train_force_amount=float(tfa),
+                                balance=True, balance_technique='action')
             ])
         return cls(
             train_bot=train_bot,
@@ -248,9 +276,9 @@ def _get_experiences_sync(settings: TrainSettings, executable: str, port_chooser
             replay = rb.FileReadableReplayBuffer(replaypath)
             num_ticks_to_do = tar_num_ticks - len(replay)
             replay.close()
-            if num_ticks_to_do <= 0:
+            if num_ticks_to_do <= 0 and session.balance:
                 rb.balance_experiences(
-                    replaypath, [rb.PositiveExperience(), rb.NegativeExperience()])
+                    replaypath, **BALANCE_LOOKUP[session.balance_technique])
                 replay = rb.FileReadableReplayBuffer(replaypath)
                 num_ticks_to_do = tar_num_ticks - len(replay)
                 replay.close()

@@ -509,10 +509,18 @@ class NegativeExperience(ExperienceType):
     def __call__(self, exp: Experience) -> bool:
         return exp.reward_rec <= 0
 
-def balance_experiences(replay_path: str, exp_types: typing.List[ExperienceType]) -> int:
-    """Loads the replay folder and filters it such that it has at least as many of the
-    first experience type as the second experience type, and at least as much of the second
-    experience type as the third, etc.
+class ActionExperience(ExperienceType):
+    """Describes an experience that involves a particular action"""
+    def __init__(self, action: Move):
+        self.action = action
+
+    def __call__(self, exp: Experience) -> bool:
+        return exp.action == self.action
+
+def balance_experiences(replay_path: str, exp_types: typing.List[ExperienceType],
+                        style: str = 'exact') -> int:
+    """Loads the replay folder and filters it such that it is balanced according to the
+    style.
 
     Note that balancing experiences may not be possible in all situations - for example, an
     optimal algorithm for a deterministic game will *always* select experiences with positive
@@ -525,6 +533,11 @@ def balance_experiences(replay_path: str, exp_types: typing.List[ExperienceType]
     Args:
         replay_path (str): the path to the replay folder to balance
         exp_types (typing.List[ExperienceType]): the experience types you want in descending order
+        style (str): determines balancing style
+            exact: ensures that there are exactly the same number of experience types in each
+            desc: ensures that it has at least as many of the first experience type as the second
+                experience type, and at least as much of the second experience type as the third,
+                etc.
 
     Returns:
         The number of each type of experience in the dataset
@@ -543,9 +556,13 @@ def balance_experiences(replay_path: str, exp_types: typing.List[ExperienceType]
                     counters[i] += 1
                     break
 
-        new_counters = [counters[0]]
-        for i in range(1, len(exp_types)):
-            new_counters.append(min(new_counters[i - 1], counters[i]))
+        if style == 'desc':
+            new_counters = [counters[0]]
+            for i in range(1, len(exp_types)):
+                new_counters.append(min(new_counters[i - 1], counters[i]))
+        else:
+            new_amt = min(counters)
+            new_counters = list(new_amt for _ in exp_types)
 
         for _ in range(len(inwriter)):
             exp: Experience = next(inwriter)

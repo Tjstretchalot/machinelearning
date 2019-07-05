@@ -63,8 +63,8 @@ SETTINGS_FILE = os.path.join(SAVEDIR, 'settings.json')
 
 MOVE_MAP = [Move.Left, Move.Right, Move.Up, Move.Down]
 MOVE_LOOKUP = dict((move, i) for i, move in enumerate(MOVE_MAP))
-ALPHA = 0.3
-CUTOFF = 3
+ALPHA = 0.8
+CUTOFF = 1
 PRED_WEIGHT = ALPHA ** CUTOFF
 
 INVALID_REWARD = -2
@@ -235,7 +235,7 @@ class Deep2Network(FeedforwardNetwork):
     Normalization          |
                           /
                     repeat (extraction depth) times
-    FC (hidden to output)
+    FC (hidden to output) (no bias)
     Nonlinearity
 
     Attributes:
@@ -264,8 +264,8 @@ class Deep2Network(FeedforwardNetwork):
         """Creates a new instance of the deep2 network in the batchnorm mode"""
         return cls(
             StackableLayer.create(ENCODE_DIM, HIDDEN_DIM),
-            [StackableLayer.create(HIDDEN_DIM, HIDDEN_DIM) for i in range(2)],
-            torch.nn.Linear(HIDDEN_DIM, OUTPUT_DIM),
+            [StackableLayer.create(HIDDEN_DIM, HIDDEN_DIM) for i in range(5)],
+            torch.nn.Linear(HIDDEN_DIM, OUTPUT_DIM, bias=False),
             'tanh'
         )
 
@@ -346,7 +346,6 @@ class Deep2Network(FeedforwardNetwork):
             primres[f'extract_{i}'] = lyr_primres
 
         npres['out_weights'] = self.out_layer.weight.data.numpy()
-        npres['out_bias'] = self.out_layer.bias.data.numpy()
 
         primres['out_nonlin_nm'] = self.out_nonlin_nm
 
@@ -401,10 +400,8 @@ class Deep2Network(FeedforwardNetwork):
                 )
 
             out_weights = npres['out_weights']
-            out_bias = npres['out_bias']
-            out_layer = torch.nn.Linear(out_weights.shape[1], out_weights.shape[0])
+            out_layer = torch.nn.Linear(out_weights.shape[1], out_weights.shape[0], bias=False)
             out_layer.weight.data[:] = torch.from_numpy(out_weights)
-            out_layer.bias.data[:] = torch.from_numpy(out_bias)
 
         if compress:
             filetools.zipdir(inpath_wo_ext)
