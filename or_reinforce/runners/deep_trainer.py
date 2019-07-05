@@ -367,7 +367,7 @@ def _train_experiences(settings: TrainSettings, executable: str):
     print('--training--')
     time.sleep(0.5)
     proc = subprocess.Popen(
-        [executable, '-u', '-m', settings.bot_module]
+        [executable, '-u', '-m', settings.bot_module, str(settings.current_session.regul_factor)]
     )
     proc.wait()
     print('--training finished--')
