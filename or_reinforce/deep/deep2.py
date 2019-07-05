@@ -622,7 +622,7 @@ def _crit(pred: torch.tensor, truth: torch.tensor):
         pred[known_val].unsqueeze(1), truth[known_val].unsqueeze(1)
     )
 
-    loss += 0.1 * (pred ** 2) # regularizer
+    loss += 0.1 * (pred ** 2).sum() # regularizer
     return loss
 
 def offline_learning():
