@@ -615,18 +615,28 @@ class MyPWL(pwl.PointWithLabelProducer):
     def _position(self, pos):
         raise NotImplementedError
 
-def _crit(pred: torch.tensor, truth: torch.tensor):
-    known_val = truth != INVALID_REWARD
+def _create_crit(regul_factor: float):
+    def crit(pred: torch.tensor, truth: torch.tensor):
+        known_val = truth != INVALID_REWARD
 
-    loss = torch.functional.F.smooth_l1_loss(
-        pred[known_val].unsqueeze(1), truth[known_val].unsqueeze(1)
-    )
+        loss = torch.functional.F.smooth_l1_loss(
+            pred[known_val].unsqueeze(1), truth[known_val].unsqueeze(1)
+        )
 
-    loss += 0.1 * (pred ** 2).sum() # regularizer
-    return loss
+        loss += regul_factor * (pred ** 2).sum() # regularizer
+        return loss
+    return crit
 
 def offline_learning():
     """Loads the replay buffer and trains on it."""
+    import argparse
+    parser = argparse.ArgumentParser(
+        description='Evaluates the deep1 bot by launching a server and connecting it')
+    parser.add_argument('regul_factor', type=float,
+                        help='The weight of regularization, should be proportional to '
+                             + 'teacher force amount')
+    args = parser.parse_args()
+
     perf_file = os.path.join(SAVEDIR, 'offline_learning_perf.log')
     perf = perf_stats.LoggingPerfStats('deep2 offline learning', perf_file)
 
@@ -666,7 +676,7 @@ def offline_learning():
             learning_rate=0.001,
             optimizer=torch.optim.Adam(
                 [p for p in network.parameters() if p.requires_grad], lr=0.001),
-            criterion=_crit
+            criterion=_create_crit(args.regul_factor)
         )
         (trainer
          .reg(tnr.EpochsTracker())
