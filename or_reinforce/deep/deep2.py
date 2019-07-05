@@ -617,16 +617,12 @@ class MyPWL(pwl.PointWithLabelProducer):
 
 def _crit(pred: torch.tensor, truth: torch.tensor):
     known_val = truth != INVALID_REWARD
-    unknown_val = truth == INVALID_REWARD
 
     loss = torch.functional.F.smooth_l1_loss(
         pred[known_val].unsqueeze(1), truth[known_val].unsqueeze(1)
     )
 
-    unk = pred[unknown_val].unsqueeze(1)
-    loss += 0.01 * torch.functional.F.smooth_l1_loss(
-        unk, torch.ones_like(unk) # exploration incentive
-    )
+    loss += 0.1 * (pred ** 2) # regularizer
     return loss
 
 def offline_learning():
