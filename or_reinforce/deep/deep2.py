@@ -664,7 +664,6 @@ class MyPWL(pwl.PointWithLabelProducer):
 
 def _create_crit(regul_factor: float):
     def crit(pred: torch.tensor, truth: torch.tensor):
-        breakpoint()
         known_val = truth != INVALID_REWARD
 
         loss = torch.functional.F.smooth_l1_loss(
