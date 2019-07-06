@@ -29,7 +29,7 @@ class EvaluatingAbsoluteNormLayer(torch.nn.Module):
         self.means = means
         self.inv_std = inv_std
 
-    def forward(self, inp: torch.tensor): # pylint: disable=arguments-differ
+    def forward(self, inp: torch.tensor):  # pylint: disable=arguments-differ
         tus.check_tensors(
             inp=(inp, (('batch', None), ('features', self.features)), self.means.dtype)
         )
@@ -55,7 +55,7 @@ class EvaluatingAbsoluteNormLayer(torch.nn.Module):
         return lyr
 
     @classmethod
-    def create_identity(cls, features: int, dtype = torch.float):
+    def create_identity(cls, features: int, dtype=torch.float):
         """Creates an identity layer (does nothing) with the given number of features. Helpful
         when you are first initializing the network"""
         return cls(features, torch.zeros(features, dtype=dtype), torch.ones(features, dtype=dtype))
@@ -79,34 +79,24 @@ class LearningAbsoluteNormLayer(torch.nn.Module):
 
     Attributes:
         features (int): the number of features that we are expecting
-        num_initial (int): the number of samples we store before in memory before the first
-            estimate of mean and variance. used to speed up convergence
+        batch_size (int): how many samples we combine into a single tensor
 
-        means (tensor[features], optional): the current estimate for the mean value for each
-            feature. initialized after we have filled the initial tensor
-        variances (tensor[features], optional): the current estimate for variance for each
-            feature. initialized after we have filled the initial tensor
-        num_seen (int): the number of samples we have seen so far
-
-        initial (tensor[num_initial, features], optional): a store for the first set of values
-            seen, initialized on the first set of samples and uninitialized once filled and used
-            to calculate the first set of means and variances
+        history (list[tensor[batch_size, features]]): the uncombined tensors
+            that we have filled up already
+        current (tensor[batch_size, features]): the current tensor we are trying
+            to fill up with samples
+        current_len (int): where we have filled up to in current
     """
 
-    # TODO rewrite so that this just calculates the true mean and std because it is
-    # waaaaay off with its approximations of the variance.
-    # the mean is close tho
-    def __init__(self, features: int, num_initial: int = 100):
+    def __init__(self, features: int, batch_size: int = 1024):
         super().__init__()
-        tus.check(features=(features, int), num_initial=(num_initial, int))
+        tus.check(features=(features, int), batch_size=(batch_size, int))
         self.features = features
-        self.num_initial = num_initial
+        self.batch_size = batch_size
 
-        self.means = None
-        self.variances = None
-        self.num_seen = 0
-
-        self.initial = None
+        self.history = []
+        self.current = None
+        self.current_len = 0
 
     def to_evaluative(self, like_batchnorm=False) -> EvaluatingAbsoluteNormLayer:
         """Gets the fixed absolute norm layer using the current estimate of mean and variance.
@@ -117,54 +107,52 @@ class LearningAbsoluteNormLayer(torch.nn.Module):
                 to determine the standard deviation. This happens by default for the batch norm
                 for numerical stability
         """
-        if self.num_seen < self.num_initial:
-            raise ValueError('have not seen enough data to convert to evaluative '
-                             + f'({self.num_seen}/{self.num_initial})')
-        means = self.means.clone()
-        if like_batchnorm:
-            inv_var = 1 / (self.variances.clone() + 1e-5)
-        else:
-            inv_var = 1 / self.variances.clone()
-        inv_std = inv_var.sqrt()
-        return EvaluatingAbsoluteNormLayer(self.features, means, inv_std)
+        if self.current is None or (not self.history and self.current_len < 3):
+            raise ValueError('have not seen enough data to determine mean and std')
 
-    def forward(self, inps: torch.tensor): # pylint: disable=arguments-differ
+        all_data: torch.tensor = None
+        if self.history:
+            if self.current_len > 0:
+                all_data = torch.cat(self.history + [self.current[:self.current_len]], dim=0)
+            else:
+                all_data = torch.cat(self.history, dim=0)
+        else:
+            all_data = self.current[:self.current_len]
+
+        means = all_data.mean(dim=0)
+        var = all_data.var(dim=0)
+
+        std = var.sqrt() if not like_batchnorm else (var + 1e-5).sqrt()
+
+        return EvaluatingAbsoluteNormLayer(self.features, means, 1 / std)
+
+    def forward(self, inps: torch.tensor):  # pylint: disable=arguments-differ
         """Updates the running mean and variance using the given inputs"""
         tus.check_tensors(
-            inps=(inps, (('batch', None), ('features', self.features)),
-                  (torch.float, torch.double))
+            inps=(
+                inps,
+                (
+                    ('batch', (self.current.dtype if self.current is not None else None)),
+                    ('features', self.features)
+                ),
+                (torch.float, torch.double)
+            )
         )
-        inps = inps.detach()
-        if self.num_seen < self.num_initial:
-            if self.initial is None:
-                self.initial = torch.zeros((self.num_initial, self.features), dtype=inps.dtype)
-            elif inps.dtype != self.initial.dtype:
-                raise ValueError(f'dtype of inps changed from {self.initial.dtype} to {inps.dtype}')
+        if hasattr(inps, 'data'):
+            inps = inps.data
 
-            if self.num_seen + inps.shape[0] <= self.num_initial:
-                self.initial[self.num_seen:self.num_seen + inps.shape[0]] = inps
-                self.num_seen += inps.shape[0]
-
-                if self.num_seen == self.num_initial:
-                    self._initial_filled()
-                return
-
-            num_for_initial = self.num_initial - self.num_seen - inps.shape[0]
-            self(inps[:num_for_initial])
-            self(inps[num_for_initial:])
-            return
-
-        prev_means = self.means.clone()
-        for i in range(inps.shape[0]):
-            self.means += (inps[i] - self.means) / (self.num_seen + 1)
-            vari_sum = (inps[i] - prev_means) * (inps[i] - self.means)  # this could be negative
-            self.variances += vari_sum
-            prev_means[:] = self.means
-            self.num_seen += 1
-
-    def _initial_filled(self):
-        """We invoke this when we fill the initial tensor"""
-        self.means = self.initial.mean(dim=0)
-        self.variances = self.initial.var(dim=0)
-
-        self.initial = None
+        if self.current is None:
+            self.current = torch.zeros((self.batch_size, self.features), dtype=inps.dtype)
+            self.current_len = 0
+        if self.current_len + inps.shape[0] == self.batch_size:
+            self.current[self.current_len:] = inps
+            self.history.append(self.current)
+            self.current = torch.zeros_like(self.history[-1])
+            self.current_len = 0
+        elif self.current_len + inps.shape[0] < self.batch_size:
+            self.current[self.current_len:self.current_len + inps.shape[0]] = inps
+            self.current_len += inps.shape[0]
+        else:
+            split_at = self.batch_size - self.current_len
+            self.forward(inps[:split_at])
+            self.forward(inps[split_at:])
