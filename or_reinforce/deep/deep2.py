@@ -27,9 +27,8 @@ import os
 import torch
 import typing
 import json
+import enum
 import numpy as np
-import scipy.io
-import datetime
 
 from shared.models.ff import FeedforwardNetwork, FFTeacher, FFHiddenActivations
 from shared.layers.norm import EvaluatingAbsoluteNormLayer, LearningAbsoluteNormLayer
@@ -239,17 +238,25 @@ class Deep2Network(FeedforwardNetwork):
     Nonlinearity
 
     Attributes:
+        inp_norm (union[BatchNorm1d, EvaluatingAbsoluteLayer]): input normalization
+        inp_learning (LearningAbsoluteLayer, optional): learning input normalization
+        inp_affine (AffineLayer): the input affine layer
         inp_layer (StackableLayer): the input layer
         extract_layers (list[StackableLayer]): the feature extraction layers
         out_layer (torch.nn.Linear): the output layer
         out_nonlin_nm (str): the name for the output nonlinearity (see shared.nonlinearites)
         out_nonlin (typing.Callable): the output nonlinearity
     """
-    def __init__(self, inp_layer: StackableLayer,
+    def __init__(self, inp_norm: typing.Union[torch.nn.BatchNorm1d, EvaluatingAbsoluteNormLayer],
+                 inp_learning: typing.Optional[LearningAbsoluteNormLayer], inp_affine: AffineLayer,
+                 inp_layer: StackableLayer,
                  extract_layers: typing.List[StackableLayer],
                  out_layer: torch.nn.Linear,
                  out_nonlin_nm: str):
         super().__init__(ENCODE_DIM, OUTPUT_DIM, 1 + len(extract_layers))
+        self.inp_norm = inp_norm
+        self.inp_learning = inp_learning
+        self.inp_affine = inp_affine
         self.inp_layer = inp_layer
         self.extract_layers = extract_layers
         self.out_layer = out_layer
@@ -263,6 +270,9 @@ class Deep2Network(FeedforwardNetwork):
     def create(cls):
         """Creates a new instance of the deep2 network in the batchnorm mode"""
         return cls(
+            torch.nn.BatchNorm1d(ENCODE_DIM, affine=False, track_running_stats=False),
+            None,
+            AffineLayer.create(ENCODE_DIM),
             StackableLayer.create(ENCODE_DIM, HIDDEN_DIM),
             [StackableLayer.create(HIDDEN_DIM, HIDDEN_DIM) for i in range(5)],
             torch.nn.Linear(HIDDEN_DIM, OUTPUT_DIM, bias=False),
@@ -272,6 +282,7 @@ class Deep2Network(FeedforwardNetwork):
     def identity_eval(self) -> None:
         """Swaps the normalization layers with identity layers. Required when you dont have any
         data to fetch statistics on but you can't use batch norms"""
+        self.inp_norm = EvaluatingAbsoluteNormLayer.create_identity(ENCODE_DIM)
         self.inp_layer.identity_eval()
         for lyr in self.extract_layers:
             lyr.identity_eval()
@@ -281,6 +292,7 @@ class Deep2Network(FeedforwardNetwork):
         batch norm layers - they are instead replaced with absolute normalization layers. This
         inserts learning norm layers prior to the batch norm layers, which can be converted
         to absolute layers after this network has been shown some samples"""
+        self.inp_learning = LearningAbsoluteNormLayer(ENCODE_DIM)
         self.inp_layer.start_stat_tracking()
         for lyr in self.extract_layers:
             lyr.start_stat_tracking()
@@ -288,25 +300,31 @@ class Deep2Network(FeedforwardNetwork):
     def stat_tracking_to_norm(self):
         """Swaps the norm layers with the current learned norm layers and resets the
         learning layers"""
+        self.inp_norm = self.inp_learning.to_evaluative(True)
+        self.inp_learning = LearningAbsoluteNormLayer(ENCODE_DIM)
         self.inp_layer.stat_tracking_to_norm()
         for lyr in self.extract_layers:
             lyr.stat_tracking_to_norm()
 
     def stop_stat_tracking(self):
         """Stops tracking statistics between layers without changing the current norm"""
+        self.inp_learning = None
         self.inp_layer.stop_stat_tracking()
         for lyr in self.extract_layers:
             lyr.stop_stat_tracking()
 
     def to_train(self):
         """Switches the norm layers to batch norm layers which are suitable for training"""
+        self.inp_norm = torch.nn.BatchNorm1d(ENCODE_DIM, affine=False, track_running_stats=False)
         self.inp_layer.to_train()
         for lyr in self.extract_layers:
             lyr.to_train()
 
     def forward(self, inps: torch.tensor, acts_cb: typing.Callable = _noop) -> torch.tensor: # pylint: disable=arguments-differ
         acts_cb(FFHiddenActivations(layer=0, hidden_acts=inps))
-        acts = self.inp_layer(inps)
+        if self.inp_learning:
+            self.inp_learning(inps)
+        acts = self.inp_layer(self.inp_affine(self.inp_norm(inps)))
         acts_cb(FFHiddenActivations(layer=1, hidden_acts=acts))
         for i, lyr in enumerate(self.extract_layers):
             acts = lyr(acts)
@@ -331,13 +349,23 @@ class Deep2Network(FeedforwardNetwork):
         tus.check(outpath=(outpath, str))
         outpath, outpath_wo_ext = mutils.process_outfile(outpath, exist_ok, compress)
 
-        npres = dict()
+        npres = {}
         primres = {'num_extract': len(self.extract_layers)}
+
+        npres['inp_affine_mult'] = self.inp_affine.mult.data.numpy()
+        npres['inp_affine_add'] = self.inp_affine.add.data.numpy()
+
+        if isinstance(self.inp_norm, EvaluatingAbsoluteNormLayer):
+            primres['inp_norm_style'] = 'abs'
+            npres['inp_norm_means'] = self.inp_norm.means.numpy()
+            npres['inp_norm_inv_std'] = self.inp_norm.inv_std.numpy()
+        else:
+            primres['inp_norm_style'] = 'batch'
 
         lyr_npres, lyr_primres = self.inp_layer.to_raw_numpy()
         for k, v in lyr_npres.items():
-            npres[f'inp_{k}'] = v
-        primres['inp'] = lyr_primres
+            npres[f'inp_lyr_{k}'] = v
+        primres['inp_lyr'] = lyr_primres
 
         for i, lyr in enumerate(self.extract_layers):
             lyr_npres, lyr_primres = lyr.to_raw_numpy()
@@ -391,7 +419,23 @@ class Deep2Network(FeedforwardNetwork):
         tus.check(num_extract=(num_extract, int), out_nonlin_nm=(out_nonlin_nm, str))
 
         with np.load(os.path.join(inpath_wo_ext, 'np.npz')) as npres:
-            inp = StackableLayer.from_raw_numpy(npres, prims['inp'], 'inp_')
+            inp_affine = AffineLayer(
+                ENCODE_DIM,
+                torch.from_numpy(npres['inp_affine_mult']),
+                torch.from_numpy(npres['inp_affine_add'])
+            )
+            inp_norm = None
+            if prims['inp_norm_style'] == 'abs':
+                inp_norm = EvaluatingAbsoluteNormLayer(
+                    ENCODE_DIM,
+                    torch.from_numpy(npres['inp_norm_means']),
+                    torch.from_numpy(npres['inp_norm_inv_std'])
+                )
+            else:
+                inp_norm = torch.nn.BatchNorm1d(
+                    ENCODE_DIM, affine=False, track_running_stats=False)
+
+            inp = StackableLayer.from_raw_numpy(npres, prims['inp_lyr'], 'inp_lyr_')
 
             extract_layers = []
             for i in range(num_extract):
@@ -406,7 +450,7 @@ class Deep2Network(FeedforwardNetwork):
         if compress:
             filetools.zipdir(inpath_wo_ext)
 
-        return cls(inp, extract_layers, out_layer, out_nonlin_nm)
+        return cls(inp_norm, None, inp_affine, inp, extract_layers, out_layer, out_nonlin_nm)
 
 def init_or_load_model(evaluation=False) -> Deep2Network:
     """Initializes the deep2 network model if the model does not exist in the standard location,
@@ -484,6 +528,10 @@ class Deep2QBot(qbot.QBot):
     def learn(self, game_state: GameState, move: Move, new_state: GameState,
               reward_raw: float, reward_pred: float) -> None:
         if self.evaluation:
+            print(f'received reward {reward_raw} (pred: {reward_pred}) for move {move.name}')
+            best_move_val = self.evaluate_all(new_state, None).max().item()
+            print(f'  predicted value of next move: {best_move_val}')
+            print(f'  after adding {PRED_WEIGHT}*pred val to reward: {reward_raw + PRED_WEIGHT*best_move_val}')
             return
         player_id = 1 if self.entity_iden == game_state.player_1_iden else 2
         self.replay.add(replay_buffer.Experience(game_state, move, self.cutoff,
@@ -604,7 +652,6 @@ class MyPWL(pwl.PointWithLabelProducer):
             enc.encode(exp.new_state, None, out=self._buffer[i])
             labels[i, MOVE_LOOKUP[exp.action]] = exp.reward_rec
             self._outmask[i, MOVE_LOOKUP[exp.action]] = 1
-
         self.target_teacher.classify_many(self.target_model, self._buffer[:batch_size],
                                           self._outbuffer[:batch_size])
         labels[self._outmask] += self._outbuffer[:batch_size].max(dim=1)[0] * PRED_WEIGHT
@@ -617,6 +664,7 @@ class MyPWL(pwl.PointWithLabelProducer):
 
 def _create_crit(regul_factor: float):
     def crit(pred: torch.tensor, truth: torch.tensor):
+        breakpoint()
         known_val = truth != INVALID_REWARD
 
         loss = torch.functional.F.smooth_l1_loss(
@@ -653,15 +701,18 @@ def offline_learning():
             ctx.logger.info('swapping target network, hint=%s', hint)
             network.save(MODELFILE, exist_ok=True)
 
+            # TODO this conversion is not working; the evaluation model performs MUCH
+            # MUCH worse than the batch model, and they diverge strongly
             new_target = Deep2Network.load(MODELFILE)
             new_target.start_stat_tracking()
-            for _ in range(3):
+            for i in range(3):
                 train_pwl.mark()
-                for _ in range(0, 1024, ctx.batch_size):
+                for j in range(0, 1024, ctx.batch_size):
                     train_pwl.fill(ctx.points, ctx.labels)
                     teacher.classify_many(new_target, ctx.points, ctx.labels)
                 new_target.stat_tracking_to_norm()
                 train_pwl.reset()
+
 
             new_target.stop_stat_tracking()
             new_target.save(EVAL_MODELFILE, exist_ok=True)

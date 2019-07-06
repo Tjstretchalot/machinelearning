@@ -92,6 +92,10 @@ class LearningAbsoluteNormLayer(torch.nn.Module):
             seen, initialized on the first set of samples and uninitialized once filled and used
             to calculate the first set of means and variances
     """
+
+    # TODO rewrite so that this just calculates the true mean and std because it is
+    # waaaaay off with its approximations of the variance.
+    # the mean is close tho
     def __init__(self, features: int, num_initial: int = 100):
         super().__init__()
         tus.check(features=(features, int), num_initial=(num_initial, int))
@@ -154,7 +158,7 @@ class LearningAbsoluteNormLayer(torch.nn.Module):
         for i in range(inps.shape[0]):
             self.means += (inps[i] - self.means) / (self.num_seen + 1)
             vari_sum = (inps[i] - prev_means) * (inps[i] - self.means)  # this could be negative
-            self.variances += vari_sum.abs()
+            self.variances += vari_sum
             prev_means[:] = self.means
             self.num_seen += 1
 
