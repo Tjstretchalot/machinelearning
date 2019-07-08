@@ -410,7 +410,7 @@ def _cleanup_session(settings: TrainSettings):
 def _run(args):
     settings: TrainSettings = None
     if not os.path.exists(args.settings):
-        os.makedirs(os.path.dirname(args.settings))
+        os.makedirs(os.path.dirname(args.settings), exist_ok=True)
         settings = TrainSettings.defaults(args.bot)
         with open(args.settings, 'w') as outfile:
             json.dump(ser.serialize_embeddable(settings), outfile)
