@@ -123,6 +123,16 @@ class TrainSettings(ser.Serializable):
                                 regul_factor=tfa, holdover=10000, balance=True,
                                 balance_technique='action')
             ])
+
+        # hopefully we've learned a pretty good policy at this point, just need to work
+        # out some kinks
+        for i in range(50): # 50*2k = 100k samples at 10% tfa / regularization
+            train_seq.append(
+                SessionSettings(tie_len=111, tar_ticks=2000, train_force_amount=0.1,
+                                regul_factor=0.1, holdover=10000, balance=True,
+                                balance_technique='action')
+            )
+
         return cls(
             train_bot=train_bot,
             adver_bot='optimax_rogue_bots.randombot.RandomBot',
