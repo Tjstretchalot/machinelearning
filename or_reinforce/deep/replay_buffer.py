@@ -584,3 +584,29 @@ def balance_experiences(replay_path: str, exp_types: typing.List[ExperienceType]
     os.rename(os.path.join(outpath, META_FILE), os.path.join(replay_path, META_FILE))
     os.rmdir(outpath)
     return result
+
+def ensure_max_length(replay_path: str, max_exps: int) -> None:
+    """Ensures that there are no more than max_exps experiences in the replay buffer at the
+    specified location. Experiences are pruned randomly if necessary.
+    """
+
+    inwriter = FileReadableReplayBuffer(replay_path)
+    if len(inwriter) < max_exps:
+        inwriter.close()
+        return
+
+    tmppath = os.path.join(replay_path, 'tmp')
+    outwriter = FileWritableReplayBuffer(tmppath)
+
+    try:
+        for _ in range(max_exps):
+            outwriter.add(next(inwriter))
+    finally:
+        inwriter.close()
+        outwriter.close()
+
+    os.remove(os.path.join(replay_path, EXPERIENCES_FILE))
+    os.remove(os.path.join(replay_path, META_FILE))
+    os.rename(os.path.join(tmppath, EXPERIENCES_FILE), os.path.join(replay_path, EXPERIENCES_FILE))
+    os.rename(os.path.join(tmppath, META_FILE), os.path.join(replay_path, META_FILE))
+    os.rmdir(tmppath)

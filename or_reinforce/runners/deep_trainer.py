@@ -45,18 +45,23 @@ class SessionSettings(ser.Serializable):
         train_force_amount (float): the percent of movements that are forced
         regul_factor (float): the regularization factor for training
 
+        holdover (int): the number of experiences from this session (and previous)
+            that should be held over to the next session
+
         balance (bool): True if the dataset is balanced somehow, False otherwise
         balance_technique (str, optional): one of 'reward' or 'action'. Reward
             balances the positive/negative experiences, action balances the move
             selected
+
     """
     def __init__(self, tie_len: int, tar_ticks: int, train_force_amount: float,
-                 regul_factor: float,
+                 regul_factor: float, holdover: int,
                  balance: bool, balance_technique: typing.Optional[str] = None):
         self.tie_len = tie_len
         self.tar_ticks = tar_ticks
         self.train_force_amount = train_force_amount
         self.regul_factor = regul_factor
+        self.holdover = holdover
         self.balance = balance
         self.balance_technique = balance_technique
 
@@ -65,10 +70,11 @@ class SessionSettings(ser.Serializable):
         return 'or_reinforce.runners.deep_trainer.session_settings'
 
     def __repr__(self):
-        return (f'SessionSettings [tie_len={self.tie_len}, tar_ticks={self.tar_ticks}'
-                + f', train_force_amount={self.train_force_amount}'
-                + f', regul_factor={self.regul_factor}, balance={self.balance}'
-                + f', balance_technique={self.balance_technique}]')
+        return (f'SessionSettings [tie_len={self.tie_len}, tar_ticks={self.tar_ticks}\n'
+                + f', train_force_amount={self.train_force_amount}\n'
+                + f', regul_factor={self.regul_factor}, balance={self.balance}\n'
+                + f', balance_technique={self.balance_technique}\n'
+                + f', holdover={self.holdover}]')
 
 ser.register(SessionSettings)
 
@@ -101,19 +107,21 @@ class TrainSettings(ser.Serializable):
         train_seq = []
         # first session short to avoid norms being way off
         train_seq.append(SessionSettings(tie_len=111, tar_ticks=1000, train_force_amount=1,
-                                         regul_factor=6,
+                                         regul_factor=6, holdover=10000,
                                          balance=True, balance_technique='action'))
         for i in range(5): # 5 * 2k = 10k samples random
             train_seq.append(SessionSettings(tie_len=111, tar_ticks=2000, train_force_amount=1,
-                                             regul_factor=5 - i,
+                                             regul_factor=5 - i, holdover=10000,
                                              balance=True, balance_technique='action'))
 
         for tfa in np.linspace(1, 0.1, 25): # 25*4k = 100k samples linearly decreasing tfa
             train_seq.extend([
                 SessionSettings(tie_len=111, tar_ticks=2000, train_force_amount=float(tfa),
-                                regul_factor=tfa, balance=True, balance_technique='action'),
+                                regul_factor=tfa, holdover=10000, balance=True,
+                                balance_technique='action'),
                 SessionSettings(tie_len=111, tar_ticks=2000, train_force_amount=float(tfa),
-                                regul_factor=tfa, balance=True, balance_technique='action')
+                                regul_factor=tfa, holdover=10000, balance=True,
+                                balance_technique='action')
             ])
         return cls(
             train_bot=train_bot,
@@ -171,6 +179,7 @@ ser.register(TrainSettings)
 
 
 SAVEDIR = shared.filetools.savepath()
+HOLDOVER_DIR = os.path.join(SAVEDIR, 'holdover_replay')
 
 def main():
     """Main entry"""
@@ -357,6 +366,9 @@ def _get_experiences_async(settings: TrainSettings, executable: str, port_min: i
         os.rename(settings.replay_folder, tmp_replay_folder)
         replay_paths.append(tmp_replay_folder)
 
+    if os.path.exists(HOLDOVER_DIR):
+        replay_paths.append(HOLDOVER_DIR)
+
     rb.merge_buffers(replay_paths, settings.replay_folder)
 
     for path in replay_paths:
@@ -377,8 +389,13 @@ def _train_experiences(settings: TrainSettings, executable: str):
         time.sleep((60 + stime) - time.time())
 
 def _cleanup_session(settings: TrainSettings):
-    filetools.deldir(settings.replay_folder)
-    time.sleep(0.5)
+    if settings.current_session.holdover <= 0:
+        filetools.deldir(settings.replay_folder)
+        time.sleep(0.5)
+        return
+
+    os.rename(settings.replay_folder, HOLDOVER_DIR)
+    rb.ensure_max_length(HOLDOVER_DIR, settings.current_session.holdover)
 
 def _run(args):
     settings: TrainSettings = None
@@ -409,6 +426,8 @@ def _run(args):
         rb.FileWritableReplayBuffer(settings.replay_folder, exist_ok=True).close()
 
     while settings.cur_ind < len(settings.train_seq):
+        print('--starting session--')
+        print(settings.current_session)
         _get_experiences_async(settings, executable, port, port + 10*nthreads, create_flags,
                                args.aggressive, spec, nthreads)
         _train_experiences(settings, executable)
