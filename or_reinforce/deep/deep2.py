@@ -71,9 +71,9 @@ INVALID_REWARD = -2
 def init_encoder(entity_iden):
     """Create an instance of the encoder for this model attached to the given entity"""
     return encoders.MergedFlatEncoders(
-        (
-            encoders.StaircaseDirectionOneHotEncoder(3, entity_iden)
-        )
+        [
+            encoders.StaircaseDirectionOneHotEncoder(3, entity_iden),
+        ]
     )
 
 ENCODE_DIM = init_encoder(None).dim
