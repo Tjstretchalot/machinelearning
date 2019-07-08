@@ -105,7 +105,7 @@ class TrainSettings(ser.Serializable):
                                          balance=True, balance_technique='action'))
         for i in range(5): # 5 * 2k = 10k samples random
             train_seq.append(SessionSettings(tie_len=111, tar_ticks=2000, train_force_amount=1,
-                                             regul_factor=(i+1),
+                                             regul_factor=5 - i,
                                              balance=True, balance_technique='action'))
 
         for tfa in np.linspace(1, 0.1, 25): # 25*4k = 100k samples linearly decreasing tfa
