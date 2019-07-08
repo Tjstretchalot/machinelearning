@@ -365,6 +365,7 @@ def _get_experiences_async(settings: TrainSettings, executable: str, port_min: i
 
 def _train_experiences(settings: TrainSettings, executable: str):
     print('--training--')
+    stime = time.time()
     time.sleep(0.5)
     proc = subprocess.Popen(
         [executable, '-u', '-m', settings.bot_module, str(settings.current_session.regul_factor)]
@@ -372,6 +373,8 @@ def _train_experiences(settings: TrainSettings, executable: str):
     proc.wait()
     print('--training finished--')
     time.sleep(0.5)
+    if 60 + stime > time.time():
+        time.sleep((60 + stime) - time.time())
 
 def _cleanup_session(settings: TrainSettings):
     filetools.deldir(settings.replay_folder)
