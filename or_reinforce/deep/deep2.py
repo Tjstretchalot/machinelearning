@@ -712,7 +712,6 @@ def offline_learning():
                 new_target.stat_tracking_to_norm()
                 train_pwl.reset()
 
-
             new_target.stop_stat_tracking()
             new_target.save(EVAL_MODELFILE, exist_ok=True)
 
@@ -730,7 +729,7 @@ def offline_learning():
         )
         (trainer
          .reg(tnr.EpochsTracker())
-         .reg(tnr.EpochsStopper(100))
+         .reg(tnr.EpochsStopper(1))
          .reg(tnr.InfOrNANDetecter())
          .reg(tnr.InfOrNANStopper())
          .reg(tnr.DecayTracker())
