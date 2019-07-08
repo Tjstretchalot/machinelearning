@@ -237,3 +237,58 @@ class StaircaseDeltaEncoder(FlatEncoder):
         out[0] = delx
         out[1] = dely
         return out
+
+class StaircaseDirectionOneHotEncoder(FlatEncoder):
+    """Encodes the staircase direction one-hot style, where the
+    vector is of the form
+
+    N+ left is staircase col? | (N-1) left is staircase col? | ... | 0 left is staircase col?
+    1 right is staircase col? | ... | N+ right is staircase col?
+
+    Similar for up/down row
+
+    Attributes:
+        dist (int): the maximum number of tiles away that we encode
+        entity_iden (int): the entity we are relative to
+    """
+    def __init__(self, dist: int, entity_iden: int):
+        self.dist = dist
+        self.entity_iden = entity_iden
+
+        self._dim = 2 * (1 + self.dist * 2)
+
+    @property
+    def dim(self):
+        return self._dim
+
+    def _encode(self, out: torch.tensor, delta: int):
+        if delta < 0:
+            if delta < self.dist:
+                out[0] = 1
+                return
+            # delta = -N -> 1
+            # delta = -(N-1) -> 2
+            out[self.dist + delta + 1] = 1
+            return
+        if delta == 0:
+            out[self.dist] = 1
+            return
+        if delta > self.dist:
+            out[self.dist * 2] = 1
+            return
+        out[self.dist + delta] = 1
+
+    def encode(self, game_state: GameState, move: Move, out: torch.tensor = None) -> torch.tensor:
+        if out is None:
+            out = torch.zeros(self.dim, dtype=torch.float)
+        else:
+            out[:] = 0
+
+        ent = game_state.iden_lookup[self.entity_iden]
+        scx, scy = game_state.world.get_at_depth(ent.depth).staircase()
+
+        delx, dely = scx - ent.x, scy - ent.y
+        self._encode(out, delx)
+        self._encode(out[1 + self.dist*2:], dely)
+        return out
+

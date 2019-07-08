@@ -72,8 +72,7 @@ def init_encoder(entity_iden):
     """Create an instance of the encoder for this model attached to the given entity"""
     return encoders.MergedFlatEncoders(
         (
-            encoders.LocationEncoder(entity_iden),
-            encoders.StaircaseLocationEncoder(entity_iden),
+            encoders.StaircaseDirectionOneHotEncoder(3, entity_iden)
         )
     )
 
@@ -674,6 +673,25 @@ def _create_crit(regul_factor: float):
         return loss
     return crit
 
+def _disp_acts(net, mpwl):
+    num_points = 32
+    sample_points = torch.zeros((num_points, ENCODE_DIM), dtype=torch.float)
+    sample_labels = torch.zeros((num_points, OUTPUT_DIM), dtype=torch.float)
+
+    mpwl.mark()
+    mpwl.fill(sample_points, sample_labels)
+    mpwl.reset()
+
+    hid_acts = []
+
+    def on_hidacts(acts_info: FFHiddenActivations):
+        hid_acts.append(acts_info.hidden_acts.detach())
+
+    net(sample_points, on_hidacts)
+
+    for i, lyr in enumerate(hid_acts):
+        print(f'Layer {i}: {lyr}')
+
 def offline_learning():
     """Loads the replay buffer and trains on it."""
     import argparse
@@ -700,8 +718,6 @@ def offline_learning():
             ctx.logger.info('swapping target network, hint=%s', hint)
             network.save(MODELFILE, exist_ok=True)
 
-            # TODO this conversion is not working; the evaluation model performs MUCH
-            # MUCH worse than the batch model, and they diverge strongly
             new_target = Deep2Network.load(MODELFILE)
             new_target.start_stat_tracking()
             for i in range(3):
@@ -711,7 +727,6 @@ def offline_learning():
                     teacher.classify_many(new_target, ctx.points, ctx.labels)
                 new_target.stat_tracking_to_norm()
                 train_pwl.reset()
-
             new_target.stop_stat_tracking()
             new_target.save(EVAL_MODELFILE, exist_ok=True)
 
@@ -729,7 +744,7 @@ def offline_learning():
         )
         (trainer
          .reg(tnr.EpochsTracker())
-         .reg(tnr.EpochsStopper(1))
+         .reg(tnr.EpochsStopper(3))
          .reg(tnr.InfOrNANDetecter())
          .reg(tnr.InfOrNANStopper())
          .reg(tnr.DecayTracker())
