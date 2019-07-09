@@ -114,7 +114,7 @@ class TrainSettings(ser.Serializable):
                                              regul_factor=5 - i, holdover=10000,
                                              balance=True, balance_technique='action'))
 
-        for tfa in np.linspace(1, 0.1, 25): # 25*4k = 100k samples linearly decreasing tfa
+        for tfa in np.linspace(1, 0.1, 50): # 50*4k = 200k samples linearly decreasing tfa
             train_seq.extend([
                 SessionSettings(tie_len=111, tar_ticks=2000, train_force_amount=float(tfa),
                                 regul_factor=tfa, holdover=10000, balance=True,
@@ -126,11 +126,17 @@ class TrainSettings(ser.Serializable):
 
         # hopefully we've learned a pretty good policy at this point, just need to work
         # out some kinks
-        for i in range(50): # 50*2k = 100k samples at 10% tfa / regularization
+        for i in range(10): # 50*2k = 100k samples mixing 0.1 / 0.5 tfa and 0.1 regul
+            for _ in range(4):
+                train_seq.append(
+                    SessionSettings(tie_len=111, tar_ticks=2000, train_force_amount=0.1,
+                                    regul_factor=0.1, holdover=10000, balance=True,
+                                    balance_technique='action')
+                )
             train_seq.append(
-                SessionSettings(tie_len=111, tar_ticks=2000, train_force_amount=0.1,
-                                regul_factor=0.1, holdover=10000, balance=True,
-                                balance_technique='action')
+                SessionSettings(tie_len=111, tar_ticks=2000, train_force_amount=0.5,
+                                    regul_factor=0.1, holdover=10000, balance=True,
+                                    balance_technique='action')
             )
 
         return cls(

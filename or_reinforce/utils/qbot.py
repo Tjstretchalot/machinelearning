@@ -233,7 +233,6 @@ class QBotController(StateActionBot):
             return self.teacher.move(game_state)
 
         move_rewards = [float(pred) for pred in self.qbot.evaluate_all(game_state, self.moves)]
-
         if self.move_selstyle == QBotMoveSelectionStyle.Greedy:
             best_ind = int(np.argmax(move_rewards))
             return self.moves[best_ind]
