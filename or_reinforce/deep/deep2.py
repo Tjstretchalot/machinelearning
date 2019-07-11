@@ -27,7 +27,6 @@ import os
 import torch
 import typing
 import json
-import enum
 import numpy as np
 
 from shared.models.ff import FeedforwardNetwork, FFTeacher, FFHiddenActivations
@@ -37,14 +36,12 @@ import shared.nonlinearities as snonlins
 import shared.trainer as tnr
 import shared.perf_stats as perf_stats
 import shared.typeutils as tus
-import shared.cp_utils as cp_utils
 import shared.filetools as filetools
 import shared.measures.utils as mutils
 
 import or_reinforce.utils.qbot as qbot
 import or_reinforce.utils.rewarders as rewarders
 import or_reinforce.utils.encoders as encoders
-import or_reinforce.utils.general as gen
 import or_reinforce.deep.replay_buffer as replay_buffer
 
 from optimax_rogue.game.state import GameState
@@ -252,7 +249,7 @@ class Deep2Network(FeedforwardNetwork):
                  extract_layers: typing.List[StackableLayer],
                  out_layer: torch.nn.Linear,
                  out_nonlin_nm: str):
-        super().__init__(ENCODE_DIM, OUTPUT_DIM, 1 + len(extract_layers))
+        super().__init__(ENCODE_DIM, OUTPUT_DIM, 2 + len(extract_layers))
         self.inp_norm = inp_norm
         self.inp_learning = inp_learning
         self.inp_affine = inp_affine
@@ -527,10 +524,10 @@ class Deep2QBot(qbot.QBot):
     def learn(self, game_state: GameState, move: Move, new_state: GameState,
               reward_raw: float, reward_pred: float) -> None:
         if self.evaluation:
-            print(f'received reward {reward_raw} (pred: {reward_pred}) for move {move.name}')
-            best_move_val = self.evaluate_all(new_state, None).max().item()
-            print(f'  predicted value of next move: {best_move_val}')
-            print(f'  after adding {PRED_WEIGHT}*pred val to reward: {reward_raw + PRED_WEIGHT*best_move_val}')
+            #print(f'received reward {reward_raw} (pred: {reward_pred}) for move {move.name}')
+            #best_move_val = self.evaluate_all(new_state, None).max().item()
+            #print(f'  predicted value of next move: {best_move_val}')
+            #print(f'  after adding {PRED_WEIGHT}*pred val to reward: {reward_raw + PRED_WEIGHT*best_move_val}')
             return
         player_id = 1 if self.entity_iden == game_state.player_1_iden else 2
         self.replay.add(replay_buffer.Experience(game_state, move, self.cutoff,

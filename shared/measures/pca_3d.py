@@ -4,6 +4,7 @@ and are thus structured to go through the npmp module.
 """
 
 import shared.measures.pca_ff as pca_ff
+import shared.measures.pca_gen as pca_gen
 import numpy as np
 import torch
 import os
@@ -13,8 +14,8 @@ import sys
 import typing
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import matplotlib.cm as mcm
 from mpl_toolkits.mplot3d import Axes3D # pylint: disable=unused-import
-from matplotlib.animation import FuncAnimation
 import pytweening
 import shared.mytweening as mytweening
 from shared.filetools import zipdir
@@ -22,6 +23,8 @@ from shared.npmp import NPDigestor
 from shared.trainer import GenericTrainingContext
 import shared.myqueue as myq
 import shared.async_anim as saa
+import shared.typeutils as tus
+import shared.measures.utils as mutils
 import time as time_
 from multiprocessing import Process
 import queue
@@ -268,8 +271,7 @@ class FrameWorker:
 
         data = self.traj.snapshots[0].projected_samples[:, :3].numpy()
         labels = self.traj.snapshots[0].projected_sample_labels.numpy()
-        scatter = ax.scatter(data[:, 0], data[:, 1], data[:, 2],
-                             s=3, c=labels, cmap=mpl.cm.get_cmap('Set1'))
+        scatter = self.init_scatter(ax, data, labels)
         ax.view_init(30, 45)
 
         minlim = float(data.min())
@@ -279,6 +281,11 @@ class FrameWorker:
         ax.set_zlim(minlim, maxlim)
 
         self.mpl_data = MPLData(fig, ax, axtitle, scatter, 0)
+
+    def init_scatter(self, ax, data, labels):
+        """Initializes the scatter plot for the given data and labels"""
+        return ax.scatter(data[:, 0], data[:, 1], data[:, 2],
+                          s=3, c=labels, cmap=mpl.cm.get_cmap('Set1'))
 
     def start_scenes(self):
         """Starts all the scenes"""
@@ -337,11 +344,114 @@ class FrameWorker:
         self.send_queue.close()
         self.rec_queue.close()
 
+class ConcattedScatter:
+    """A wrapper around multiple scatter plots to make them appear like
+    a single scatter plot
+
+    Attributes:
+        scatters (list[mask, scatter]): the scatter plots we are wrapping
+    """
+    def __init__(self, scatters):
+        self.scatters = scatters
+
+    def __setattr__(self, name, value):
+        if name == 'scatters':
+            super().__setattr__(name, value)
+            return
+
+        if name == '_offsets3d':
+            xs, ys, zs = value
+            for mask, scatter in self.scatters:
+                scatter._offsets3d = (xs[mask], ys[mask], zs[mask]) # pylint: disable=protected-access
+            return
+
+        raise AttributeError(f'no such attribute: {name}')
+
+
+class GenFrameWorker(FrameWorker):
+    """A frame worker which accepts a general pc trajectory and the associated
+    required information for determining the color and marker for each point.
+
+    Attributes (beyond or changed from FrameWorker):
+        traj (pca_gen.PCTrajectoryGen): the trajectory to plot
+        markers (callable): accepts an ndarray of shape (batch_size, output_size)
+            and returns a iterable of (ndarray[batch_size] dtype=bool, str) where the
+            ndarray is a mask for the points and the str is the marker to use
+        scalar_mapping (OutputToScalarMapping): maps the outputs (batch_size, output_size)
+            to scalars which can be sent through the norm and then the color map
+        norm (mcolors.Normalize): rescale the result from the OutputToScalarMapping
+            to 0-1
+        cmap (union[ColorMap, str]): either a colormap or a string identifier for
+            a colormap that maps the 0-1 output of the norm to colors
+    """
+    def __init__(self, img_queue, rec_queue, send_queue, ms_per_frame,
+                 frame_size, dpi, scenes, traj, markers, scalar_mapping,
+                 norm, cmap):
+        super().__init__(img_queue, rec_queue, send_queue, ms_per_frame,
+                         frame_size, dpi, scenes, traj)
+        self.markers = markers
+        self.scalar_mapping = scalar_mapping
+        self.norm = norm
+        self.cmap = cmap
+
+    def init_scatter(self, ax, data, labels):
+        return _init_scatter_gen(self.scalar_mapping, self.cmap, self.norm, self.markers,
+                                 ax, data, labels)
+
+def _init_scatter_gen(scalar_mapping, cmap, norm, markers, ax, data, labels):
+    scatters = []
+
+    for mask, marker in markers(labels):
+        masked_data = data[mask]
+        scatters.append(
+            (mask,
+            ax.scatter(masked_data[:, 0], masked_data[:, 1], masked_data[:, 2],
+                       s=3, c=scalar_mapping(torch.from_numpy(labels[mask])),
+                       cmap=mcm.get_cmap(cmap),
+                       norm=norm, marker=marker))
+        )
+
+    return ConcattedScatter(scatters)
+
 def _frame_worker_target(img_queue, rec_queue, send_queue, ms_per_frame, frame_size, dpi,
                          scenes, traj, logfile):
     worker = FrameWorker(
         myq.ZeroMQQueue.deser(img_queue), myq.ZeroMQQueue.deser(rec_queue),
         myq.ZeroMQQueue.deser(send_queue), ms_per_frame, frame_size, dpi, scenes, traj)
+
+    try:
+        worker.do_all()
+    except:
+        traceback.print_exc()
+        with open(logfile, 'r') as infile:
+            traceback.print_exc(file=infile)
+        raise
+
+def _frame_worker_target_gen(img_queue, rec_queue, send_queue, ms_per_frame, frame_size,
+                             dpi, scenes, traj, markers, scalar_mapping, norm, cmap, logfile):
+    """Target for frame workers using the GenFrameWorker subclass
+
+    Args:
+        img_queue (ZeroMQQueue, serialized): the queue to send images through
+        rec_queue (ZeroMQQueue, serialized): the queue to receive jobs from
+        send_queue (ZeroMQQueue, serialized): the queue to notify jobs are complete
+        ms_per_frame (float): milliseconds per frame
+        frame_size (tuple[float, float]): size of the frame in inches
+        dpi (int): pixels per inch
+        scenes (list[Scene]): the scenes we are trying to render
+        traj (PCTrajectoryGen): the trajectory we are rending
+        markers (str): the path to the module and name of the marker producing callable
+        scalar_mapping (str): the path to the module and name of the scalar mapping producing callable
+        norm (str): the path to the module and name of the norm producing callable
+        cmap (str): the name of the color map to use
+        logfile (str): where to store errors if they occur
+    """
+    worker = GenFrameWorker(
+        myq.ZeroMQQueue.deser(img_queue), myq.ZeroMQQueue.deser(rec_queue),
+        myq.ZeroMQQueue.deser(send_queue), ms_per_frame, frame_size, dpi, scenes, traj,
+        mutils.get_fixed_single(markers)(), mutils.get_fixed_single(scalar_mapping)(),
+        mutils.get_fixed_single(norm)(), cmap
+    )
 
     try:
         worker.do_all()
@@ -423,14 +533,17 @@ class FrameWorkerConnection:
         """Notifies this worker that it should render the specified frame number"""
         self.send_queue.put(('img', frame_num))
 
-def _plot_ff_real(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool,
+def _plot_ff_real(traj: typing.Union[pca_ff.PCTrajectoryFF, pca_gen.PCTrajectoryGen],
+                  outfile: str, exist_ok: bool,
                   frame_time: float = 16.67, layer_names: typing.Optional[typing.List] = None,
                   snapshots: typing.Optional[typing.List[typing.Tuple[int, int, dict]]] = None,
-                  video: bool = True):
+                  video: bool = True,
+                  markers: str = None, scalar_mapping: str = None, norm: str = None,
+                  cmap: str = None):
     """Plots the given feed-forward pc trajectory
 
     Args:
-        traj (pca_ff.PCTrajectoryFF): the trajectory to plot
+        traj (union[pca_ff.PCTrajectoryFF, pca_gen.PCTrajectoryGen]): the trajectory to plot
         outfile (str): a path to the zip file we should save the plots in
         exist_ok (bool): true to overwrite existing zip, false to keep it
         snapshots (list[tuple[int, int, dict]]): a list of snapshots to take, where a snapshot
@@ -438,8 +551,20 @@ def _plot_ff_real(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool,
             with a reasonable balance between performance and aesthetics. May be set to an empty
             list for no snapshots
         video (bool): if True a video is rendered, if False, just snapshots are rendered
+
+        markers (str): if the trajectory is a PCTrajectoryGen, this is the path to the module and
+            callable that returns a callable which accepts a tensor from the output layer and
+            returns an iterable of [tensor, str] where the tensor is a mask for the samples
+            and the str is the marker that should be used.
+        scalar_mapping (str): if the trajectory is a PCTrajectoryGen, this is the path to the
+            module and callable that returns a OutputToScalarMapping-style callable.
+        norm (str): if the trajectory is a PCTrajectoryGen, this is the path to the module and
+            callable that returns a matplotlib.colors.Normalize instance or subclass instance
+        cmap (str): The colormap to use. Defaults to 'Set1' for a PCTrajectoryFF and 'cividis'
+            for PCTrajectoryGen
+            NOTE: currently cmap on PCTrajectoryFF only effects the snapshots
     """
-    if not isinstance(traj, pca_ff.PCTrajectoryFF):
+    if not isinstance(traj, (pca_ff.PCTrajectoryFF, pca_gen.PCTrajectoryGen)):
         raise ValueError(f'expected traj is pca_ff.PCTrajectoryFF, got {traj} (type={type(traj)})')
     if not isinstance(outfile, str):
         raise ValueError(f'expected outfile is str, got {outfile} (type={type(outfile)})')
@@ -451,7 +576,15 @@ def _plot_ff_real(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool,
         if len(layer_names) != traj.num_layers:
             raise ValueError(f'expected len(layer_names) = traj.num_layers = {traj.num_layers}, got {len(layer_names)}')
 
+    if isinstance(traj, pca_gen.PCTrajectoryGen):
+        tus.check(markers=(markers, str), scalar_mapping=(scalar_mapping, str),
+                  norm=(norm, str))
+        cmap = cmap or 'cividis'
+    else:
+        cmap = cmap or 'Set1'
+
     if snapshots is None:
+        snapshots = []
         for lyr in range(traj.num_layers):
             for angle in (15, 0, -15, 90, 180, 270):
                 snapshots.append((lyr, angle, {'dpi': DPI}))
@@ -459,6 +592,7 @@ def _plot_ff_real(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool,
         for snap in snapshots:
             if 'dpi' not in snap[2]:
                 snap[2]['dpi'] = DPI
+
 
     fps = int(round(1000 / frame_time))
     frame_time = 1000 / fps
@@ -498,12 +632,23 @@ def _plot_ff_real(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool,
         _visible_layer = target_layer
         snapsh: pca_ff.PCTrajectoryFFSnapshot = traj.snapshots[target_layer]
         if _scatter is None:
-            _scatter = ax.scatter(snapsh.projected_samples[:, 0].numpy(),
-                                  snapsh.projected_samples[:, 1].numpy(),
-                                  snapsh.projected_samples[:, 2].numpy(),
-                                  s=3,
-                                  c=snapsh.projected_sample_labels.numpy(),
-                                  cmap=mpl.cm.get_cmap('Set1'))
+            if isinstance(traj, pca_ff.PCTrajectoryFF):
+                _scatter = ax.scatter(snapsh.projected_samples[:, 0].numpy(),
+                                    snapsh.projected_samples[:, 1].numpy(),
+                                    snapsh.projected_samples[:, 2].numpy(),
+                                    s=3,
+                                    c=snapsh.projected_sample_labels.numpy(),
+                                    cmap=mpl.cm.get_cmap(cmap))
+            else:
+                _scatter = _init_scatter_gen(
+                    mutils.get_fixed_single(scalar_mapping)(),
+                    cmap,
+                    mutils.get_fixed_single(norm)(),
+                    mutils.get_fixed_single(markers)(),
+                    ax,
+                    snapsh.projected_samples.numpy(),
+                    snapsh.projected_sample_labels.numpy()
+                )
             if not norotate:
                 ax.view_init(30, 45)
 
@@ -598,9 +743,16 @@ def _plot_ff_real(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool,
         img_queue = myq.ZeroMQQueue.create_recieve()
         send_queue = myq.ZeroMQQueue.create_send()
         ack_queue = myq.ZeroMQQueue.create_recieve()
-        proc = Process(target=_frame_worker_target,
-                       args=(img_queue.serd(), send_queue.serd(), ack_queue.serd(), frame_time,
-                             FRAME_SIZE, DPI, scenes, traj, wlog))
+        if isinstance(traj, pca_ff.PCTrajectoryFF):
+            proc = Process(
+                target=_frame_worker_target,
+                args=(img_queue.serd(), send_queue.serd(), ack_queue.serd(), frame_time,
+                      FRAME_SIZE, DPI, scenes, traj, wlog))
+        else:
+            proc = Process(
+                target=_frame_worker_target_gen,
+                args=(img_queue.serd(), send_queue.serd(), ack_queue.serd(), frame_time,
+                      FRAME_SIZE, DPI, scenes, traj, markers, scalar_mapping, norm, cmap, wlog))
         proc.start()
         workers.append(FrameWorkerConnection(proc, img_queue, send_queue, ack_queue))
         animator.register_queue(img_queue)
@@ -708,6 +860,61 @@ def plot_ff(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool,
         args.append(snapshot.projected_samples.numpy())
     digestor(sample_labels, *args, outfile=outfile, exist_ok=exist_ok,
              frame_time=frame_time, layer_names=layer_names,
+             target_module='shared.measures.pca_3d', target_name='_plot_npmp')
+
+def plot_gen(traj: pca_gen.PCTrajectoryGen, outfile: str, exist_ok: bool,
+             markers: str, scalar_mapping: str, norm: str,
+             cmap: str = 'cividis', frame_time: float = 16.67,
+             digestor: NPDigestor = None, layer_names: typing.List[str] = None):
+    """Plots the given general trajectory in 3-dimensions in a smooth video,
+    optionally using the given digestor. Because the general trajectories do
+    not have any assumptions about the output layer, more information is needed
+    to know how to plot them.
+
+    Args:
+        traj (pca_gen.PCTrajectoryGen): The trajectory to plot
+        outfile (str): Where to store the video and snapshots
+        exist_ok (bool): True if we should delete existing folders that we want to use if
+            they exist, False to error if there are existing folders we want to use.
+        markers (str): A path to a callable that returns a callable which accepts
+            (ndarray[batch_size, output_size]) and returns (ndarray[batch_size], str) where the
+            output tensor is a mask for the samples and the output string is the marker to use.
+        scalar_mapping (str): A path to something that, when called, gives an OutputToScalarMapping
+        norm (str): A path to something that, when called, gives the matplotlib.colors.Normalize
+            instance to use
+        cmap (str, optional): The color map to use. Defaults to 'cividis'.
+        frame_time (float, optional): Number of milliseconds per frame. Defaults to 16.67.
+        digestor (NPDigestor, optional): If provided, used to digest. Defaults to None.
+        layer_names (typing.List[str], optional): If provided, used to create titles for scenes.
+            Defaults to None.
+    """
+    tus.check(
+        traj=(traj, pca_gen.PCTrajectoryGen),
+        outfile=(outfile, str),
+        exist_ok=(exist_ok, bool),
+        markers=(markers, str),
+        scalar_mapping=(scalar_mapping, str),
+        norm=(norm, str),
+        cmap=(cmap, str),
+        frame_time=(frame_time, float)
+    )
+    mutils.process_outfile(outfile, exist_ok)
+
+    if digestor is None:
+        _plot_ff_real(traj, outfile, exist_ok, frame_time, layer_names,
+                      None, True, markers, scalar_mapping, norm, cmap)
+        return
+
+    sample_labels = traj.snapshots[0].projected_sample_labels.numpy()
+    args = []
+    for snapshot in traj.snapshots:
+        snapshot: pca_gen.PCTrajectoryGenSnapshot
+        args.append(snapshot.principal_vectors.numpy())
+        args.append(snapshot.principal_values.numpy())
+        args.append(snapshot.projected_samples.numpy())
+    digestor(sample_labels, *args, outfile=outfile, exist_ok=exist_ok,
+             frame_time=frame_time, layer_names=layer_names,
+             markers=markers, scalar_mapping=scalar_mapping, norm=norm, cmap=cmap,
              target_module='shared.measures.pca_3d', target_name='_plot_npmp')
 
 

@@ -308,6 +308,15 @@ class SqueezeOTSMapping(OutputToScalarMapping):
         scalars[:] = outputs.squeeze()
         return scalars
 
+class MaxOTSMapping(OutputToScalarMapping):
+    """Gets the maximum value of the output to get scalars."""
+    def __call__(self, outputs: torch.tensor,
+                 scalars: typing.Optional[torch.tensor] = None) -> torch.tensor:
+        if scalars is None:
+            return outputs.max(dim=1)[0]
+        scalars[:] = outputs.max(dim=1)[0]
+        return scalars
+
 def plot_trajectory(traj: PCTrajectoryGen, filepath: str, exist_ok: bool = False,
                     alpha: float = 0.5, square: bool = True, transparent: bool = True,
                     s: int = 1, ots: OutputToScalarMapping = SqueezeOTSMapping(),

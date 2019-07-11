@@ -11,6 +11,7 @@ from shared.pwl import PointWithLabelProducer
 from shared.trainer import GenericTrainingContext
 import shared.npmp as npmp
 import os
+import importlib
 
 def verify_points_and_labels(sample_points: torch.tensor, sample_labels: torch.tensor):
     """Verifies that the given sample points and labels make sense together
@@ -248,9 +249,6 @@ class StackedNetworkActivations:
         """Converts this to the normal network hidden activations for usage, stripping unused memory"""
         hid_acts = [hacts[:self.num_pts] for hacts in self.hid_acts]
         return NetworkHiddenActivations(self.netstyle, self.sample_points[:self.num_pts], self.sample_labels[:self.num_pts], hid_acts)
-
-
-
 
 
 def get_hidacts_ff_with_sample(network: FeedforwardNetwork, sample_points: torch.tensor,
@@ -633,4 +631,14 @@ def verify_ndarray(arr: np.ndarray, arr_name: str,
             raise ValueError(f'expected the expected dtype is float or int, got {dtype}')
 
 
+def get_fixed(module: str, name: str):
+    """Gets the value stored in the given module with the given name.
+    """
+    mod = importlib.import_module(module)
+    return getattr(mod, name)
 
+def get_fixed_single(module_and_name: str):
+    """Gets the value stored in the given module and name, where they
+    are given in a single string separated by a dot."""
+    spl = module_and_name.split('.')
+    return get_fixed('.'.join(spl[:-1]), spl[-1])

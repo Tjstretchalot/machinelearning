@@ -19,6 +19,7 @@ from shared.trainer import GenericTrainingContext
 import shared.npmp as npmp
 import shared.measures.utils as mutils
 import shared.myqueue as myq
+import shared.typeutils as tus
 
 import uuid
 
@@ -200,6 +201,48 @@ def measure_pr_ff(network: FeedforwardNetwork, pwl_prod: PointWithLabelProducer)
     network(sample_points, on_hidacts)
 
     return PRTrajectory(overall=pr_overall, by_label=pr_by_label, layers=True)
+
+def measure_pr_gen(network: typing.Union[FeedforwardNetwork, NaturalRNN],
+                   pwl_prod: PointWithLabelProducer,
+                   points_dtype: typing.Any = torch.float,
+                   out_dtype: typing.Any = torch.float,
+                   recur_times: int = 10,
+                   squeeze_to_pwl: bool = False) -> PRTrajectory:
+    """Measures the participation ratio trajectory for the given generalized feed
+    forward network, not assuming that the output dimension is a label. The
+    resulting trajectory does not have by_label set.
+    """
+    tus.check(
+        network=(network, (FeedforwardNetwork, NaturalRNN)),
+        pwl_prod=(pwl_prod, PointWithLabelProducer),
+    )
+
+    num_samples = min(pwl_prod.epoch_size, 2000)
+    points = torch.zeros((num_samples, pwl_prod.input_dim), dtype=points_dtype)
+    out = torch.zeros((num_samples, network.output_dim), dtype=out_dtype)
+    pwl_prod.fill(points, out.squeeze() if squeeze_to_pwl else out)
+
+    num_layers = 0
+    if isinstance(network, NaturalRNN):
+        num_layers = recur_times
+    else:
+        num_layers = network.num_layers
+    pr_overall = torch.zeros(num_layers + 1, dtype=points_dtype)
+
+    def on_hidacts_raw(hid_acts: torch.tensor, layer: int):
+        pr_overall[layer] = measure_pr(hid_acts)
+
+    if isinstance(network, NaturalRNN):
+        def on_hidacts_rnn(hacts: RNNHiddenActivations):
+            on_hidacts_raw(hacts.hidden_acts.detach(), hacts.recur_step)
+        network(points, recur_times, on_hidacts_rnn, 1)
+    else:
+        def on_hidacts_ff(facts: FFHiddenActivations):
+            on_hidacts_raw(facts.hidden_acts.detach(), facts.layer)
+        network(points, on_hidacts_ff)
+
+    return PRTrajectory(pr_overall, None, True)
+
 
 def measure_pr_rnn(network: NaturalRNN, teacher: RNNTeacher, pwl_prod: PointWithLabelProducer) -> PRTrajectory:
     """Measures the participation ratio through time for the given recurrent network
