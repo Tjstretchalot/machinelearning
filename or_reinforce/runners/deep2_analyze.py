@@ -24,7 +24,11 @@ def _ots():
 
 def _markers():
     def markers(inp: np.ndarray):
-        return [(np.ones(inp.shape[0], dtype='bool'), 'o')]
+        argmaxed = inp.argmax(1)
+        res = []
+        for i, marker in enumerate(['<', '>', '^', 'v']):
+            res.append((argmaxed == i, marker))
+        return res
     return markers
 
 def _norm():
