@@ -28,7 +28,7 @@ def _markers():
     return markers
 
 def _norm():
-    return mcolors.Normalize(-1, 1)
+    return mcolors.Normalize() # autoscale
 
 def main():
     """Main entry point for analyizing the model"""
