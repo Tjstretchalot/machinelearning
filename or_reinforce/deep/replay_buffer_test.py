@@ -25,7 +25,8 @@ def make_exp() -> rb.Experience:
     """Creates a semi-random experience"""
     lmoves = list(moves.Move)
     return rb.Experience(make_state(), random.choice(lmoves), random.randint(1, 3),
-                         make_state(), random.random(), random.randint(1, 2))
+                         make_state(), random.random(), random.randint(1, 2),
+                         random.random())
 
 FILEPATH = os.path.join('out', 'or_reinforce', 'deep', 'tests', 'replay_buffer_test')
 def main():
@@ -77,6 +78,36 @@ def main():
     got2 = buf.sample(1)[0]
     if got != got2:
         raise ValueError(f'mark did not retrieve same experience: {got} vs {got2}')
+
+    buf.close()
+
+    buf = rb.MemoryPrioritizedReplayBuffer(os.path.join(FILEPATH, '3'))
+
+    saw = []
+    buf.mark()
+    for _ in range(15):
+        got = buf.sample(1)[0]
+        saw.append(got)
+    buf.reset()
+    for _ in range(15):
+        got = buf.sample(1)[0]
+        if got != saw[0]:
+            raise ValueError(f'got bad value: {got}, expected {saw[-1]}')
+        saw.pop(0)
+
+    for _ in range(15):
+        got = buf.pop()[2]
+        found = False
+        for exp in sbuf:
+            if got == exp:
+                found = True
+                got.last_td_error = random.random()
+                exp.last_td_error = got.last_td_error
+                buf.add(got)
+                break
+        if not found:
+            raise ValueError(f'got {got}, expected one of '
+                             + '\n'.join(repr(exp) for exp in sbuf))
 
     buf.close()
 

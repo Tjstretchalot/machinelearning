@@ -7,6 +7,7 @@ import json
 import struct
 import io
 import random
+from collections import deque
 
 import shared.typeutils as tus
 import shared.perf_stats as perf_stats
@@ -24,11 +25,14 @@ class Experience(ser.Serializable):
         new_state (GameState): the new state that we were in after
         reward_rec (float): the reward that we actually received in the delay ticks
         player_id (int): either 1 or 2 for the player the bot is controlling
+        last_td_error (float, optional): when last checked, what was the temporal difference between
+            the value we expected from the state-action and what we saw
     """
     def __init__(self, state: GameState, action: Move, delay: int, new_state: GameState,
-                 reward_rec: float, player_id: int):
+                 reward_rec: float, player_id: int, last_td_error: typing.Optional[float]):
         tus.check(state=(state, GameState), action=(action, Move), delay=(delay, int),
-                  reward_rec=(reward_rec, float), player_id=(player_id, int))
+                  reward_rec=(reward_rec, float), player_id=(player_id, int),
+                  last_td_error=(last_td_error, (type(None), float)))
 
         self.state = state
         self.action = action
@@ -36,6 +40,7 @@ class Experience(ser.Serializable):
         self.new_state = new_state
         self.reward_rec = reward_rec
         self.player_id = player_id
+        self.last_td_error = last_td_error
 
     def has_custom_serializer(self):
         return True
@@ -52,6 +57,11 @@ class Experience(ser.Serializable):
         arr.write(serd_state)
         arr.write(struct.pack('>f', self.reward_rec))
         arr.write(self.player_id.to_bytes(4, 'big', signed=False))
+        if self.last_td_error:
+            arr.write((1).to_bytes(1, 'big', signed=False))
+            arr.write(struct.pack('>f', self.last_td_error))
+        else:
+            arr.write((0).to_bytes(1, 'big', signed=False))
         return arr.getvalue()
 
     @classmethod
@@ -66,7 +76,12 @@ class Experience(ser.Serializable):
         new_state = GameState.from_prims(arr.read(state_len))
         reward = struct.unpack('>f', arr.read(4))[0]
         player_id = int.from_bytes(arr.read(4), 'big', signed=False)
-        return Experience(state, action, delay, new_state, reward, player_id)
+        have_td = int.from_bytes(arr.read(1), 'big', signed=False) == 1
+        if have_td:
+            last_td_error = struct.unpack('>f', arr.read(4))[0]
+        else:
+            last_td_error = None
+        return Experience(state, action, delay, new_state, reward, player_id, last_td_error)
 
     def __eq__(self, other: 'Experience') -> bool:
         if not isinstance(other, Experience):
@@ -83,12 +98,20 @@ class Experience(ser.Serializable):
             return False
         if self.player_id != other.player_id:
             return False
+        if self.last_td_error:
+            if not other.last_td_error:
+                return False
+            if abs(self.last_td_error - other.last_td_error) > 1e-6:
+                return False
+        elif other.last_td_error:
+            return False
         return True
 
     def __repr__(self) -> str:
         return (f'Experience [state={repr(self.state)}, action={repr(self.action)}, '
                 + f'new_state={repr(self.new_state)}, '
-                + f'reward_rec={repr(self.reward_rec)}, player_id={self.player_id}]')
+                + f'reward_rec={repr(self.reward_rec)}, player_id={self.player_id}, '
+                + f'last_td_error={repr(self.last_td_error)}]')
 
 ser.register(Experience)
 
@@ -443,6 +466,331 @@ class FileReadableReplayBuffer(ReadableReplayBuffer):
 
         for i in range(earliest_file, self.shuffle_counter + 1):
             os.remove(self._shuffle_path(i))
+
+
+BALANCE_SIZE = 1024
+BALANCE_SIZE_POWS = [BALANCE_SIZE ** i for i in range(4)]
+class PrioritizedExperienceNode:
+    """A tree node in the prioritized replay buffer
+
+    Attributes:
+        priority (float): if this is a leaf node, this is the priority that
+            the child should be picked. If this is not a leaf node, this is the
+            sum of the priorities that the children should be picked
+        alpha_norm_priority (float): the alpha-norm (where alpha is some constant
+            float value) of the priorities inside this node.
+        alpha (float): the alpha value used by this node. changing requires updating
+            the alpha norm.
+        children (list[PrioritizedExperienceNode], optional)
+        child (Experience, optional)
+
+        _len (int): how many experiences are stored in this node
+        _flat (bool): true if all our children are leafs, false otherwise
+    """
+    def __init__(self, alpha: float, child: typing.Optional[Experience] = None,
+                 priority: float = 0):
+        self.alpha = alpha
+        self.alpha_norm_priority = priority ** alpha
+        self.priority = priority
+        self.children = None
+        self.child = child
+        self._flat = True
+
+        if child is None:
+            self._len = 0
+        else:
+            self._len = 1
+
+    def add(self, experience: Experience, priority: float):
+        """Adds the given experience to this node"""
+        if self._len == 0:
+            self.child = experience
+            self.priority = priority
+            self.alpha_norm_priority = priority ** self.alpha
+            self._len = 1
+            return
+
+        if self._len == 1:
+            self.children = [
+                PrioritizedExperienceNode(self.alpha, child=self.child, priority=self.priority),
+                PrioritizedExperienceNode(self.alpha, child=experience, priority=priority)
+            ]
+            self.priority += priority
+            self.alpha_norm_priority += self.children[1].alpha_norm_priority
+            self._len = 2
+            return
+
+        if len(self.children) < BALANCE_SIZE:
+            self.children.append(
+                PrioritizedExperienceNode(self.alpha, child=experience, priority=priority))
+            self.priority += priority
+            self.alpha_norm_priority += self.children[-1].alpha_norm_priority
+            self._len += 1
+            return
+
+        self._flat = False
+        cutoff = 2
+        while BALANCE_SIZE_POWS[cutoff] < self._len:
+            cutoff += 1
+        cutoff = BALANCE_SIZE_POWS[cutoff]
+        cutoff_child = BALANCE_SIZE_POWS[cutoff - 1]
+
+        sind = random.randrange(0, BALANCE_SIZE)
+        for i in range(BALANCE_SIZE):
+            child = self.children[i]
+            if len(child) < cutoff_child:
+                child.add(experience, priority)
+                break
+            sind += 1
+            if sind >= BALANCE_SIZE:
+                sind -= BALANCE_SIZE
+        self.priority += priority
+        self._len += 1
+        self.alpha_norm_priority += priority ** self.alpha
+
+    def flatten(self) -> typing.List[Experience]:
+        """Converts this node into a list of experiences"""
+        if self._len == 1:
+            return [self.child]
+
+        if self._flat:
+            return [child.child for child in self.children]
+
+        res = []
+        for child in self.children:
+            res.extend(child.flatten())
+        return res
+
+    def fetch_uniform(self) -> Experience:
+        """Fetches an experience uniformly randomly from this node, without respect to
+        priorities"""
+        return self.fetch_at(random.randrange(0, self._len))
+
+    def fetch_at(self, target_index: int) -> Experience:
+        """Fetches the experience at the given index in this node"""
+        if not 0 <= target_index < self._len:
+            raise IndexError(f'index outside of range (expected in [0, {self._len}), '
+                             + f'got {target_index})')
+        if self._len == 1:
+            return self.child
+        if self._flat:
+            return self.children[target_index].child
+        cur_index = 0
+        rol_sum = 0
+        while rol_sum + len(self.children[cur_index]) < target_index:
+            rol_sum += len(self.children[cur_index])
+            cur_index += 1
+        return self.children[cur_index].fetch_at(target_index - rol_sum)
+
+    def pop(
+            self, rand: float,
+            inv_alpha_norm_priorities: typing.Optional[float] = None
+        ) -> typing.Tuple[float, float, Experience]:
+        """Pops the experience off of this node, seeded with the given random number between
+        0-1. If the random number is chosen uniformly at random on (0, 1), and
+        inv_alpha_norm_priorities is not specified, then this selects with probability
+
+        P(i) = (p_i^alpha) / (alpha-norm p).
+
+        Note that this returns (priority, probability, exp), which is the priority of the
+        experience returned, the probability that this experience is the one returned (assuming
+        rand is unif(0, 1)), and the actual experience itself.
+        """
+        if not inv_alpha_norm_priorities:
+            if self._len == 0:
+                raise IndexError('pop from empty node')
+            if self._len == 1:
+                prob, prio, exp = (1, self.priority, self.child)
+                self.priority = 0
+                self.alpha_norm_priority = 0
+                self._len = 0
+                self.child = None
+                return prio, prob, exp
+
+            inv_alpha_norm_priorities = 1 / self.alpha_norm_priority
+
+        # maybe it's better to multiply rand by alpha_norm_priority instead of doing it this way?
+        # probably only a very minor improvement if it is one, and makes nesting more complicated
+
+        roll_sum = 0
+        child_ind = None
+        new_amt = None
+        child_nonleaf = None
+        for ind, child in enumerate(self.children):
+            new_amt = child.alpha_norm_priority * inv_alpha_norm_priorities
+            if roll_sum + new_amt >= rand:
+                if len(child) == 1:
+                    child_ind = ind
+                    break
+
+                child_nonleaf = child
+                break
+            roll_sum += new_amt
+
+        if child_nonleaf:
+            prio, prob, exp = child_nonleaf.pop(rand - roll_sum, inv_alpha_norm_priorities)
+            self._len -= 1
+            self.priority -= prio
+            self.alpha_norm_priority -= prio ** self.alpha
+            return prio, prob, exp
+
+        child = self.children.pop(child_ind)
+        self._len -= 1
+        self.priority -= child.priority
+        self.alpha_norm_priority -= child.alpha_norm_priority
+
+        if self._len == 1:
+            self.child = self.children[0].child
+            self.children = None
+            self._flat = True
+        return child.priority, new_amt, child.child
+
+
+    def __len__(self):
+        return self._len
+
+class MemoryPrioritizedReplayBuffer(ReadableReplayBuffer):
+    """Loads the entire replay buffer into memory. The sample and next function somewhat
+    inefficiently provide a uniform sampling of the replay buffer for compatibility.
+    More helpfully, this provides pop which is prioritized as well as add for updating
+    the last_td_error.
+
+    This is meant to be analogous to the implementation described in
+    https://arxiv.org/pdf/1511.05952.pdf
+
+    Priority calculations:
+        priority = |temporal difference| + epsilon
+        probability = (priority of item)^(alpha) / (alpha-norm of all priorities)
+
+    Remark:
+        To copy the result of this to a new buffer, it's important that you don't just
+        loop over the samples. The samples for this, unlike the file readable version,
+        do not guarrantee you see each item exactly once per epoch. You can loop over
+        this in order by fetch_at or via flatten. Flattening will usually be faster.
+
+    Attributes:
+        dirname (str): the path to the directory where we loaded experiences from
+        tree (PrioritizedExperienceNode): the experiences in this buffer
+        epsilon (float): added to the absolute temporal difference error to ensure
+            all experiences have some non-zero probability of being selected
+        alpha (float) (from 0 to +inf): 0 means completely uniform selection,
+            while +inf means deterministic. Typical values are between 0.4 and 1
+        unseen_priority (float): the priority given to things we have not seen before.
+            this can be thought of as the td-error that we pretend things have if we
+            haven't sent them through the network yet
+
+        history (deque[Experience]): if mark() was called then we begin storing a history
+            of returned values from sample() so as to be able to replicate them. We store
+            them here
+        history_ind (int): where we are currently in the history. If this is the length
+            of the history, then new samples are uniform and appended to the history.
+            If there are no marks, then this should be 0 (meaning pop from the left).
+        marks (list[int]): the list of currently held marks. These are indices in the history.
+    """
+    def __init__(self, dirname: str, epsilon=1e-6, alpha=0.6, unseen_priority=1.0):
+        self.dirname = dirname
+        self.tree = PrioritizedExperienceNode(alpha)
+        self.epsilon = epsilon
+        self.alpha = alpha
+        self.unseen_priority = unseen_priority
+
+        self.history = deque()
+        self.history_ind = 0
+        self.marks = []
+
+        self._load()
+
+    def _load(self):
+        """Loads experiences from the file and stores them into the tree. Meant to be invoked only
+        once, by the constructor"""
+        rb = FileReadableReplayBuffer(self.dirname)
+        try:
+            for _ in range(len(rb)):
+                self.add(next(rb))
+        finally:
+            rb.close()
+
+    def __next__(self) -> Experience:
+        """Selects an experience uniformly at random from this buffer"""
+        if self.history:
+            if not self.marks:
+                return self.history.popleft()
+            if self.history_ind == len(self.history):
+                tmp = self.tree.fetch_uniform()
+                self.history.append(tmp)
+                self.history_ind += 1
+                return tmp
+            tmp = self.history[self.history_ind]
+            self.history_ind += 1
+            return tmp
+        tmp = self.tree.fetch_uniform()
+        if self.marks:
+            self.history_ind += 1
+            self.history.append(tmp)
+        return tmp
+
+    def sample(self, num: int) -> typing.List[Experience]:
+        """Samples the specified number of experiences uniformly at random from this buffer"""
+        return [next(self) for _ in range(num)]
+
+    def fetch_at(self, ind: int) -> Experience:
+        """Fetches the experience at index 0 <= ind < len(self). This may be arbitrarily shuffled
+        by calls to pop or add.
+        """
+        return self.tree.fetch_at(ind)
+
+    def flatten(self) -> typing.List[Experience]:
+        """Returns a flattened version of this replay buffer in the form of a list."""
+        return self.tree.flatten()
+
+    def pop(self) -> typing.Tuple[float, float, Experience]:
+        """Returns an experience form this buffer selected according to the relative
+        td-error. See class documentation for exact probabilities. You can re-add
+        the experience to this buffer with a new last_td_error.
+
+        Returns:
+            priority (float): the priority for the selected experience
+            probability (float): the probability of the selected Experience being selected
+            experience (Experience): the experience that was selected
+        """
+        return self.tree.pop(random.random())
+
+    def add(self, exp: Experience) -> None:
+        """Adds the specified experience to this buffer."""
+        if not exp.last_td_error:
+            prio = self.unseen_priority
+        else:
+            prio = abs(exp.last_td_error) + self.epsilon
+        self.tree.add(exp, prio)
+
+    def mark(self) -> None:
+        """Marks this buffer, which causes all sample and nexts that follow until the next reset
+        to be replayed after the reset. This operation may be nested.
+        """
+        self.marks.append(self.history_ind)
+
+    def reset(self) -> None:
+        """Causes this to replay all experiences from __next__ and sample in the same order since
+        the last mark
+        """
+        self.history_ind = self.marks.pop()
+
+    def close(self) -> None:
+        """Releases references to the garbage collector. Future operations are undefined"""
+        if self.marks:
+            import warnings
+            warnings.warn('Marks are being leaked', UserWarning)
+        self.dirname = None
+        self.tree = None
+        self.epsilon = None
+        self.alpha = None
+        self.history = None
+        self.history_ind = None
+        self.marks = None
+
+    def __len__(self) -> int:
+        return len(self.tree)
+
 
 def merge_buffers(inpaths: typing.List[str], outpath: str) -> None:
     """Merges the replay buffers stored in the inpaths to the
