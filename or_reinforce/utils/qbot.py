@@ -70,7 +70,7 @@ class QBot:
 
     def learn(self, game_state: GameState, move: Move, new_state: GameState,
               reward_raw: float, reward_pred: float) -> None:
-        """Teach the underling model that it should have predicted the specified
+        """Teach the underlying model that it should have predicted the specified
         diminished reward from making the specified move in the given game state
 
         Arguments:
@@ -197,8 +197,6 @@ class QBotController(StateActionBot):
         self.last_save = time.time()
         self.history = deque()
 
-        self._has_evaluate_all = hasattr(self, 'evaluate_all')
-
     def __call__(self, entity_iden):
         self.entity_iden = entity_iden
         self.qbot(entity_iden)
@@ -268,8 +266,11 @@ class QBotController(StateActionBot):
 
     def _det_move(self, game_state: GameState) -> Move:
         """Deterministic greedy movement without teacher forcing"""
-        move_rewards = [self.qbot.evaluate(game_state, move) for move in self.moves]
-        best_ind = int(np.argmax(move_rewards))
+        move_rewards = self.qbot.evaluate_all(game_state, self.moves)
+        if isinstance(move_rewards, (tuple, list, np.ndarray)):
+            best_ind = int(np.argmax(move_rewards))
+        else:
+            best_ind = move_rewards.argmax().item()
         return self.moves[best_ind]
 
     def think(self, max_time: float):
@@ -291,9 +292,7 @@ class QBotController(StateActionBot):
             factor *= self.qbot.alpha
 
         latest_gamestate = self.gstate_cache.fetch(self.history[self.qbot.cutoff][0])
-        reward_pred = factor * (
-            self.qbot.evaluate(latest_gamestate, self._det_move(latest_gamestate))
-        )
+        reward_pred = factor * float(max(self.qbot.evaluate_all(latest_gamestate, self.moves)))
 
         latest = self.history[self.qbot.cutoff]
         latest_state = self.gstate_cache.fetch(latest[0])

@@ -402,7 +402,17 @@ class FeedforwardComplex(FeedforwardNetwork):
 
 class FFTeacher(NetworkTeacher):
     """A simple network teacher
+
+    Attributes:
+        store_teach_result (bool): if True, a copy of the result from the network for teach_many
+            is stored into teach_result
+        teach_result (torch.tensor[batch, output_dim]): the result of the network, only set if
+            store_teach_result is set to True.
     """
+    def __init__(self, store_teach_result: bool = False):
+        self.store_teach_result = store_teach_result
+        self.teach_result = None
+
     def teach_many(self, network: Network, optimizer: torch.optim.Optimizer, criterion: typing.Any,
                    points: torch.tensor, labels: torch.tensor):
         tus.check_tensors(points=(points, (('batch', None), ('input_dim', network.input_dim)), torch.float32),
@@ -412,6 +422,8 @@ class FFTeacher(NetworkTeacher):
             network.zero_grad()
             optimizer.zero_grad()
             result = network(points)
+            if self.store_teach_result:
+                self.teach_result = result.detach().clone()
             loss = criterion(result, labels)
             loss.backward()
             optimizer.step()

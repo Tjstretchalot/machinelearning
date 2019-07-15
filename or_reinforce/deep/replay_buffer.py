@@ -532,8 +532,8 @@ class PrioritizedExperienceNode:
         cutoff = 2
         while BALANCE_SIZE_POWS[cutoff] < self._len:
             cutoff += 1
-        cutoff = BALANCE_SIZE_POWS[cutoff]
         cutoff_child = BALANCE_SIZE_POWS[cutoff - 1]
+        cutoff = BALANCE_SIZE_POWS[cutoff]
 
         sind = random.randrange(0, BALANCE_SIZE)
         for i in range(BALANCE_SIZE):
@@ -577,7 +577,7 @@ class PrioritizedExperienceNode:
             return self.children[target_index].child
         cur_index = 0
         rol_sum = 0
-        while rol_sum + len(self.children[cur_index]) < target_index:
+        while rol_sum + len(self.children[cur_index]) <= target_index:
             rol_sum += len(self.children[cur_index])
             cur_index += 1
         return self.children[cur_index].fetch_at(target_index - rol_sum)

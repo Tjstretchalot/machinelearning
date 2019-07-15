@@ -44,6 +44,10 @@ class SessionSettings(ser.Serializable):
         tar_ticks (int): the number of replay experiences that we are looking for
         train_force_amount (float): the percent of movements that are forced
         regul_factor (float): the regularization factor for training
+        alpha (float): how strongly we prefer samples with large td-errors,
+            with 0<=alpha. A value of 0 is completely uniform (no prioritization)
+        beta (float): how much we correct for prioritization, where 0 is no
+            correction and 1 is complete correction
 
         holdover (int): the number of experiences from this session (and previous)
             that should be held over to the next session
@@ -55,12 +59,14 @@ class SessionSettings(ser.Serializable):
 
     """
     def __init__(self, tie_len: int, tar_ticks: int, train_force_amount: float,
-                 regul_factor: float, holdover: int,
+                 regul_factor: float, holdover: int, alpha: float, beta: float,
                  balance: bool, balance_technique: typing.Optional[str] = None):
         self.tie_len = tie_len
         self.tar_ticks = tar_ticks
         self.train_force_amount = train_force_amount
         self.regul_factor = regul_factor
+        self.alpha = alpha
+        self.beta = beta
         self.holdover = holdover
         self.balance = balance
         self.balance_technique = balance_technique
@@ -72,8 +78,8 @@ class SessionSettings(ser.Serializable):
     def __repr__(self):
         return (f'SessionSettings [tie_len={self.tie_len}, tar_ticks={self.tar_ticks}\n'
                 + f', train_force_amount={self.train_force_amount}\n'
-                + f', regul_factor={self.regul_factor}, balance={self.balance}\n'
-                + f', balance_technique={self.balance_technique}\n'
+                + f', regul_factor={self.regul_factor}, alpha={self.alpha}, beta={self.beta}\n'
+                + f', balance={self.balance}, balance_technique={self.balance_technique}\n'
                 + f', holdover={self.holdover}]')
 
 ser.register(SessionSettings)
@@ -107,21 +113,25 @@ class TrainSettings(ser.Serializable):
         train_seq = []
         # first session short to avoid norms being way off
         train_seq.append(SessionSettings(tie_len=111, tar_ticks=1000, train_force_amount=1,
-                                         regul_factor=6, holdover=10000,
+                                         regul_factor=6, holdover=10000, alpha=0.6, beta=0.4,
                                          balance=True, balance_technique='action'))
         for i in range(5): # 5 * 2k = 10k samples random
             train_seq.append(SessionSettings(tie_len=111, tar_ticks=2000, train_force_amount=1,
-                                             regul_factor=5 - i, holdover=10000,
+                                             regul_factor=5 - i, holdover=10000, alpha=0.6, beta=0.4,
                                              balance=True, balance_technique='action'))
 
-        for tfa in np.linspace(1, 0.1, 50): # 50*4k = 200k samples linearly decreasing tfa
+        betas = np.linspace(0.4, 1, 50)
+        for i, tfa in enumerate(np.linspace(1, 0.1, 50)):
+            # 50*4k = 200k samples linearly decreasing tfa
             train_seq.extend([
                 SessionSettings(tie_len=111, tar_ticks=2000, train_force_amount=float(tfa),
-                                regul_factor=tfa, holdover=10000, balance=True,
-                                balance_technique='action'),
+                                regul_factor=tfa, holdover=10000, alpha=0.6,
+                                beta=betas[i],
+                                balance=True, balance_technique='action'),
                 SessionSettings(tie_len=111, tar_ticks=2000, train_force_amount=float(tfa),
-                                regul_factor=tfa, holdover=10000, balance=True,
-                                balance_technique='action')
+                                regul_factor=tfa, holdover=10000, alpha=0.6,
+                                beta=betas[i],
+                                balance=True, balance_technique='action')
             ])
 
         # hopefully we've learned a pretty good policy at this point, just need to work
@@ -130,13 +140,13 @@ class TrainSettings(ser.Serializable):
             for _ in range(4):
                 train_seq.append(
                     SessionSettings(tie_len=111, tar_ticks=2000, train_force_amount=0.1,
-                                    regul_factor=0.1, holdover=10000, balance=True,
-                                    balance_technique='action')
+                                    regul_factor=0.1, holdover=10000, alpha=0.6, beta=1.0,
+                                    balance=True, balance_technique='action')
                 )
             train_seq.append(
                 SessionSettings(tie_len=111, tar_ticks=2000, train_force_amount=0.5,
-                                    regul_factor=0.1, holdover=10000, balance=True,
-                                    balance_technique='action')
+                                regul_factor=0.1, holdover=10000, alpha=0.6, beta=1.0,
+                                balance=True, balance_technique='action')
             )
 
         return cls(
@@ -395,8 +405,10 @@ def _train_experiences(settings: TrainSettings, executable: str):
     print('--training--')
     stime = time.time()
     time.sleep(0.5)
+    sess = settings.current_session
     proc = subprocess.Popen(
-        [executable, '-u', '-m', settings.bot_module, str(settings.current_session.regul_factor)]
+        [executable, '-u', '-m', settings.bot_module, str(sess.regul_factor),
+         str(sess.alpha), str(sess.beta)]
     )
     proc.wait()
     print('--training finished--')

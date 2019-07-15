@@ -527,11 +527,16 @@ class Deep2QBot(qbot.QBot):
             #print(f'received reward {reward_raw} (pred: {reward_pred}) for move {move.name}')
             #best_move_val = self.evaluate_all(new_state, None).max().item()
             #print(f'  predicted value of next move: {best_move_val}')
-            #print(f'  after adding {PRED_WEIGHT}*pred val to reward: {reward_raw + PRED_WEIGHT*best_move_val}')
+            #print(f'  after adding {PRED_WEIGHT}*pred val to reward: ', end='')
+            #print(f'{reward_raw + PRED_WEIGHT*best_move_val}')
             return
         player_id = 1 if self.entity_iden == game_state.player_1_iden else 2
+
+        correct_bootstrapped_reward = (reward_raw + reward_pred)
+        bootstrapped_reward = self.evaluate_all(game_state, MOVE_MAP).max().item()
+        td_error = correct_bootstrapped_reward - bootstrapped_reward
         self.replay.add(replay_buffer.Experience(game_state, move, self.cutoff,
-                                                 new_state, reward_raw, player_id))
+                                                 new_state, reward_raw, player_id, td_error))
 
     def save(self) -> None:
         pass
@@ -581,6 +586,16 @@ class MyPWL(pwl.PointWithLabelProducer):
         target_teacher (NetworkTeacher): the teacher we can use to evaluate states
         encoders_by_id (dict[int, Encoder]): the encoders by player id
 
+        using_priority (bool): if True we are using priority sampling to fill, if False
+            we are sampling uniformly. When using priority sampling, we fill recent
+        recent (typing.List[float, float, Experience, float]):
+                priority (float): the priority of the experience
+                probability (float): the probability of this experience being selected
+                exp (Experience): the experience that was selected
+
+        __position (int): where we "are", faked
+        marks (list[int]): the positions we have marked, faked for keeping track of epochs
+
         _buffer [torch.tensor[n, ENCODE_DIM]]: The buffer for inputs to the target network,
             cached to avoid unnecessary garbage. n is the largest batch size that we have
             seen so far.
@@ -595,19 +610,27 @@ class MyPWL(pwl.PointWithLabelProducer):
         self.target_teacher = FFTeacher()
         self.encoders_by_id = dict()
 
+        self.using_priority = False
+        self.recent = None
+
         self._buffer = torch.zeros((1, ENCODE_DIM), dtype=torch.float)
         self._outbuffer = torch.zeros((1, OUTPUT_DIM), dtype=torch.float)
         self._outmask = torch.zeros((1, OUTPUT_DIM), dtype=torch.uint8)
 
+        self.__position = 0
+        self.marks = []
+
     def mark(self):
         self.replay.mark()
+        self.marks.append(self.__position)
 
     def reset(self):
         self.replay.reset()
+        self.__position = self.marks.pop()
 
     @property
     def position(self):
-        return self.replay.position
+        return self.__position
 
     @position.setter
     def position(self, val):
@@ -615,7 +638,7 @@ class MyPWL(pwl.PointWithLabelProducer):
 
     @property
     def remaining_in_epoch(self):
-        return self.replay.remaining_in_epoch
+        return len(self.replay) - self.__position
 
     def __next__(self) -> pwl.PointWithLabel:
         raise NotImplementedError('no reasonable way to do this since '
@@ -631,12 +654,24 @@ class MyPWL(pwl.PointWithLabelProducer):
 
     def fill(self, points: torch.tensor, labels: torch.tensor) -> None:
         batch_size = points.shape[0]
+        self.__position = (self.__position + batch_size) % len(self.replay)
         self._ensure_buffers(batch_size)
 
         labels[:] = INVALID_REWARD
         self._outmask[:] = 0
 
-        exps = self.replay.sample(batch_size)
+        if not self.using_priority:
+            exps = self.replay.sample(batch_size)
+        else:
+            exps = []
+            self.recent = []
+            self.using_priority = False
+
+            for _ in range(batch_size):
+                prio, prob, exp = self.replay.pop()
+                exps.append(exp)
+                self.recent.append([prio, prob, exp])
+
         for i, exp in enumerate(exps):
             exp: replay_buffer.Experience
             ent_id = exp.state.player_1_iden if exp.player_id == 1 else exp.state.player_2_iden
@@ -652,23 +687,83 @@ class MyPWL(pwl.PointWithLabelProducer):
                                           self._outbuffer[:batch_size])
         labels[self._outmask] += self._outbuffer[:batch_size].max(dim=1)[0] * PRED_WEIGHT
 
+
     def _fill(self, points, labels):
         raise NotImplementedError
 
     def _position(self, pos):
         raise NotImplementedError
 
-def _create_crit(regul_factor: float):
-    def crit(pred: torch.tensor, truth: torch.tensor):
+class MyCrit:
+    """The criterion we use for evaluating, which can have weights injected into it. This
+    is mean square error with a regularizing factor
+
+    Attributes:
+        regul_factor (float): how much the regularization term effects the loss
+        sample_weights (torch.tensor[batch_size], optional): if specified, the next call
+            to this criterion will use the given sample weights as an element-wise product
+            with the loss.
+    """
+    def __init__(self, regul_factor: float):
+        self.regul_factor = regul_factor
+        self.sample_weights = None
+
+    def __call__(self, pred: torch.tensor, truth: torch.tensor):
         known_val = truth != INVALID_REWARD
 
-        loss = torch.functional.F.smooth_l1_loss(
-            pred[known_val].unsqueeze(1), truth[known_val].unsqueeze(1)
-        )
+        sq_diffs = (pred[known_val] - truth[known_val]) ** 2
+        if self.sample_weights is not None:
+            sq_diffs = sq_diffs * self.sample_weights
+            self.sample_weights = None
+        loss = sq_diffs.mean()
 
-        loss += regul_factor * (pred ** 2).sum() # regularizer
+        loss += self.regul_factor * (pred ** 2).mean() # regularizer
         return loss
-    return crit
+
+class UsePrioritySampling:
+    """Should be injected into the END of the trainer"""
+    def pre_loop(self, context: tnr.GenericTrainingContext) -> None:
+        """Tells the PWL to use priority sampling on the next fill"""
+        context.train_pwl.using_priority = True
+
+    def pre_train(self, context: tnr.GenericTrainingContext) -> None:
+        """Tells the FFTeacher to store the teach result"""
+        context.teacher.store_teach_result = True
+
+class UsePrioritySampling2:
+    """Should be injected into the START of the trainer"""
+    def __init__(self, crit: MyCrit, beta: float):
+        self.criterion = crit
+        self.beta = beta
+        self._buffer = None
+
+    def _ensure_buffers(self, context: tnr.GenericTrainingContext) -> None:
+        batch_size = context.batch_size
+        if self._buffer is None or self._buffer.shape[0] != batch_size:
+            self._buffer = torch.zeros(batch_size, dtype=torch.float)
+
+    def post_points(self, context: tnr.GenericTrainingContext) -> None:
+        """Applies the importance sampling weights to the criterion"""
+        self._ensure_buffers(context)
+        for i in range(context.batch_size):
+            self._buffer[i] = context.train_pwl.recent[i][1]
+        self._buffer = ((1 / len(context.train_pwl.replay)) * (1 / self._buffer)) ** self.beta
+        self._buffer /= self._buffer.max()
+        self.criterion.sample_weights = self._buffer
+
+    def post_train(self, context: tnr.GenericTrainingContext, loss: float) -> None:
+        """Inserts the trained experiences back into the replay buffer"""
+        net_outs = context.teacher.teach_result
+        context.teacher.store_teach_result = False
+
+        for i, (_, _, exp) in enumerate(context.train_pwl.recent):
+            net_pred = net_outs[i][MOVE_LOOKUP[exp.action]].item()
+            cor_pred = context.labels[i]
+            cor_pred = cor_pred[cor_pred != -2].item()
+            td_error = cor_pred - net_pred
+            exp.last_td_error = td_error
+            context.train_pwl.replay.add(exp)
+
 
 def _disp_acts(net, mpwl):
     num_points = 32
@@ -697,14 +792,23 @@ def offline_learning():
     parser.add_argument('regul_factor', type=float,
                         help='The weight of regularization, should be proportional to '
                              + 'teacher force amount')
+    parser.add_argument('alpha', type=float,
+                        help='How much prioritization is used, with alpha=0 corresponding '
+                             + 'to uniform replay. As alpha tends to infinity, this tends towards '
+                             + 'completely deterministic. Typically 0<alpha<1')
+    parser.add_argument('beta', type=float,
+                        help='Importance sampling weights for learning rates to compensate '
+                             + 'for prioritized replay. 0<=beta<=1, where beta=1 fully compensates'
+                             + ' and beta=0 does not compensate at all')
     args = parser.parse_args()
 
     perf_file = os.path.join(SAVEDIR, 'offline_learning_perf.log')
     perf = perf_stats.LoggingPerfStats('deep2 offline learning', perf_file)
 
-    replay = replay_buffer.FileReadableReplayBuffer(REPLAY_FOLDER, perf=perf)
+    replay = replay_buffer.MemoryPrioritizedReplayBuffer(REPLAY_FOLDER, alpha=args.alpha)
     try:
-        print(f'loaded {len(replay)} experiences for replay...')
+        print(f'Replaying {len(replay)} experiences with prioritized replay ('
+              + f'regul_factor={args.regul_factor}, alpha={args.alpha}, beta={args.beta})')
         network = init_or_load_model()
         teacher = FFTeacher()
 
@@ -717,9 +821,9 @@ def offline_learning():
 
             new_target = Deep2Network.load(MODELFILE)
             new_target.start_stat_tracking()
-            for i in range(3):
+            for _ in range(3):
                 train_pwl.mark()
-                for j in range(0, 1024, ctx.batch_size):
+                for _ in range(0, 1024, ctx.batch_size):
                     train_pwl.fill(ctx.points, ctx.labels)
                     teacher.classify_many(new_target, ctx.points, ctx.labels)
                 new_target.stat_tracking_to_norm()
@@ -734,12 +838,13 @@ def offline_learning():
             test_pwl=test_pwl,
             teacher=teacher,
             batch_size=32,
-            learning_rate=0.001,
+            learning_rate=0.00025,
             optimizer=torch.optim.Adam(
                 [p for p in network.parameters() if p.requires_grad], lr=0.001),
-            criterion=_create_crit(args.regul_factor)
+            criterion=MyCrit(args.regul_factor)
         )
         (trainer
+         .reg(UsePrioritySampling2(trainer.criterion, args.beta))
          .reg(tnr.EpochsTracker())
          .reg(tnr.EpochsStopper(3))
          .reg(tnr.InfOrNANDetecter())
@@ -748,6 +853,7 @@ def offline_learning():
          .reg(tnr.DecayStopper(1))
          .reg(tnr.OnEpochCaller.create_every(update_target, skip=CUTOFF)) # smaller cutoffs require more bootstrapping pylint: disable=line-too-long
          .reg(tnr.DecayOnPlateau())
+         .reg(UsePrioritySampling())
         )
         res = trainer.train(network, target_dtype=torch.float32,
                             point_dtype=torch.float32,
@@ -756,7 +862,16 @@ def offline_learning():
         if res['inf_or_nan']:
             print('training failed! inf or nan!')
     finally:
+        flattened = replay.flatten()
         replay.close()
+
+        print('resaving replay')
+        filetools.deldir(REPLAY_FOLDER)
+        replay = replay_buffer.FileWritableReplayBuffer(REPLAY_FOLDER)
+        for exp in flattened:
+            replay.add(exp)
+        replay.close()
+        print('finished resaving replay')
 
 if __name__ == '__main__':
     offline_learning()
