@@ -899,7 +899,8 @@ def plot_gen(traj: pca_gen.PCTrajectoryGen, outfile: str, exist_ok: bool,
         scalar_mapping=(scalar_mapping, str),
         norm=(norm, str),
         cmap=(cmap, str),
-        frame_time=(frame_time, float)
+        frame_time=(frame_time, float),
+        s=(s, (int, float))
     )
     mutils.process_outfile(outfile, exist_ok)
 
@@ -917,7 +918,7 @@ def plot_gen(traj: pca_gen.PCTrajectoryGen, outfile: str, exist_ok: bool,
         args.append(snapshot.projected_samples.numpy())
     digestor(sample_labels, *args, outfile=outfile, exist_ok=exist_ok,
              frame_time=frame_time, layer_names=layer_names,
-             markers=markers, scalar_mapping=scalar_mapping, norm=norm, cmap=cmap,
+             markers=markers, scalar_mapping=scalar_mapping, norm=norm, cmap=cmap, s=s,
              target_module='shared.measures.pca_3d', target_name='_plot_npmp')
 
 
