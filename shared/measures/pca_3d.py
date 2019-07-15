@@ -397,9 +397,9 @@ class GenFrameWorker(FrameWorker):
 
     def init_scatter(self, ax, data, labels):
         return _init_scatter_gen(self.scalar_mapping, self.cmap, self.norm, self.markers,
-                                 ax, data, labels)
+                                 ax, data, labels, self.s)
 
-def _init_scatter_gen(scalar_mapping, cmap, norm, markers, ax, data, labels):
+def _init_scatter_gen(scalar_mapping, cmap, norm, markers, ax, data, labels, s):
     scatters = []
 
     for mask, marker in markers(labels):
@@ -407,7 +407,7 @@ def _init_scatter_gen(scalar_mapping, cmap, norm, markers, ax, data, labels):
         scatters.append(
             (mask,
             ax.scatter(masked_data[:, 0], masked_data[:, 1], masked_data[:, 2],
-                       s=3, c=scalar_mapping(torch.from_numpy(labels[mask])),
+                       s=s, c=scalar_mapping(torch.from_numpy(labels[mask])),
                        cmap=mcm.get_cmap(cmap),
                        norm=norm, marker=marker))
         )
@@ -650,7 +650,8 @@ def _plot_ff_real(traj: typing.Union[pca_ff.PCTrajectoryFF, pca_gen.PCTrajectory
                     mutils.get_fixed_single(markers)(),
                     ax,
                     snapsh.projected_samples.numpy(),
-                    snapsh.projected_sample_labels.numpy()
+                    snapsh.projected_sample_labels.numpy(),
+                    s
                 )
             if not norotate:
                 ax.view_init(30, 45)

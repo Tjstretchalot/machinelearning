@@ -130,7 +130,7 @@ def _run(args):
                             'Layer 5', 'Layer 6', 'Output'])
     print('--plotting top 2 pcs--')
     pca_deep2.plot_trajectory(traj, os.path.join(SAVEDIR, 'pca'), exist_ok=True,
-                                transparent=False, norm=mcolors.Normalize(-0.1, 0.1))
+                                transparent=False, norm=mcolors.Normalize(-0.2, 0.2))
     print('--measuring participation ratio--')
     pr_traj: pr.PRTrajectory = pr.measure_pr_gen(network, train_pwl)
     print('--plotting participation ratio--')
