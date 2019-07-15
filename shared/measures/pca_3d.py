@@ -404,12 +404,13 @@ def _init_scatter_gen(scalar_mapping, cmap, norm, markers, ax, data, labels, s):
 
     for mask, marker in markers(labels):
         masked_data = data[mask]
+        marker = marker if isinstance(marker, dict) else {'marker': marker}
         scatters.append(
             (mask,
             ax.scatter(masked_data[:, 0], masked_data[:, 1], masked_data[:, 2],
                        s=s, c=scalar_mapping(torch.from_numpy(labels[mask])),
                        cmap=mcm.get_cmap(cmap),
-                       norm=norm, marker=marker))
+                       norm=norm, **marker))
         )
 
     return ConcattedScatter(scatters)
@@ -558,6 +559,8 @@ def _plot_ff_real(traj: typing.Union[pca_ff.PCTrajectoryFF, pca_gen.PCTrajectory
             callable that returns a callable which accepts a tensor from the output layer and
             returns an iterable of [tensor, str] where the tensor is a mask for the samples
             and the str is the marker that should be used.
+            Alternatively, instead of a str, the marker may be a dict which is simply passed
+            as keyword-arguments to the plot (replicating marker with {'marker': marker})
         scalar_mapping (str): if the trajectory is a PCTrajectoryGen, this is the path to the
             module and callable that returns a OutputToScalarMapping-style callable.
         norm (str): if the trajectory is a PCTrajectoryGen, this is the path to the module and

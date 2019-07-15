@@ -20,7 +20,12 @@ import or_reinforce.utils.pca_deep2 as pca_deep2
 
 SAVEDIR = filetools.savepath()
 MODULE = 'or_reinforce.runners.deep2_analyze'
-
+MARKERS = [
+    {'marker': '<', 'markerfacecoloralt': 'black', 'fillstyle': 'right'},
+    {'marker': '>', 'markerfacecoloralt': 'black', 'fillstyle': 'left'},
+    {'marker': '^', 'markerfacecoloralt': 'black', 'fillstyle': 'bottom'},
+    {'marker': 'v', 'markerfacecoloralt': 'black', 'fillstyle': 'top'}
+]
 def _ots():
     return pca_gen.MaxOTSMapping()
 
@@ -28,7 +33,7 @@ def _markers():
     def markers(inp: np.ndarray):
         argmaxed = inp.argmax(1)
         res = []
-        for i, marker in enumerate(['<', '>', '^', 'v']):
+        for i, marker in enumerate(MARKERS):
             res.append((argmaxed == i, marker))
         return res
     return markers
@@ -84,7 +89,7 @@ def main():
     parser.add_argument('--pca3d', action='store_true',
                         help='create the pca3d video')
     parser.add_argument('--mpf', type=float, default=16.67, help='milliseconds per frame')
-    parser.add_argument('--marker_size', type=float, default=24, help='marker size for video')
+    parser.add_argument('--marker_size', type=float, default=32, help='marker size for video')
     args = parser.parse_args()
     _run(args)
 
