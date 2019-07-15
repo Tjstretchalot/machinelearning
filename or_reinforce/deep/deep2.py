@@ -791,15 +791,15 @@ def offline_learning():
         description='Evaluates the deep1 bot by launching a server and connecting it')
     parser.add_argument('regul_factor', type=float,
                         help='The weight of regularization, should be proportional to '
-                             + 'teacher force amount')
+                        + 'teacher force amount')
     parser.add_argument('alpha', type=float,
                         help='How much prioritization is used, with alpha=0 corresponding '
-                             + 'to uniform replay. As alpha tends to infinity, this tends towards '
-                             + 'completely deterministic. Typically 0<alpha<1')
+                        + 'to uniform replay. As alpha tends to infinity, this tends towards '
+                        + 'completely deterministic. Typically 0<alpha<1')
     parser.add_argument('beta', type=float,
                         help='Importance sampling weights for learning rates to compensate '
-                             + 'for prioritized replay. 0<=beta<=1, where beta=1 fully compensates'
-                             + ' and beta=0 does not compensate at all')
+                        + 'for prioritized replay. 0<=beta<=1, where beta=1 fully compensates'
+                        + ' and beta=0 does not compensate at all')
     args = parser.parse_args()
 
     perf_file = os.path.join(SAVEDIR, 'offline_learning_perf.log')

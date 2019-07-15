@@ -791,7 +791,6 @@ class MemoryPrioritizedReplayBuffer(ReadableReplayBuffer):
     def __len__(self) -> int:
         return len(self.tree)
 
-
 def merge_buffers(inpaths: typing.List[str], outpath: str) -> None:
     """Merges the replay buffers stored in the inpaths to the
     outpath. The outpath must not already exist"""

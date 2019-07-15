@@ -67,8 +67,6 @@ class PointWithLabelProducer:
         """
         if len(points.shape) != 2:
             raise ValueError(f'expected points has shape [batch_size x input_dim], got {points.shape}')
-        if len(labels.shape) != 1:
-            raise ValueError(f'expected labels has shape [batch_size], got {labels.shape}')
         if points.shape[0] != labels.shape[0]:
             raise ValueError('expected points [batch_size x input_dim] and labels [batch_size] to'
                              + f' have same first dimension, but points.shape[0]={points.shape[0]}'
@@ -136,7 +134,8 @@ class SimplePointWithLabelProducer(PointWithLabelProducer):
         real_labels (torch.tensor [epoch_size])
     """
 
-    def __init__(self, real_points: torch.tensor, real_labels: torch.tensor, output_dim: int):
+    def __init__(self, real_points: torch.tensor, real_labels: torch.tensor, output_dim: int,
+                 ignore_output_shape: bool = False):
         if not torch.is_tensor(real_points):
             raise ValueError(f'expected real_points is tensor, got {real_points}')
         if len(real_points.shape) != 2:
@@ -145,12 +144,14 @@ class SimplePointWithLabelProducer(PointWithLabelProducer):
             raise ValueError(f'expected real_points has dtype float or double, got {real_points.dtype}')
         if not torch.is_tensor(real_labels):
             raise ValueError(f'expected real_labels is tensor, got {real_labels}')
-        if len(real_labels.shape) != 1:
-            raise ValueError(f'expected real_labels has shape (num_samples), got {real_labels.shape}')
+        if not ignore_output_shape:
+            if len(real_labels.shape) != 1:
+                raise ValueError(f'expected real_labels has shape (num_samples), got {real_labels.shape}')
         if real_labels.dtype == torch.uint8:
             raise ValueError(f'labels is uint8 which is prone to issues, use int or long instead')
-        if real_labels.dtype not in (torch.uint8, torch.int, torch.long):
-            raise ValueError(f'expected real_labels has int-like dtype, got {real_labels.dtype}')
+        if not ignore_output_shape:
+            if real_labels.dtype not in (torch.uint8, torch.int, torch.long):
+                raise ValueError(f'expected real_labels has int-like dtype, got {real_labels.dtype}')
         if real_points.shape[0] != real_labels.shape[0]:
             raise ValueError(f'exepcted real_points has shape (num_samples, input_dim) and real_labels has shape (num_samples) but real_points.shape={real_points.shape} and real_labels.shape={real_labels.shape} (mismatch on dim 0)')
         super().__init__(real_points.shape[0], real_points.shape[1], output_dim)
