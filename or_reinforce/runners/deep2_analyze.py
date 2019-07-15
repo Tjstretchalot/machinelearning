@@ -84,6 +84,7 @@ def main():
     parser.add_argument('--pca3d', action='store_true',
                         help='create the pca3d video')
     parser.add_argument('--mpf', type=float, default=16.67, help='milliseconds per frame')
+    parser.add_argument('--marker_size', type=float, default=24, help='marker size for video')
     args = parser.parse_args()
     _run(args)
 
@@ -124,7 +125,7 @@ def _run(args):
         print('--performing 3d plot--')
         pca_3d.plot_gen(traj, os.path.join(SAVEDIR, 'pca_3d'), True,
                         MODULE + '._markers', MODULE + '._ots', MODULE + '._norm',
-                        'cividis', args.mpf, None,
+                        'cividis', args.mpf, args.marker_size, None,
                         ['Input', 'Layer 1', 'Layer 2', 'Layer 3', 'Layer 4',
                             'Layer 5', 'Layer 6', 'Output'])
     print('--plotting top 2 pcs--')

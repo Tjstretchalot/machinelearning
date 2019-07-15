@@ -245,12 +245,13 @@ class FrameWorker:
         scenes (list[Scene]): the scenes which this worker has
 
         traj (pca_ff.PCTrajectoryFF): the trajectory we are plotting
+        s (float): the size of the markers
 
         mpl_data (MPLData): the actual mpl data we have
     """
 
     def __init__(self, img_queue, rec_queue, send_queue, ms_per_frame,
-                 frame_size, dpi, scenes, traj):
+                 frame_size, dpi, scenes, traj, s):
         self.img_queue = img_queue
         self.rec_queue = rec_queue
         self.send_queue = send_queue
@@ -259,6 +260,7 @@ class FrameWorker:
         self.dpi = dpi
         self.scenes = scenes
         self.traj = traj
+        self.s = s
 
         self.mpl_data = None
 
@@ -285,7 +287,7 @@ class FrameWorker:
     def init_scatter(self, ax, data, labels):
         """Initializes the scatter plot for the given data and labels"""
         return ax.scatter(data[:, 0], data[:, 1], data[:, 2],
-                          s=3, c=labels, cmap=mpl.cm.get_cmap('Set1'))
+                          s=self.s, c=labels, cmap=mpl.cm.get_cmap('Set1'))
 
     def start_scenes(self):
         """Starts all the scenes"""
@@ -301,8 +303,7 @@ class FrameWorker:
         """Determines the which scene and when in the scene the given frame is"""
         millis = frame_num * self.ms_per_frame
 
-        ogmillis = millis
-        for i, scene in enumerate(self.scenes):
+        for _, scene in enumerate(self.scenes):
             if millis < scene.duration:
                 return scene, millis
             millis -= scene.duration
@@ -385,10 +386,10 @@ class GenFrameWorker(FrameWorker):
             a colormap that maps the 0-1 output of the norm to colors
     """
     def __init__(self, img_queue, rec_queue, send_queue, ms_per_frame,
-                 frame_size, dpi, scenes, traj, markers, scalar_mapping,
+                 frame_size, dpi, scenes, traj, s, markers, scalar_mapping,
                  norm, cmap):
         super().__init__(img_queue, rec_queue, send_queue, ms_per_frame,
-                         frame_size, dpi, scenes, traj)
+                         frame_size, dpi, scenes, traj, s)
         self.markers = markers
         self.scalar_mapping = scalar_mapping
         self.norm = norm
@@ -414,10 +415,10 @@ def _init_scatter_gen(scalar_mapping, cmap, norm, markers, ax, data, labels):
     return ConcattedScatter(scatters)
 
 def _frame_worker_target(img_queue, rec_queue, send_queue, ms_per_frame, frame_size, dpi,
-                         scenes, traj, logfile):
+                         scenes, traj, s, logfile):
     worker = FrameWorker(
         myq.ZeroMQQueue.deser(img_queue), myq.ZeroMQQueue.deser(rec_queue),
-        myq.ZeroMQQueue.deser(send_queue), ms_per_frame, frame_size, dpi, scenes, traj)
+        myq.ZeroMQQueue.deser(send_queue), ms_per_frame, frame_size, dpi, scenes, traj, s)
 
     try:
         worker.do_all()
@@ -428,7 +429,7 @@ def _frame_worker_target(img_queue, rec_queue, send_queue, ms_per_frame, frame_s
         raise
 
 def _frame_worker_target_gen(img_queue, rec_queue, send_queue, ms_per_frame, frame_size,
-                             dpi, scenes, traj, markers, scalar_mapping, norm, cmap, logfile):
+                             dpi, scenes, traj, s, markers, scalar_mapping, norm, cmap, logfile):
     """Target for frame workers using the GenFrameWorker subclass
 
     Args:
@@ -440,6 +441,7 @@ def _frame_worker_target_gen(img_queue, rec_queue, send_queue, ms_per_frame, fra
         dpi (int): pixels per inch
         scenes (list[Scene]): the scenes we are trying to render
         traj (PCTrajectoryGen): the trajectory we are rending
+        s (float): the size of the markers
         markers (str): the path to the module and name of the marker producing callable
         scalar_mapping (str): the path to the module and name of the scalar mapping producing callable
         norm (str): the path to the module and name of the norm producing callable
@@ -448,7 +450,7 @@ def _frame_worker_target_gen(img_queue, rec_queue, send_queue, ms_per_frame, fra
     """
     worker = GenFrameWorker(
         myq.ZeroMQQueue.deser(img_queue), myq.ZeroMQQueue.deser(rec_queue),
-        myq.ZeroMQQueue.deser(send_queue), ms_per_frame, frame_size, dpi, scenes, traj,
+        myq.ZeroMQQueue.deser(send_queue), ms_per_frame, frame_size, dpi, scenes, traj, s,
         mutils.get_fixed_single(markers)(), mutils.get_fixed_single(scalar_mapping)(),
         mutils.get_fixed_single(norm)(), cmap
     )
@@ -539,7 +541,7 @@ def _plot_ff_real(traj: typing.Union[pca_ff.PCTrajectoryFF, pca_gen.PCTrajectory
                   snapshots: typing.Optional[typing.List[typing.Tuple[int, int, dict]]] = None,
                   video: bool = True,
                   markers: str = None, scalar_mapping: str = None, norm: str = None,
-                  cmap: str = None):
+                  cmap: str = None, s: float = 3):
     """Plots the given feed-forward pc trajectory
 
     Args:
@@ -563,6 +565,7 @@ def _plot_ff_real(traj: typing.Union[pca_ff.PCTrajectoryFF, pca_gen.PCTrajectory
         cmap (str): The colormap to use. Defaults to 'Set1' for a PCTrajectoryFF and 'cividis'
             for PCTrajectoryGen
             NOTE: currently cmap on PCTrajectoryFF only effects the snapshots
+        s (float): the size of the markers
     """
     if not isinstance(traj, (pca_ff.PCTrajectoryFF, pca_gen.PCTrajectoryGen)):
         raise ValueError(f'expected traj is pca_ff.PCTrajectoryFF, got {traj} (type={type(traj)})')
@@ -636,7 +639,7 @@ def _plot_ff_real(traj: typing.Union[pca_ff.PCTrajectoryFF, pca_gen.PCTrajectory
                 _scatter = ax.scatter(snapsh.projected_samples[:, 0].numpy(),
                                     snapsh.projected_samples[:, 1].numpy(),
                                     snapsh.projected_samples[:, 2].numpy(),
-                                    s=3,
+                                    s=s,
                                     c=snapsh.projected_sample_labels.numpy(),
                                     cmap=mpl.cm.get_cmap(cmap))
             else:
@@ -747,12 +750,12 @@ def _plot_ff_real(traj: typing.Union[pca_ff.PCTrajectoryFF, pca_gen.PCTrajectory
             proc = Process(
                 target=_frame_worker_target,
                 args=(img_queue.serd(), send_queue.serd(), ack_queue.serd(), frame_time,
-                      FRAME_SIZE, DPI, scenes, traj, wlog))
+                      FRAME_SIZE, DPI, scenes, traj, s, wlog))
         else:
             proc = Process(
                 target=_frame_worker_target_gen,
                 args=(img_queue.serd(), send_queue.serd(), ack_queue.serd(), frame_time,
-                      FRAME_SIZE, DPI, scenes, traj, markers, scalar_mapping, norm, cmap, wlog))
+                      FRAME_SIZE, DPI, scenes, traj, s, markers, scalar_mapping, norm, cmap, wlog))
         proc.start()
         workers.append(FrameWorkerConnection(proc, img_queue, send_queue, ack_queue))
         animator.register_queue(img_queue)
@@ -864,7 +867,7 @@ def plot_ff(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool,
 
 def plot_gen(traj: pca_gen.PCTrajectoryGen, outfile: str, exist_ok: bool,
              markers: str, scalar_mapping: str, norm: str,
-             cmap: str = 'cividis', frame_time: float = 16.67,
+             cmap: str = 'cividis', frame_time: float = 16.67, s: float = 1,
              digestor: NPDigestor = None, layer_names: typing.List[str] = None):
     """Plots the given general trajectory in 3-dimensions in a smooth video,
     optionally using the given digestor. Because the general trajectories do
@@ -902,7 +905,7 @@ def plot_gen(traj: pca_gen.PCTrajectoryGen, outfile: str, exist_ok: bool,
 
     if digestor is None:
         _plot_ff_real(traj, outfile, exist_ok, frame_time, layer_names,
-                      None, True, markers, scalar_mapping, norm, cmap)
+                      None, True, markers, scalar_mapping, norm, cmap, s)
         return
 
     sample_labels = traj.snapshots[0].projected_sample_labels.numpy()
