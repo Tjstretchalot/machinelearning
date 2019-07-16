@@ -21,10 +21,10 @@ import or_reinforce.utils.pca_deep2 as pca_deep2
 SAVEDIR = filetools.savepath()
 MODULE = 'or_reinforce.runners.deep2_analyze'
 MARKERS = [
-    {'marker': '<', 'markerfacecoloralt': 'black', 'fillstyle': 'right'},
-    {'marker': '>', 'markerfacecoloralt': 'black', 'fillstyle': 'left'},
-    {'marker': '^', 'markerfacecoloralt': 'black', 'fillstyle': 'bottom'},
-    {'marker': 'v', 'markerfacecoloralt': 'black', 'fillstyle': 'top'}
+    {'marker': '<', 'fillstyle': 'right'},
+    {'marker': '>', 'fillstyle': 'left'},
+    {'marker': '^', 'fillstyle': 'bottom'},
+    {'marker': 'v', 'fillstyle': 'top'}
 ]
 def _ots():
     return pca_gen.MaxOTSMapping()
