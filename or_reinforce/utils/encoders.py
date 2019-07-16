@@ -292,3 +292,50 @@ class StaircaseDirectionOneHotEncoder(FlatEncoder):
         self._encode(out[1 + self.dist*2:], dely)
         return out
 
+class SurroundEntityEncoder(FlatEncoder):
+    """Encodes the location of nearby entities in a 1-hot style, where either there is another
+    entity at each location or there is not.
+
+    Attributes:
+        entity_iden (int): the entity we are looking from
+        view_distance (int): how far away in tiles we can see
+    """
+    def __init__(self, entity_iden: int, view_distance: int):
+        self.entity_iden = entity_iden
+        self.view_distance = view_distance
+        self._dim = (view_distance * 2 + 1) ** 2
+
+    @property
+    def dim(self):
+        return self._dim
+
+    def encode(self, game_state: GameState, move: Move, out: torch.tensor = None) -> torch.tensor:
+        if out is None:
+            out = torch.zeros((self.dim,), dtype=torch.float)
+        else:
+            out[:] = 0
+
+        if self.entity_iden not in game_state.iden_lookup:
+            return out
+
+        ent = game_state.iden_lookup[self.entity_iden]
+        if ent.depth not in game_state.world.dungeons:
+            return out
+        dung = game_state.world.get_at_depth(ent.depth)
+
+        out = out.view(self.view_distance * 2 + 1,
+                       self.view_distance * 2 + 1)
+        for x_ind in range(self.view_distance * 2 + 1):
+            x = ent.x + (x_ind - self.view_distance)
+            if x < 0 or x >= dung.width:
+                continue
+            for y_ind in range(self.view_distance * 2 + 1):
+                y = ent.y + (y_ind - self.view_distance)
+                if y < 0 or y >= dung.height:
+                    continue
+                if x == 0 and y == 0:
+                    continue
+                if (ent.depth, x, y) in game_state.pos_lookup:
+                    out[x_ind, y_ind] = 1
+
+        return out.view(self.dim)

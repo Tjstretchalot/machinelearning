@@ -70,6 +70,8 @@ def init_encoder(entity_iden):
     return encoders.MergedFlatEncoders(
         [
             encoders.StaircaseDirectionOneHotEncoder(3, entity_iden),
+            encoders.SurroundBarrierEncoder(entity_iden, 5),
+            encoders.SurroundEntityEncoder(entity_iden, 3)
         ]
     )
 
