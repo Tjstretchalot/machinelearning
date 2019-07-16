@@ -8,6 +8,7 @@ import optimax_rogue.game.world as world
 import optimax_rogue.logic.worldgen as worldgen
 import optimax_rogue.game.entities as entities
 import optimax_rogue.logic.moves as moves
+import numpy as np
 
 
 def make_state() -> state.GameState:
@@ -26,7 +27,8 @@ def make_exp() -> rb.Experience:
     lmoves = list(moves.Move)
     return rb.Experience(make_state(), random.choice(lmoves), random.randint(1, 3),
                          make_state(), random.random(), random.randint(1, 2),
-                         random.random())
+                         random.random(), np.random.uniform(0, 1, 5).astype('float32'),
+                         np.random.uniform(0, 1, 5).astype('float32'))
 
 FILEPATH = os.path.join('out', 'or_reinforce', 'deep', 'tests', 'replay_buffer_test')
 def main():

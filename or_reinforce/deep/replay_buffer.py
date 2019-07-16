@@ -8,6 +8,7 @@ import struct
 import io
 import random
 from collections import deque
+import numpy as np
 
 import shared.typeutils as tus
 import shared.perf_stats as perf_stats
@@ -27,12 +28,27 @@ class Experience(ser.Serializable):
         player_id (int): either 1 or 2 for the player the bot is controlling
         last_td_error (float, optional): when last checked, what was the temporal difference between
             the value we expected from the state-action and what we saw
+        encoded_state (np.ndarray, float32, flat): the encoded initial state
+        new_encoded_state (np.ndarray, float32, flat): the encoded final state
     """
     def __init__(self, state: GameState, action: Move, delay: int, new_state: GameState,
-                 reward_rec: float, player_id: int, last_td_error: typing.Optional[float]):
+                 reward_rec: float, player_id: int, last_td_error: typing.Optional[float],
+                 encoded_state: np.ndarray, new_encoded_state: np.ndarray):
         tus.check(state=(state, GameState), action=(action, Move), delay=(delay, int),
                   reward_rec=(reward_rec, float), player_id=(player_id, int),
-                  last_td_error=(last_td_error, (type(None), float)))
+                  last_td_error=(last_td_error, (type(None), float)),
+                  encoded_state=(encoded_state, np.ndarray),
+                  new_encoded_state=(new_encoded_state, np.ndarray))
+        if encoded_state.dtype != np.dtype('float32'):
+            raise ValueError(f'expected encoded state dtype is float32, got {encoded_state.dtype}')
+        if new_encoded_state.dtype != np.dtype('float32'):
+            raise ValueError('expected new encoded state dtypei s float32, '
+                             + f'got {new_encoded_state.dtype}')
+        if len(encoded_state.shape) != 1:
+            raise ValueError(f'expected encoded state is flat but has shape {encoded_state.shape}')
+        if len(new_encoded_state.shape) != 1:
+            raise ValueError('expected new encoded state is flat, but has shape '
+                             + str(new_encoded_state.shape))
 
         self.state = state
         self.action = action
@@ -41,6 +57,8 @@ class Experience(ser.Serializable):
         self.reward_rec = reward_rec
         self.player_id = player_id
         self.last_td_error = last_td_error
+        self.encoded_state = encoded_state
+        self.new_encoded_state = new_encoded_state
 
     def has_custom_serializer(self):
         return True
@@ -62,10 +80,17 @@ class Experience(ser.Serializable):
             arr.write(struct.pack('>f', self.last_td_error))
         else:
             arr.write((0).to_bytes(1, 'big', signed=False))
+
+        serd_state = self.encoded_state.tobytes()
+        arr.write(len(serd_state).to_bytes(4, 'big', signed=False))
+        arr.write(serd_state)
+        serd_state = self.new_encoded_state.tobytes()
+        arr.write(len(serd_state).to_bytes(4, 'big', signed=False))
+        arr.write(serd_state)
         return arr.getvalue()
 
     @classmethod
-    def from_prims(cls, prims: bytes) -> 'Experience': # pylint: disable=line-too-long, arguments-differ
+    def from_prims(cls, prims: bytes) -> 'Experience':
         arr = io.BytesIO(prims)
         arr.seek(0, 0)
         state_len = int.from_bytes(arr.read(4), 'big', signed=False)
@@ -81,7 +106,14 @@ class Experience(ser.Serializable):
             last_td_error = struct.unpack('>f', arr.read(4))[0]
         else:
             last_td_error = None
-        return Experience(state, action, delay, new_state, reward, player_id, last_td_error)
+
+        state_len = int.from_bytes(arr.read(4), 'big', signed=False)
+        encoded_state = np.frombuffer(arr.read(state_len), dtype='float32')
+
+        state_len = int.from_bytes(arr.read(4), 'big', signed=False)
+        encoded_new_state = np.frombuffer(arr.read(state_len), dtype='float32')
+        return Experience(state, action, delay, new_state, reward, player_id, last_td_error,
+                          encoded_state, encoded_new_state)
 
     def __eq__(self, other: 'Experience') -> bool:
         if not isinstance(other, Experience):

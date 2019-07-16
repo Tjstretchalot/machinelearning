@@ -538,7 +538,9 @@ class Deep2QBot(qbot.QBot):
         bootstrapped_reward = self.evaluate_all(game_state, MOVE_MAP).max().item()
         td_error = correct_bootstrapped_reward - bootstrapped_reward
         self.replay.add(replay_buffer.Experience(game_state, move, self.cutoff,
-                                                 new_state, reward_raw, player_id, td_error))
+                                                 new_state, reward_raw, player_id, td_error,
+                                                 self.encoder.encode(game_state, None),
+                                                 self.encoder.encode(new_state, None)))
 
     def save(self) -> None:
         pass
@@ -586,7 +588,6 @@ class MyPWL(pwl.PointWithLabelProducer):
         replay (ReplayBuffer): the buffer we are loading experiences from
         target_model (Deep2Network): the network we use to evaluate states
         target_teacher (NetworkTeacher): the teacher we can use to evaluate states
-        encoders_by_id (dict[int, Encoder]): the encoders by player id
 
         using_priority (bool): if True we are using priority sampling to fill, if False
             we are sampling uniformly. When using priority sampling, we fill recent
@@ -610,7 +611,6 @@ class MyPWL(pwl.PointWithLabelProducer):
         self.replay = replay
         self.target_model = target_model
         self.target_teacher = FFTeacher()
-        self.encoders_by_id = dict()
 
         self.using_priority = False
         self.recent = None
@@ -676,13 +676,8 @@ class MyPWL(pwl.PointWithLabelProducer):
 
         for i, exp in enumerate(exps):
             exp: replay_buffer.Experience
-            ent_id = exp.state.player_1_iden if exp.player_id == 1 else exp.state.player_2_iden
-            if ent_id not in self.encoders_by_id:
-                self.encoders_by_id[ent_id] = init_encoder(ent_id)
-
-            enc: encoders.FlatEncoder = self.encoders_by_id[ent_id]
-            enc.encode(exp.state, None, out=points[i])
-            enc.encode(exp.new_state, None, out=self._buffer[i])
+            points[i, :] = torch.from_numpy(exp.encoded_state)
+            self._buffer[i, :] = torch.from_numpy(exp.new_encoded_state)
             labels[i, MOVE_LOOKUP[exp.action]] = exp.reward_rec
             self._outmask[i, MOVE_LOOKUP[exp.action]] = 1
         self.target_teacher.classify_many(self.target_model, self._buffer[:batch_size],
