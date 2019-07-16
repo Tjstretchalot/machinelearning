@@ -539,8 +539,8 @@ class Deep2QBot(qbot.QBot):
         td_error = correct_bootstrapped_reward - bootstrapped_reward
         self.replay.add(replay_buffer.Experience(game_state, move, self.cutoff,
                                                  new_state, reward_raw, player_id, td_error,
-                                                 self.encoder.encode(game_state, None),
-                                                 self.encoder.encode(new_state, None)))
+                                                 self.encoder.encode(game_state, None).numpy(),
+                                                 self.encoder.encode(new_state, None).numpy()))
 
     def save(self) -> None:
         pass

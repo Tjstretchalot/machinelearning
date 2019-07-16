@@ -34,7 +34,8 @@ class Experience(ser.Serializable):
     def __init__(self, state: GameState, action: Move, delay: int, new_state: GameState,
                  reward_rec: float, player_id: int, last_td_error: typing.Optional[float],
                  encoded_state: np.ndarray, new_encoded_state: np.ndarray):
-        tus.check(state=(state, GameState), action=(action, Move), delay=(delay, int),
+        tus.check(state=(state, (GameState, bytes)), action=(action, Move), delay=(delay, int),
+                  new_state=(new_state, (GameState, bytes)),
                   reward_rec=(reward_rec, float), player_id=(player_id, int),
                   last_td_error=(last_td_error, (type(None), float)),
                   encoded_state=(encoded_state, np.ndarray),
@@ -50,27 +51,49 @@ class Experience(ser.Serializable):
             raise ValueError('expected new encoded state is flat, but has shape '
                              + str(new_encoded_state.shape))
 
-        self.state = state
+        self._state = state
         self.action = action
         self.delay = delay
-        self.new_state = new_state
+        self._new_state = new_state
         self.reward_rec = reward_rec
         self.player_id = player_id
         self.last_td_error = last_td_error
         self.encoded_state = encoded_state
         self.new_encoded_state = new_encoded_state
 
+    @property
+    def state(self) -> GameState:
+        """Returns the game state we started in. Lazily decoded"""
+        if isinstance(self._state, GameState):
+            return self._state
+        self._state = GameState.from_prims(self._state)
+        return self._state
+
+    @property
+    def new_state(self) -> GameState:
+        """Returns the game state we ended in, lazily decoded"""
+        if isinstance(self._new_state, GameState):
+            return self._new_state
+        self._new_state = GameState.from_prims(self._new_state)
+        return self._new_state
+
     def has_custom_serializer(self):
         return True
 
     def to_prims(self) -> bytes:
         arr = io.BytesIO()
-        serd_state = self.state.to_prims()
+        serd_state = (
+            self._state.to_prims()
+            if isinstance(self._state, GameState)
+            else self._state)
         arr.write(len(serd_state).to_bytes(4, 'big', signed=False))
         arr.write(serd_state)
         arr.write(int(self.action).to_bytes(4, 'big', signed=False))
         arr.write(self.delay.to_bytes(4, 'big', signed=False))
-        serd_state = self.new_state.to_prims()
+        serd_state = (
+            self._new_state.to_prims()
+            if isinstance(self._new_state, GameState)
+            else self._new_state)
         arr.write(len(serd_state).to_bytes(4, 'big', signed=False))
         arr.write(serd_state)
         arr.write(struct.pack('>f', self.reward_rec))
@@ -94,11 +117,11 @@ class Experience(ser.Serializable):
         arr = io.BytesIO(prims)
         arr.seek(0, 0)
         state_len = int.from_bytes(arr.read(4), 'big', signed=False)
-        state = GameState.from_prims(arr.read(state_len))
+        state = arr.read(state_len)
         action = Move(int.from_bytes(arr.read(4), 'big', signed=False))
         delay = int.from_bytes(arr.read(4), 'big', signed=False)
         state_len = int.from_bytes(arr.read(4), 'big', signed=False)
-        new_state = GameState.from_prims(arr.read(state_len))
+        new_state = arr.read(state_len)
         reward = struct.unpack('>f', arr.read(4))[0]
         player_id = int.from_bytes(arr.read(4), 'big', signed=False)
         have_td = int.from_bytes(arr.read(1), 'big', signed=False) == 1
@@ -118,13 +141,19 @@ class Experience(ser.Serializable):
     def __eq__(self, other: 'Experience') -> bool:
         if not isinstance(other, Experience):
             return False
-        if self.state != other.state:
+        if isinstance(self._state, bytes) and isinstance(other._state, bytes): # pylint: disable=protected-access, line-too-long
+            if self._state != other._state: # pylint: disable=protected-access
+                return False
+        elif self.state != other.state:
             return False
         if self.action != other.action:
             return False
         if self.delay != other.delay:
             return False
-        if self.new_state != other.new_state:
+        if isinstance(self._state, bytes) and isinstance(other._state, bytes): # pylint: disable=protected-access, line-too-long
+            if self._state != other._state: # pylint: disable=protected-access
+                return False
+        elif self.new_state != other.new_state:
             return False
         if abs(self.reward_rec - other.reward_rec) > 1e-6:
             return False
