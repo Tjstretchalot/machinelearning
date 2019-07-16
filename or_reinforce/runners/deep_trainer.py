@@ -84,6 +84,11 @@ class SessionSettings(ser.Serializable):
 
 ser.register(SessionSettings)
 
+
+INIT_REGUL = 6
+PRE_ANNEAL_TFA_REGUL = 4
+POST_ANNEAL_TFA_REGUL = 1
+
 class TrainSettings(ser.Serializable):
     """The settings for training the deep bot
 
@@ -111,41 +116,47 @@ class TrainSettings(ser.Serializable):
         """Gets the current recommended settings for training the deep bot as well as possible.
         This can take some time."""
         train_seq = []
+
+
+        first_reguls = np.linspace(INIT_REGUL, PRE_ANNEAL_TFA_REGUL, 6)
         # first session short to avoid norms being way off
         train_seq.append(SessionSettings(tie_len=111, tar_ticks=1000, train_force_amount=1,
-                                         regul_factor=6, holdover=10000, alpha=0.6, beta=0.4,
+                                         regul_factor=first_reguls[0], holdover=10000, alpha=0.6, beta=0.4,
                                          balance=True, balance_technique='action'))
         for i in range(5): # 5 * 2k = 10k samples random
             train_seq.append(SessionSettings(tie_len=111, tar_ticks=2000, train_force_amount=1,
-                                             regul_factor=5 - i, holdover=10000, alpha=0.6, beta=0.4,
+                                             regul_factor=first_reguls[i+1], holdover=10000,
+                                             alpha=0.6, beta=0.4,
                                              balance=True, balance_technique='action'))
 
+        reguls = np.linspace(PRE_ANNEAL_TFA_REGUL, POST_ANNEAL_TFA_REGUL, 50)
         betas = np.linspace(0.4, 1, 50)
         for i, tfa in enumerate(np.linspace(1, 0.1, 50)):
             # 50*4k = 200k samples linearly decreasing tfa
             train_seq.extend([
                 SessionSettings(tie_len=111, tar_ticks=2000, train_force_amount=float(tfa),
-                                regul_factor=tfa, holdover=10000, alpha=0.6,
-                                beta=betas[i],
+                                regul_factor=float(reguls[i]), holdover=10000, alpha=0.6,
+                                beta=float(betas[i]),
                                 balance=True, balance_technique='action'),
                 SessionSettings(tie_len=111, tar_ticks=2000, train_force_amount=float(tfa),
-                                regul_factor=tfa, holdover=10000, alpha=0.6,
-                                beta=betas[i],
+                                regul_factor=float(reguls[i]), holdover=10000, alpha=0.6,
+                                beta=float(betas[i]),
                                 balance=True, balance_technique='action')
             ])
 
+        regul = POST_ANNEAL_TFA_REGUL
         # hopefully we've learned a pretty good policy at this point, just need to work
         # out some kinks
         for i in range(10): # 50*2k = 100k samples mixing 0.1 / 0.5 tfa and 0.1 regul
             for _ in range(4):
                 train_seq.append(
                     SessionSettings(tie_len=111, tar_ticks=2000, train_force_amount=0.1,
-                                    regul_factor=0.1, holdover=10000, alpha=0.6, beta=1.0,
+                                    regul_factor=regul, holdover=10000, alpha=0.6, beta=1.0,
                                     balance=True, balance_technique='action')
                 )
             train_seq.append(
                 SessionSettings(tie_len=111, tar_ticks=2000, train_force_amount=0.5,
-                                regul_factor=0.1, holdover=10000, alpha=0.6, beta=1.0,
+                                regul_factor=regul, holdover=10000, alpha=0.6, beta=1.0,
                                 balance=True, balance_technique='action')
             )
 
