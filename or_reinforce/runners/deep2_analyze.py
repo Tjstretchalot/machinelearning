@@ -151,7 +151,7 @@ def _run(args):
         else:
             markers = MODULE + '._all_same_markers'
             ots = MODULE + '._ots_argmax'
-            norm = MODULE + '._nonorm'
+            norm = MODULE + '._norm'
             cmap = 'Set1'
 
         pca_3d.plot_gen(traj, os.path.join(SAVEDIR, 'pca_3d'), True,
