@@ -22,14 +22,18 @@ import or_reinforce.utils.pca_deep2 as pca_deep2
 
 SAVEDIR = filetools.savepath()
 MODULE = 'or_reinforce.runners.deep2_analyze'
-MARKERS = [
-    mmarkers.MarkerStyle(marker='<', fillstyle='right'),
-    mmarkers.MarkerStyle(marker='>', fillstyle='left'),
-    mmarkers.MarkerStyle(marker='^', fillstyle='bottom'),
-    mmarkers.MarkerStyle(marker='v', fillstyle='top')
-]
+MARKERS = ['<', '>', '^', 'v']
+USE_MARKER_SHAPES = False
+"""True means we use color to signify expected reward and the marker
+shape to indicate which move. False to use color to indicate which
+move and to use the same marker shape for everything. Marker shape
+can be hard to distinguish"""
+
 def _ots():
     return pca_gen.MaxOTSMapping()
+
+def _ots_argmax():
+    return pca_gen.ArgmaxOTSMapping()
 
 def _markers():
     def markers(inp: np.ndarray):
@@ -40,8 +44,16 @@ def _markers():
         return res
     return markers
 
+def _all_same_markers():
+    def markers(inp: np.ndarray):
+        return [(np.ones(inp.shape, dtype='bool'), 'o')]
+    return markers
+
 def _norm():
     return mcolors.Normalize() # autoscale
+
+def _nonorm():
+    return mcolors.NoNorm()
 
 def get_unique_states(replay_path: str) -> torch.tensor:
     """Gets the unique encoded states that are in the given replay folder.
@@ -130,9 +142,21 @@ def _run(args):
     traj: pca_gen.PCTrajectoryGen = pca_gen.find_trajectory(network, train_pwl, 3)
     if args.pca3d:
         print('--performing 3d plot--')
+
+        if USE_MARKER_SHAPES:
+            markers = MODULE + '._markers'
+            ots = MODULE + '._ots'
+            norm = MODULE + '._norm'
+            cmap = 'cividis'
+        else:
+            markers = MODULE + '._all_same_markers'
+            ots = MODULE + '._ots_argmax'
+            norm = MODULE + '._nonorm'
+            cmap = 'Set1'
+
         pca_3d.plot_gen(traj, os.path.join(SAVEDIR, 'pca_3d'), True,
-                        MODULE + '._markers', MODULE + '._ots', MODULE + '._norm',
-                        'cividis', args.mpf, args.marker_size, None,
+                        markers, ots, norm, cmap,
+                        args.mpf, args.marker_size, None,
                         ['Input', 'Layer 1', 'Layer 2', 'Layer 3', 'Layer 4',
                             'Layer 5', 'Layer 6', 'Output'])
     print('--plotting top 2 pcs--')

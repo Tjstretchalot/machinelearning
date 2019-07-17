@@ -317,6 +317,15 @@ class MaxOTSMapping(OutputToScalarMapping):
         scalars[:] = outputs.max(dim=1)[0]
         return scalars
 
+class ArgmaxOTSMapping(OutputToScalarMapping):
+    """Gets the arg-maxed output. Useful for switching to a set-style"""
+    def __call__(self, outputs: torch.tensor,
+                 scalars: typing.Optional[torch.tensor] = None) -> torch.tensor:
+        if scalars is None:
+            return outputs.argmax(dim=1).float()
+        scalars[:] = outputs.argmax(dim=1).float()
+        return scalars
+
 def plot_trajectory(traj: PCTrajectoryGen, filepath: str, exist_ok: bool = False,
                     alpha: float = 0.5, square: bool = True, transparent: bool = True,
                     s: int = 1, ots: OutputToScalarMapping = SqueezeOTSMapping(),
