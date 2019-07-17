@@ -6,6 +6,7 @@ import shared.setup_torch # pylint: disable=unused-import
 import torch
 import numpy as np
 import matplotlib.colors as mcolors
+import matplotlib.markers as mmarkers
 
 import shared.measures.pca_gen as pca_gen
 import shared.measures.participation_ratio as pr
@@ -18,13 +19,14 @@ import or_reinforce.runners.deep_trainer as deep_trainer
 import or_reinforce.deep.deep2 as deep2
 import or_reinforce.utils.pca_deep2 as pca_deep2
 
+
 SAVEDIR = filetools.savepath()
 MODULE = 'or_reinforce.runners.deep2_analyze'
 MARKERS = [
-    {'marker': '<', 'fillstyle': 'right'},
-    {'marker': '>', 'fillstyle': 'left'},
-    {'marker': '^', 'fillstyle': 'bottom'},
-    {'marker': 'v', 'fillstyle': 'top'}
+    mmarkers.MarkerStyle(marker='<', fillstyle='right'),
+    mmarkers.MarkerStyle(marker='>', fillstyle='left'),
+    mmarkers.MarkerStyle(marker='^', fillstyle='bottom'),
+    mmarkers.MarkerStyle(marker='v', fillstyle='top')
 ]
 def _ots():
     return pca_gen.MaxOTSMapping()
