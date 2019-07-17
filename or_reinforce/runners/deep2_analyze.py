@@ -46,7 +46,7 @@ def _markers():
 
 def _all_same_markers():
     def markers(inp: np.ndarray):
-        return [(np.ones(inp.shape, dtype='bool'), 'o')]
+        return [(np.ones(inp.shape[0], dtype='bool'), 'o')]
     return markers
 
 def _norm():
