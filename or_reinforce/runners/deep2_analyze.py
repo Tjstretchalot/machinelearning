@@ -128,7 +128,7 @@ def _correctness_markers(network: deep2.Deep2Network, states: torch.tensor,
         if _is_correct(network, exp, nout):
             mask_cor[i] = 1
 
-    mask_incor = 1 - mask_cor
+    mask_incor = mask_cor == 0
 
     return [(mask_cor, 'o'), (mask_incor, 'X')]
 
