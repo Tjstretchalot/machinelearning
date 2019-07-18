@@ -86,10 +86,11 @@ def _get_correct(exp: replay_buffer.Experience):
     bot_iden = state.player_1_iden if exp.player_id == 1 else state.player_2_iden
     oth_iden = state.player_1_iden if exp.player_id == 2 else state.player_2_iden
     bot = state.iden_lookup[bot_iden]
-    oth = state.iden_lookup[oth_iden]
-    if bot.depth == oth.depth and (
-            min(abs(bot.y - oth.y), abs(bot.x - oth.x)) <= deep2.ENTITY_VIEW_DIST):
-        return deep2.MOVE_MAP
+    if oth_iden in state.iden_lookup:
+        oth = state.iden_lookup[oth_iden]
+        if bot.depth == oth.depth and (
+                min(abs(bot.y - oth.y), abs(bot.x - oth.x)) <= deep2.ENTITY_VIEW_DIST):
+            return deep2.MOVE_MAP
     scase = state.world.get_at_depth(bot.depth).staircase()
 
     res = []
@@ -169,7 +170,8 @@ def get_unique_states_with_exps(
     try:
         for _ in range(len(buffer)):
             exp: replay_buffer.Experience = next(buffer)
-            if all((existing != torch.from_numpy(exp.encoded_state)).sum() > 0 for existing in result):
+            if all((existing != torch.from_numpy(exp.encoded_state)).sum() > 0
+                    for existing in result):
                 result.append(torch.from_numpy(exp.encoded_state))
                 result_exps.append(exp)
     finally:
