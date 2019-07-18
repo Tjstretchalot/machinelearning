@@ -14,6 +14,9 @@ def main():
     parser.add_argument('--py3', action='store_true', help='changes executable to python3')
     parser.add_argument('--bot', type=str, default='or_reinforce.deep.deep1.deep1',
                         help='the module and callable of the bot to evaluate')
+    parser.add_argument('--gamestart', type=str,
+                        default='optimax_rogue.logic.worldgen.TogetherGameStartGenerator',
+                        help='Decides how the game is initialized')
     parser.add_argument('ip', type=str, help='the ip for everything to connect to.')
     parser.add_argument('port', type=int, help='the port for the server to be hosted on')
     parser.add_argument('gui_port', type=int, help='the GUI port to connect on')
@@ -31,7 +34,8 @@ def _run(args):
     procs = []
     procs.append(subprocess.Popen(
         [executable, '-m', 'optimax_rogue.server.main', '-hn', args.ip,
-         '-p', str(args.port), '-t', '0.016', '--dsunused', secret1, secret2]
+         '-p', str(args.port), '-t', '0.016', '--dsunused', secret1, secret2,
+         '--gamestart', args.gamestart]
     ))
 
     time.sleep(1)
