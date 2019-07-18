@@ -73,9 +73,9 @@ def _mark_cached_moves():
 def _cache_markers(markers: typing.List[typing.Tuple[np.ndarray, str]]):
     """Stores the given mask and marker combination so that it will be loaded
     by _mark_cached_moves and returned"""
-    os.makedirs(STORED_MARKER_FP, exist_ok=True)
-
-    metafile = os.path.join(STORED_MARKER_FP, 'meta.json')
+    if os.path.exists(STORED_MARKER_FP):
+        filetools.deldir(STORED_MARKER_FP)
+    os.makedirs(STORED_MARKER_FP)
     with open(metafile, 'w') as outfile:
         json.dump({
             'markers': list(mark for _, mark in markers)
