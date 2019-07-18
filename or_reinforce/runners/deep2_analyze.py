@@ -182,7 +182,7 @@ def get_unique_states_with_exps(
     finally:
         buffer.close()
 
-    cat_torch = torch.zeros((len(result_exps), result.values()[0].shape[0]))
+    cat_torch = torch.zeros((len(result_exps), list(result.values())[0].shape[0]))
     ctr = 0
     for arr in result.values():
         for res in arr:
