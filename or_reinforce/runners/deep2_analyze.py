@@ -169,7 +169,7 @@ def get_unique_states_with_exps(
     try:
         for _ in range(len(buffer)):
             exp: replay_buffer.Experience = next(buffer)
-            if all((existing != exp.encoded_state).sum() > 0 for existing in result):
+            if all((existing != torch.from_numpy(exp.encoded_state)).sum() > 0 for existing in result):
                 result.append(torch.from_numpy(exp.encoded_state))
                 result_exps.append(exp)
     finally:
