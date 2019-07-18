@@ -76,7 +76,7 @@ def _cache_markers(markers: typing.List[typing.Tuple[np.ndarray, str]]):
     if os.path.exists(STORED_MARKER_FP):
         filetools.deldir(STORED_MARKER_FP)
     os.makedirs(STORED_MARKER_FP)
-    metafile = os.path.join(STORED_MARKER_FP, metafile)
+    metafile = os.path.join(STORED_MARKER_FP, 'meta.json')
     with open(metafile, 'w') as outfile:
         json.dump({
             'markers': list(mark for _, mark in markers)
