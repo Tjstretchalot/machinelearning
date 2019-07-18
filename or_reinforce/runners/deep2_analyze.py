@@ -62,7 +62,7 @@ def _mark_cached_moves():
 
         marks = []
         with np.load(os.path.join(STORED_MARKER_FP, 'masks.npz')) as masks:
-            for i, marker in meta['markers']:
+            for i, marker in enumerate(meta['markers']):
                 mask = masks[f'mask_{i}']
                 marks.append((mask, marker))
         return marks
@@ -166,15 +166,15 @@ def get_unique_states_with_exps(
             torch.tensor, typing.List[replay_buffer.Experience]]:
     """Gets the unique states and a corresponding representative experience
     for each state."""
-    result = []
+    result = set()
     result_exps = []
+
     buffer = replay_buffer.FileReadableReplayBuffer(replay_path)
     try:
         for _ in range(len(buffer)):
             exp: replay_buffer.Experience = next(buffer)
-            if all((existing != torch.from_numpy(exp.encoded_state)).sum() > 0
-                   for existing in result):
-                result.append(torch.from_numpy(exp.encoded_state))
+            if torch.from_numpy(exp.encoded_state) not in result:
+                result.add(torch.from_numpy(exp.encoded_state))
                 result_exps.append(exp)
     finally:
         buffer.close()
