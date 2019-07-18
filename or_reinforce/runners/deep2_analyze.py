@@ -84,7 +84,7 @@ def _cache_markers(markers: typing.List[typing.Tuple[np.ndarray, str]]):
 
     np.savez_compressed(
         os.path.join(STORED_MARKER_FP, 'masks.npz'),
-        **dict((f'mask_{i}', mask) for i, (_, mask) in enumerate(markers)))
+        **dict((f'mask_{i}', mask) for i, (mask, _) in enumerate(markers)))
 
 def _get_correct(exp: replay_buffer.Experience):
     state: GameState = exp.state
