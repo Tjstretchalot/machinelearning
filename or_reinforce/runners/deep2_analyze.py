@@ -1,12 +1,13 @@
 """Analyzes a deep2 model"""
 import argparse
 import os
+import typing
+import json
 
 import shared.setup_torch # pylint: disable=unused-import
 import torch
 import numpy as np
 import matplotlib.colors as mcolors
-import matplotlib.markers as mmarkers
 
 import shared.measures.pca_gen as pca_gen
 import shared.measures.participation_ratio as pr
@@ -18,6 +19,9 @@ import or_reinforce.deep.replay_buffer as replay_buffer
 import or_reinforce.runners.deep_trainer as deep_trainer
 import or_reinforce.deep.deep2 as deep2
 import or_reinforce.utils.pca_deep2 as pca_deep2
+
+import optimax_rogue.logic.moves as moves
+from optimax_rogue.game.state import GameState
 
 
 SAVEDIR = filetools.savepath()
@@ -49,6 +53,83 @@ def _all_same_markers():
         return [(np.ones(inp.shape[0], dtype='bool'), 'o')]
     return markers
 
+STORED_MARKER_FP = os.path.join(SAVEDIR, 'cached_markers')
+def _mark_cached_moves():
+    def markers(inp: np.ndarray):
+        metafile = os.path.join(STORED_MARKER_FP, 'meta.json')
+        with open(metafile, 'r') as infile:
+            meta = json.load(infile)
+
+        marks = []
+        with np.load(os.path.join(STORED_MARKER_FP, 'masks.npz')) as masks:
+            for i, marker in meta['markers']:
+                mask = masks[f'mask_{i}']
+                marks.append((mask, marker))
+        return marks
+    return markers
+
+def _cache_markers(markers: typing.List[typing.Tuple[np.ndarray, str]]):
+    """Stores the given mask and marker combination so that it will be loaded
+    by _mark_cached_moves and returned"""
+    metafile = os.path.join(STORED_MARKER_FP, 'meta.json')
+    with open(metafile, 'w') as outfile:
+        json.dump({
+            'markers': list(mark for _, mark in markers)
+        }, outfile)
+
+    np.savez_compressed(
+        os.path.join(STORED_MARKER_FP, 'masks.npz'),
+        **dict((f'mask_{i}', mask) for i, (_, mask) in enumerate(markers)))
+
+def _get_correct(exp: replay_buffer.Experience):
+    state: GameState = exp.state
+    bot_iden = state.player_1_iden if exp.player_id == 1 else state.player_2_iden
+    oth_iden = state.player_1_iden if exp.player_id == 2 else state.player_2_iden
+    bot = state.iden_lookup[bot_iden]
+    oth = state.iden_lookup[oth_iden]
+    if bot.depth == oth.depth and (
+            min(abs(bot.y - oth.y), abs(bot.x - oth.x)) <= deep2.ENTITY_VIEW_DIST):
+        return deep2.MOVE_MAP
+    scase = state.world.get_at_depth(bot.depth).staircase()
+
+    res = []
+    if scase.x < bot.x:
+        res.append(moves.Move.Left)
+    elif scase.x > bot.x:
+        res.append(moves.Move.Right)
+    if scase.y < bot.y:
+        res.append(moves.Move.Up)
+    elif scase.y > bot.y:
+        res.append(moves.Move.Down)
+    return res
+
+def _is_correct(network: deep2.Deep2Network, exp: replay_buffer.Experience,
+                net_res: torch.tensor):
+    # net_res = network(torch.from_numpy(exp.encoded_state).unsqueeze(0))
+    net_action = deep2.MOVE_MAP[net_res.squeeze().argmax().item()]
+    return net_action in _get_correct(exp)
+
+def _correctness_markers(network: deep2.Deep2Network, states: torch.tensor,
+                         exps: typing.List[replay_buffer.Experience]):
+    """Returns markers that can be passed to _cache_markers that correspond to
+    a circle if the network makes the right decision and false otherwise.
+
+    Args:
+        network (deep2.Deep2Network): the network who is judging the states
+        exps (typing.List[Experience]): the experiences
+    """
+    net_outs = network(states)
+
+    mask_cor = np.zeros(states.shape[0], dtype='bool')
+    for i, (nout, exp) in enumerate(zip(net_outs, exps)):
+        if _is_correct(network, exp, nout):
+            mask_cor[i] = 1
+
+    mask_incor = 1 - mask_cor
+
+    return [(mask_cor, 'o'), (mask_incor, 'X')]
+
+
 def _norm():
     return mcolors.Normalize() # autoscale
 
@@ -67,22 +148,34 @@ def get_unique_states(replay_path: str) -> torch.tensor:
     """
     result = []
     buffer = replay_buffer.FileReadableReplayBuffer(replay_path)
-    encoders = dict()
-    out = torch.zeros(deep2.ENCODE_DIM)
     try:
         for _ in range(len(buffer)):
             exp: replay_buffer.Experience = next(buffer)
-            ent_id = exp.state.player_1_iden if exp.player_id == 1 else exp.state.player_2_iden
-            if ent_id not in encoders:
-                encoders[ent_id] = deep2.init_encoder(ent_id)
-            encoders[ent_id].encode(exp.state, None, out)
-            if all((existing != out).sum() > 0 for existing in result):
-                result.append(out)
-                out = torch.zeros(deep2.ENCODE_DIM)
+            if all((existing != exp.encoded_state).sum() > 0 for existing in result):
+                result.append(torch.from_numpy(exp.encoded_state))
     finally:
         buffer.close()
 
     return torch.cat(tuple(i.unsqueeze(0) for i in result), dim=0)
+
+def get_unique_states_with_exps(
+        replay_path: str) -> typing.Tuple[
+            torch.tensor, typing.List[replay_buffer.Experience]]:
+    """Gets the unique states and a corresponding representative experience
+    for each state."""
+    result = []
+    result_exps = []
+    buffer = replay_buffer.FileReadableReplayBuffer(replay_path)
+    try:
+        for _ in range(len(buffer)):
+            exp: replay_buffer.Experience = next(buffer)
+            if all((existing != exp.encoded_state).sum() > 0 for existing in result):
+                result.append(torch.from_numpy(exp.encoded_state))
+                result_exps.append(exp)
+    finally:
+        buffer.close()
+
+    return torch.cat(tuple(i.unsqueeze(0) for i in result), dim=0), result_exps
 
 def main():
     """Main entry point for analyzing the model"""
@@ -131,7 +224,7 @@ def _run(args):
         False, False, nthreads)
 
     network = deep2.Deep2Network.load(deep2.EVAL_MODELFILE)
-    states = get_unique_states(deep2.REPLAY_FOLDER)
+    states, exps = get_unique_states_with_exps(deep2.REPLAY_FOLDER)
     network.eval()
     with torch.no_grad():
         labels = network(states)
@@ -149,7 +242,9 @@ def _run(args):
             norm = MODULE + '._norm'
             cmap = 'cividis'
         else:
-            markers = MODULE + '._all_same_markers'
+            print('--caching markers--')
+            _cache_markers(_correctness_markers(network, states, exps))
+            markers = MODULE + '._mark_cached_moves'
             ots = MODULE + '._ots_argmax'
             norm = MODULE + '._norm'
             cmap = 'Set1'

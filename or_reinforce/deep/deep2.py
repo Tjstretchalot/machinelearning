@@ -65,13 +65,16 @@ PRED_WEIGHT = ALPHA ** CUTOFF
 
 INVALID_REWARD = -2
 
+STAIRCASE_VIEW_DIST = 3
+TILES_VIEW_DIST = 5
+ENTITY_VIEW_DIST = 3
 def init_encoder(entity_iden):
     """Create an instance of the encoder for this model attached to the given entity"""
     return encoders.MergedFlatEncoders(
         [
-            encoders.StaircaseDirectionOneHotEncoder(3, entity_iden),
-            encoders.SurroundBarrierEncoder(entity_iden, 5),
-            encoders.SurroundEntityEncoder(entity_iden, 3)
+            encoders.StaircaseDirectionOneHotEncoder(STAIRCASE_VIEW_DIST, entity_iden),
+            encoders.SurroundBarrierEncoder(entity_iden, TILES_VIEW_DIST),
+            encoders.SurroundEntityEncoder(entity_iden, ENTITY_VIEW_DIST)
         ]
     )
 
