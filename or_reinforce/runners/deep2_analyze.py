@@ -166,20 +166,30 @@ def get_unique_states_with_exps(
             torch.tensor, typing.List[replay_buffer.Experience]]:
     """Gets the unique states and a corresponding representative experience
     for each state."""
-    result = set()
+    result = dict()
     result_exps = []
 
     buffer = replay_buffer.FileReadableReplayBuffer(replay_path)
     try:
         for _ in range(len(buffer)):
             exp: replay_buffer.Experience = next(buffer)
-            if torch.from_numpy(exp.encoded_state) not in result:
-                result.add(torch.from_numpy(exp.encoded_state))
+            as_torch = torch.from_numpy(exp.encoded_state)
+            if hash(as_torch) not in result_exps:
+                result[hash(as_torch)] = [as_torch]
                 result_exps.append(exp)
+            elif all((existing != as_torch).sum() > 0 for existing in result[hash(as_torch)]):
+                result[hash(as_torch)].append(as_torch)
     finally:
         buffer.close()
 
-    return torch.cat(tuple(i.unsqueeze(0) for i in result), dim=0), result_exps
+    cat_torch = torch.zeros((len(result_exps), result.values()[0].shape[0]))
+    ctr = 0
+    for arr in result.values():
+        for res in arr:
+            cat_torch[ctr, :] = res
+            ctr += 1
+
+    return cat_torch, result_exps
 
 def main():
     """Main entry point for analyzing the model"""
