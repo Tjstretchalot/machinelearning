@@ -371,7 +371,7 @@ def _get_experiences_async(settings: TrainSettings, executable: str, port_min: i
         replay.close()
 
         if num_ticks_to_do <= 0:
-            print(f'get_experiences_async nothing to do (already at {settings.replay_folder}')
+            print(f'get_experiences_async nothing to do (already at {settings.replay_folder})')
             return
 
     replay_paths = [os.path.join(settings.bot_folder, f'replay_{i}') for i in range(nthreads)]

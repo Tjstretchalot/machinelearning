@@ -71,6 +71,8 @@ def _mark_cached_moves():
 def _cache_markers(markers: typing.List[typing.Tuple[np.ndarray, str]]):
     """Stores the given mask and marker combination so that it will be loaded
     by _mark_cached_moves and returned"""
+    os.makedirs(STORED_MARKER_FP, exist_ok=True)
+
     metafile = os.path.join(STORED_MARKER_FP, 'meta.json')
     with open(metafile, 'w') as outfile:
         json.dump({
@@ -171,7 +173,7 @@ def get_unique_states_with_exps(
         for _ in range(len(buffer)):
             exp: replay_buffer.Experience = next(buffer)
             if all((existing != torch.from_numpy(exp.encoded_state)).sum() > 0
-                    for existing in result):
+                   for existing in result):
                 result.append(torch.from_numpy(exp.encoded_state))
                 result_exps.append(exp)
     finally:
@@ -256,10 +258,10 @@ def _run(args):
                         markers, ots, norm, cmap,
                         args.mpf, args.marker_size, None,
                         ['Input', 'Layer 1', 'Layer 2', 'Layer 3', 'Layer 4',
-                            'Layer 5', 'Layer 6', 'Output'])
+                         'Layer 5', 'Layer 6', 'Output'])
     print('--plotting top 2 pcs--')
     pca_deep2.plot_trajectory(traj, os.path.join(SAVEDIR, 'pca'), exist_ok=True,
-                                transparent=False, norm=mcolors.Normalize(-0.2, 0.2))
+                              transparent=False, norm=mcolors.Normalize(-0.2, 0.2))
     print('--measuring participation ratio--')
     pr_traj: pr.PRTrajectory = pr.measure_pr_gen(network, train_pwl)
     print('--plotting participation ratio--')
