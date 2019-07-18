@@ -64,6 +64,8 @@ def _mark_cached_moves():
         with np.load(os.path.join(STORED_MARKER_FP, 'masks.npz')) as masks:
             for i, marker in enumerate(meta['markers']):
                 mask = masks[f'mask_{i}']
+                if mask.dtype != np.dtype('bool'):
+                    raise ValueError(f'expected bool, got {mask.dtype} for i={i} ({mask})')
                 marks.append((mask, marker))
         return marks
     return markers
@@ -154,8 +156,9 @@ def get_unique_states(replay_path: str) -> torch.tensor:
     try:
         for _ in range(len(buffer)):
             exp: replay_buffer.Experience = next(buffer)
-            if all((existing != exp.encoded_state).sum() > 0 for existing in result):
-                result.append(torch.from_numpy(exp.encoded_state))
+            as_torch = torch.from_numpy(exp.encoded_state)
+            if all((existing != as_torch).sum() > 0 for existing in result):
+                result.append(as_torch)
     finally:
         buffer.close()
 
@@ -166,7 +169,7 @@ def get_unique_states_with_exps(
             torch.tensor, typing.List[replay_buffer.Experience]]:
     """Gets the unique states and a corresponding representative experience
     for each state."""
-    result = dict()
+    result = []
     result_exps = []
 
     buffer = replay_buffer.FileReadableReplayBuffer(replay_path)
@@ -174,22 +177,13 @@ def get_unique_states_with_exps(
         for _ in range(len(buffer)):
             exp: replay_buffer.Experience = next(buffer)
             as_torch = torch.from_numpy(exp.encoded_state)
-            if hash(as_torch) not in result_exps:
-                result[hash(as_torch)] = [as_torch]
+            if all((existing != as_torch).sum() > 0 for existing in result):
+                result.append(as_torch)
                 result_exps.append(exp)
-            elif all((existing != as_torch).sum() > 0 for existing in result[hash(as_torch)]):
-                result[hash(as_torch)].append(as_torch)
     finally:
         buffer.close()
 
-    cat_torch = torch.zeros((len(result_exps), list(result.values())[0][0].shape[0]))
-    ctr = 0
-    for arr in result.values():
-        for res in arr:
-            cat_torch[ctr, :] = res
-            ctr += 1
-
-    return cat_torch, result_exps
+    return torch.cat(tuple(i.unsqueeze(0) for i in result), dim=0), result_exps
 
 def main():
     """Main entry point for analyzing the model"""
