@@ -94,13 +94,13 @@ def _get_correct(exp: replay_buffer.Experience):
     scase = state.world.get_at_depth(bot.depth).staircase()
 
     res = []
-    if scase.x < bot.x:
+    if scase[0] < bot.x:
         res.append(moves.Move.Left)
-    elif scase.x > bot.x:
+    elif scase[0] > bot.x:
         res.append(moves.Move.Right)
-    if scase.y < bot.y:
+    if scase[1] < bot.y:
         res.append(moves.Move.Up)
-    elif scase.y > bot.y:
+    elif scase[1] > bot.y:
         res.append(moves.Move.Down)
     return res
 
@@ -251,6 +251,7 @@ def _run(args):
             norm = MODULE + '._norm'
             cmap = 'Set1'
 
+        print('--beginning plot--')
         pca_3d.plot_gen(traj, os.path.join(SAVEDIR, 'pca_3d'), True,
                         markers, ots, norm, cmap,
                         args.mpf, args.marker_size, None,
