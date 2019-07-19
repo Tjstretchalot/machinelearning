@@ -356,7 +356,12 @@ class MaskedParentScene(Scene):
             print(f'  samples: {masked_samples[:10]}')
             print(f'  labels: {masked_labels[:10]}')
             masked_scatter = frame_worker.init_scatter(
-                mpl_data.axes, masked_samples, masked_labels
+                mpl_data.axes, masked_samples, masked_labels,
+                (
+                    frame_worker.markers(snapsh.projected_sample_labels.numpy())[self.mask]
+                    if hasattr(frame_worker, 'markers')
+                    else None
+                )
             )
             masked_scatter.remove()
         self.masked_mpl = MaskedMPLData(
@@ -486,7 +491,7 @@ class FrameWorker:
 
         self.mpl_data = MPLData(fig, ax, axtitle, scatter, 0)
 
-    def init_scatter(self, ax, data, labels):
+    def init_scatter(self, ax, data, labels, known_markers=None):
         """Initializes the scatter plot for the given data and labels"""
         return ax.scatter(data[:, 0], data[:, 1], data[:, 2],
                           s=self.s, c=labels, cmap=mpl.cm.get_cmap('Set1'))
@@ -625,14 +630,17 @@ class GenFrameWorker(FrameWorker):
         self.norm = norm
         self.cmap = cmap
 
-    def init_scatter(self, ax, data, labels):
+    def init_scatter(self, ax, data, labels, known_markers=None):
         return _init_scatter_gen(self.scalar_mapping, self.cmap, self.norm, self.markers,
-                                 ax, data, labels, self.s)
+                                 ax, data, labels, self.s, known_markers)
 
-def _init_scatter_gen(scalar_mapping, cmap, norm, markers, ax, data, labels, s):
+def _init_scatter_gen(scalar_mapping, cmap, norm, markers, ax, data, labels, s,
+                      known_markers=None):
+    if known_markers is None:
+        known_markers = markers(labels)
     scatters = []
 
-    for mask, marker in markers(labels):
+    for mask, marker in known_markers:
         masked_data = data[mask]
         marker = marker if isinstance(marker, dict) else {'marker': marker}
         scatters.append(
