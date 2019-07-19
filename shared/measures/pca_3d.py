@@ -319,7 +319,7 @@ class MaskedParentScene(Scene):
             False we mask by modifying only a subset of the parent scatter
     """
     def __init__(self, masked_traj, outer_traj_snapshot_ind, mask, children,
-                 mask_by_remove = True):
+                 mask_by_remove=True):
         super().__init__(sum((child.duration for child in children), 0), 'MaskedParentScene')
         self.masked_traj = masked_traj
         self.outer_traj_snapshot_ind = outer_traj_snapshot_ind
@@ -346,8 +346,8 @@ class MaskedParentScene(Scene):
             snapsh = traj.snapshots[self.outer_traj_snapshot_ind]
             masked_scatter = frame_worker.init_scatter(
                 mpl_data.axes,
-                snapsh.projected_samples.numpy(),
-                snapsh.projected_sample_labels.numpy())
+                snapsh.projected_samples[self.mask].contiguous().numpy().copy(),
+                snapsh.projected_sample_labels[self.mask].contiguous().numpy().copy())
         self.masked_mpl = MaskedMPLData(
             mpl_data, masked_scatter, self.outer_traj_snapshot_ind)
         for child in self.children:
