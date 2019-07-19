@@ -245,6 +245,13 @@ def find_clusters(samples: np.ndarray) -> Clusters:
         sums[lbl_ind] = masked.sum(axis=0)
         num_per[lbl_ind] = masked.shape[0]
 
+    if unique_labels.shape[0] == 1 and num_per[0] == samples.shape[0]:
+        return Clusters(
+            samples,
+            np.zeros((0, samples.shape[1])),
+            np.zeros(0),
+            {'clustering': args, 'other': args_meta}
+        )
 
     # calculate centers of each cluster
     centers = (
