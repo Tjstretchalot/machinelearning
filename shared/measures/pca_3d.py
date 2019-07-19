@@ -12,6 +12,7 @@ import traceback
 import io
 import sys
 import typing
+import bisect
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.cm as mcm
@@ -25,6 +26,7 @@ import shared.myqueue as myq
 import shared.async_anim as saa
 import shared.typeutils as tus
 import shared.measures.utils as mutils
+import shared.measures.clusters as clusters
 import time as time_
 from multiprocessing import Process
 import queue
@@ -36,6 +38,8 @@ INPUT_SPIN_TIME = 12500
 OTHER_SPIN_TIME = 10000
 INTERP_SPIN_TIME = 6000
 ZOOM_TIME = 2000
+CLUSTER_ZOOM_TIME = 2000
+CLUSTER_SPIN_TIME = 10000
 
 NUM_WORKERS = 6#3
 FRAMES_PER_SYNC = 10
@@ -223,6 +227,48 @@ class InterpScene(Scene):
         self.start_np = None
         self.delta_np = None
 
+class MaskedParentScene(Scene):
+    """Describes a scene which accepts child scenes. The children scenes, however,
+    see a different trajectory than the overall trajectory. This is initially intended
+    to support zooming into clusters.
+
+    Attributes:
+        masked_traj (union[pca_ff.PCTrajectoryFF, pca_gen.PCTrajectoryGen]):
+            the trajectory that children see
+        children (list[Scene]): the children scenes
+        children_end_times (list[int]): when the children scenes end
+    """
+    def __init__(self, masked_traj, children):
+        super().__init__(sum((child.duration for child in children), 0), 'MaskedParentScene')
+        self.masked_traj = masked_traj
+        self.children = children
+
+        self.children_end_times = []
+        cursum = 0
+        for child in self.children:
+            cursum += child.duration
+            self.children_end_times.append(cursum)
+
+    def start(self, traj, mpl_data):
+        for child in self.children:
+            child.start(self.masked_traj, mpl_data)
+
+    def _get_scene_and_time(self, time_ms):
+        millis = time_ms
+
+        scene_loc = bisect.bisect_right(self.children_end_times, millis)
+        if scene_loc < 0 or scene_loc >= len(self.children):
+            raise ValueError(f'there is no scene at time {time_ms}')
+        prev_end_time = self.children_end_times[scene_loc - 1] if scene_loc > 0 else 0
+        return self.children[scene_loc], millis - prev_end_time
+
+    def apply(self, traj, mpl_data, time_ms):
+        child, millis = self._get_scene_and_time(time_ms)
+        child.apply(self.masked_traj, mpl_data, millis)
+
+    def finish(self, traj, mpl_data):
+        for child in self.children:
+            child.finish(self.masked_traj, mpl_data)
 
 class FrameWorker:
     """Describes a frame worker. They are initialized each with enough information to make
@@ -243,6 +289,8 @@ class FrameWorker:
         frame_size (tuple[float, float]): size of the frame in inches
         dpi (int): number of pixels per inch
         scenes (list[Scene]): the scenes which this worker has
+        scene_end_times (list[int]): a strictly increasing list of the times at which
+            each scene ends, for performance.
 
         traj (pca_ff.PCTrajectoryFF): the trajectory we are plotting
         s (float): the size of the markers
@@ -263,6 +311,12 @@ class FrameWorker:
         self.s = s
 
         self.mpl_data = None
+
+        self.scene_end_times = []
+        sumtime = 0
+        for scene in scenes:
+            sumtime += scene.duration
+            self.scene_end_times.append(sumtime)
 
     def init_mpl(self):
         """Initializes the figure, axes, title, and scatter plot"""
@@ -303,12 +357,11 @@ class FrameWorker:
         """Determines the which scene and when in the scene the given frame is"""
         millis = frame_num * self.ms_per_frame
 
-        for _, scene in enumerate(self.scenes):
-            if millis < scene.duration:
-                return scene, millis
-            millis -= scene.duration
-
-        raise ValueError(f'there is no frame {frame_num}')
+        scene_loc = bisect.bisect_right(self.scene_end_times, millis)
+        if scene_loc < 0 or scene_loc >= len(self.scenes):
+            raise ValueError(f'there is no frame {frame_num}')
+        prev_end_time = self.scene_end_times[scene_loc - 1] if scene_loc > 0 else 0
+        return self.scenes[scene_loc], millis - prev_end_time
 
     def do_all(self):
         """This is meant to be the function that is invoked immediately after initialization,
@@ -407,10 +460,10 @@ def _init_scatter_gen(scalar_mapping, cmap, norm, markers, ax, data, labels, s):
         marker = marker if isinstance(marker, dict) else {'marker': marker}
         scatters.append(
             (mask,
-            ax.scatter(masked_data[:, 0], masked_data[:, 1], masked_data[:, 2],
-                       s=s, c=scalar_mapping(torch.from_numpy(labels[mask])),
-                       cmap=mcm.get_cmap(cmap),
-                       norm=norm, **marker))
+             ax.scatter(masked_data[:, 0], masked_data[:, 1], masked_data[:, 2],
+                        s=s, c=scalar_mapping(torch.from_numpy(labels[mask])),
+                        cmap=mcm.get_cmap(cmap),
+                        norm=norm, **marker))
         )
 
     return ConcattedScatter(scatters)
@@ -440,11 +493,12 @@ def _frame_worker_target_gen(img_queue, rec_queue, send_queue, ms_per_frame, fra
         ms_per_frame (float): milliseconds per frame
         frame_size (tuple[float, float]): size of the frame in inches
         dpi (int): pixels per inch
-        scenes (list[Scene]): the scenes we are trying to render
+        scenes (list[Scene]): the scenes we are trying to render.
         traj (PCTrajectoryGen): the trajectory we are rending
         s (float): the size of the markers
         markers (str): the path to the module and name of the marker producing callable
-        scalar_mapping (str): the path to the module and name of the scalar mapping producing callable
+        scalar_mapping (str): the path to the module and name of the scalar mapping
+            producing callable
         norm (str): the path to the module and name of the norm producing callable
         cmap (str): the name of the color map to use
         logfile (str): where to store errors if they occur
@@ -536,13 +590,56 @@ class FrameWorkerConnection:
         """Notifies this worker that it should render the specified frame number"""
         self.send_queue.put(('img', frame_num))
 
+def _get_cluster_scene(traj: typing.Union[pca_ff.PCTrajectoryFF, pca_gen.PCTrajectoryGen],
+                       layer_ind: int, layer_name: str, clust: clusters.Clusters,
+                       clust_ind: int) -> Scene:
+    rel_snap = traj.snapshots[layer_ind]
+    mask = torch.from_numpy(clust.labels) == clust_ind
+    if isinstance(rel_snap, pca_ff.PCTrajectoryFFSnapshot):
+        rel_snap: pca_ff.PCTrajectoryFFSnapshot
+
+        new_snap = pca_ff.PCTrajectoryFFSnapshot(
+            rel_snap.principal_vectors, rel_snap.principal_values,
+            rel_snap.projected_samples[mask].contiguous(),
+            rel_snap.projected_sample_labels[mask].contiguous()
+        )
+        new_traj = pca_ff.PCTrajectoryFF([new_snap])
+    else:
+        rel_snap: pca_gen.PCTrajectoryGenSnapshot
+
+        new_snap = pca_gen.PCTrajectoryGenSnapshot(
+            rel_snap.principal_vectors, rel_snap.principal_values,
+            rel_snap.projected_samples[mask].contiguous(),
+            rel_snap.projected_sample_labels[mask].contiguous()
+        )
+        new_traj = pca_gen.PCTrajectoryGen([new_snap])
+
+    old_zoom = (
+        rel_snap.projected_samples.min().item(),
+        rel_snap.projected_samples.max().item()
+    )
+    new_zoom = (
+        new_snap.projected_samples.min().item(),
+        new_snap.projected_samples.max().item()
+    )
+
+    title = f'{layer_name} Cluster {clust_ind+1}'
+    return MaskedParentScene(new_traj, [
+        ZoomScene(CLUSTER_ZOOM_TIME, title, old_zoom, new_zoom, 0),
+        RotationScene(CLUSTER_SPIN_TIME, title, 0),
+        ZoomScene(CLUSTER_ZOOM_TIME, title, new_zoom, old_zoom, 0)
+    ])
+
+
 def _plot_ff_real(traj: typing.Union[pca_ff.PCTrajectoryFF, pca_gen.PCTrajectoryGen],
                   outfile: str, exist_ok: bool,
                   frame_time: float = 16.67, layer_names: typing.Optional[typing.List] = None,
                   snapshots: typing.Optional[typing.List[typing.Tuple[int, int, dict]]] = None,
                   video: bool = True,
                   markers: str = None, scalar_mapping: str = None, norm: str = None,
-                  cmap: str = None, s: float = 3):
+                  cmap: str = None, s: float = 3,
+                  clusts: typing.Optional[
+                      typing.List[typing.Optional[clusters.Clusters]]] = None):
     """Plots the given feed-forward pc trajectory
 
     Args:
@@ -569,6 +666,10 @@ def _plot_ff_real(traj: typing.Union[pca_ff.PCTrajectoryFF, pca_gen.PCTrajectory
             for PCTrajectoryGen
             NOTE: currently cmap on PCTrajectoryFF only effects the snapshots
         s (float): the size of the markers
+        clusts (list[optional[Clusters]], optional): if provided, it must have the same length as
+            there are layers in the trajectory. For each corresponding index with clusters, a zoom
+            in to the cluster will be shown in the final video.
+
     """
     if not isinstance(traj, (pca_ff.PCTrajectoryFF, pca_gen.PCTrajectoryGen)):
         raise ValueError(f'expected traj is pca_ff.PCTrajectoryFF, got {traj} (type={type(traj)})')
@@ -588,6 +689,14 @@ def _plot_ff_real(traj: typing.Union[pca_ff.PCTrajectoryFF, pca_gen.PCTrajectory
         cmap = cmap or 'cividis'
     else:
         cmap = cmap or 'Set1'
+
+    if clusts is not None:
+        tus.check(clusts=(clusts, (tuple, list)))
+        tus.check_list((type(None), clusters.Clusters), clusts=clusts)
+        if len(clusts) != traj.num_layers:
+            raise ValueError(f'expected clusters is length {traj.num_layers}, got {len(clusts)}')
+    else:
+        clusts = list(None for i in traj.num_layers)
 
     if snapshots is None:
         snapshots = []
@@ -710,6 +819,16 @@ def _plot_ff_real(traj: typing.Union[pca_ff.PCTrajectoryFF, pca_gen.PCTrajectory
         RotationScene(INPUT_SPIN_TIME, layer_names[0] if layer_names is not None else '', 0)
     ]
 
+    if clusts[0] is not None:
+        clust: clusters.Clusters = clusts[0]
+        for clust_ind in range(clust.num_clusters):
+            scenes.append(_get_cluster_scene(
+                traj,
+                0,
+                layer_names[0] if layer_names is not None else '',
+                clust,
+                clust_ind))
+
     curdat = traj.snapshots[0].projected_samples.numpy()
     curlim = (float(curdat.min()), float(curdat.max()))
     for i in range(1, traj.num_layers):
@@ -734,6 +853,15 @@ def _plot_ff_real(traj: typing.Union[pca_ff.PCTrajectoryFF, pca_gen.PCTrajectory
             layer_names[i] if layer_names is not None else '',
             i
         ))
+        if clusts[i] is not None:
+            clust: clusters.Clusters = clusts[i]
+            for clust_ind in range(clust.num_clusters):
+                scenes.append(_get_cluster_scene(
+                    traj,
+                    i,
+                    layer_names[i] if layer_names is not None else '',
+                    clust,
+                    clust_ind))
         curlim = newlim
         curdat = newdat
 
@@ -872,7 +1000,8 @@ def plot_ff(traj: pca_ff.PCTrajectoryFF, outfile: str, exist_ok: bool,
 def plot_gen(traj: pca_gen.PCTrajectoryGen, outfile: str, exist_ok: bool,
              markers: str, scalar_mapping: str, norm: str,
              cmap: str = 'cividis', frame_time: float = 16.67, s: float = 1,
-             digestor: NPDigestor = None, layer_names: typing.List[str] = None):
+             digestor: NPDigestor = None, layer_names: typing.List[str] = None,
+             clusts: typing.Optional[typing.List[typing.Optional[clusters.Clusters]]]):
     """Plots the given general trajectory in 3-dimensions in a smooth video,
     optionally using the given digestor. Because the general trajectories do
     not have any assumptions about the output layer, more information is needed
@@ -910,8 +1039,10 @@ def plot_gen(traj: pca_gen.PCTrajectoryGen, outfile: str, exist_ok: bool,
 
     if digestor is None:
         _plot_ff_real(traj, outfile, exist_ok, frame_time, layer_names,
-                      None, True, markers, scalar_mapping, norm, cmap, s)
+                      None, True, markers, scalar_mapping, norm, cmap, s, clusts)
         return
+    elif clusts is not None:
+        raise NotImplementedError('passing clusters to digestor')
 
     sample_labels = traj.snapshots[0].projected_sample_labels.numpy()
     args = []

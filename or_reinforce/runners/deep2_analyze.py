@@ -12,6 +12,7 @@ import matplotlib.colors as mcolors
 import shared.measures.pca_gen as pca_gen
 import shared.measures.participation_ratio as pr
 import shared.measures.pca_3d as pca_3d
+import shared.measures.clusters as clusters
 import shared.filetools as filetools
 import shared.pwl as pwl
 
@@ -206,6 +207,8 @@ def main():
                         help='create the pca3d video')
     parser.add_argument('--mpf', type=float, default=16.67, help='milliseconds per frame')
     parser.add_argument('--marker_size', type=float, default=32, help='marker size for video')
+    parser.add_argument('--noclusts', action='store_true',
+                        help='disables auto clustering and cluster zoom for pca3d video')
     args = parser.parse_args()
     _run(args)
 
@@ -258,12 +261,20 @@ def _run(args):
             norm = MODULE + '._norm'
             cmap = 'Set1'
 
+        print('--generating clusters--')
+        clusts = []
+        for lyr, snap in enumerate(traj.snapshots):
+            print(f'--generating clusters for layer {lyr}--')
+            snap: pca_gen.PCTrajectoryGenSnapshot
+            lyr_clusts: clusters.Clusters = clusters.find_clusters(snap.projected_samples.numpy())
+            clusts.append(lyr_clusts)
+            print(f'--found {lyr_clusts.num_clusters} clusters for layer {lyr}--')
         print('--beginning plot--')
         pca_3d.plot_gen(traj, os.path.join(SAVEDIR, 'pca_3d'), True,
                         markers, ots, norm, cmap,
                         args.mpf, args.marker_size, None,
                         ['Input', 'Layer 1', 'Layer 2', 'Layer 3', 'Layer 4',
-                         'Layer 5', 'Layer 6', 'Output'])
+                         'Layer 5', 'Layer 6', 'Output'], clusts)
     print('--plotting top 2 pcs--')
     pca_deep2.plot_trajectory(traj, os.path.join(SAVEDIR, 'pca'), exist_ok=True,
                               transparent=False, norm=mcolors.Normalize(-0.2, 0.2))
