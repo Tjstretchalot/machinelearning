@@ -336,7 +336,7 @@ class MaskedParentScene(Scene):
             self.children_end_times.append(cursum)
 
     def start(self, frame_worker, traj, mpl_data: MPLData):
-        if self.mask_by_remove:
+        if not self.mask_by_remove:
             masked_scatter = MaskedScatter(
                 mpl_data.scatter,
                 self.mask,
