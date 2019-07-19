@@ -239,9 +239,9 @@ class MaskedScatter:
             which are not specified.
     """
     def __init__(self, real_scatter, mask, oth_points):
-        if isinstance(mask, torch.tensor):
+        if hasattr(mask, 'numpy')
             mask = mask.numpy()
-        if isinstance(oth_points, torch.tensor):
+        if hasattr(oth_points, 'numpy')
             oth_points = oth_points.numpy()
 
         self.real_scatter = real_scatter
