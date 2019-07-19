@@ -125,6 +125,11 @@ class Scene:
         if mpl_data.title.get_text() != self.title:
             mpl_data.title.set_text(self.title)
 
+    def applied_last_but_not_this(self, traj, mpl_data):
+        """Called when this was the last scene to be applied but
+        it won't be applied on the next frame we are rendering"""
+        pass
+
     def finish(self, traj, mpl_data):
         """Called after all frames have finished rendering"""
         pass
@@ -308,6 +313,7 @@ class MaskedParentScene(Scene):
         masked_mpl (MaskedMPLData): the masked mpl data, initialized on start
         children (list[Scene]): the children scenes
         children_end_times (list[int]): when the children scenes end
+        last_child (int): the index in children of the last scene we rendered
 
         mask_by_remove (bool): if True, we mask by hiding the parent scatter, if
             False we mask by modifying only a subset of the parent scatter
@@ -320,6 +326,7 @@ class MaskedParentScene(Scene):
         self.mask = mask
         self.masked_mpl = None
         self.children = children
+        self.last_child = None
         self.mask_by_remove = False
 
         self.children_end_times = []
@@ -348,22 +355,43 @@ class MaskedParentScene(Scene):
 
     def _get_scene_and_time(self, time_ms):
         millis = time_ms
+        if self.last_child:
+            if self.last_child == 0 and millis < self.children_end_times[0]:
+                return 0, self.children[0], millis
+            if (millis > self.children_end_times[self.last_child - 1] and
+                    millis < self.children_end_times[self.last_child]):
+                return (self.last_child, self.children[self.last_child],
+                        millis - self.children_end_times[self.last_child - 1])
 
         scene_loc = bisect.bisect_right(self.children_end_times, millis)
         if scene_loc < 0 or scene_loc >= len(self.children):
             raise ValueError(f'there is no scene at time {time_ms}')
         prev_end_time = self.children_end_times[scene_loc - 1] if scene_loc > 0 else 0
-        return self.children[scene_loc], millis - prev_end_time
+        return scene_loc, self.children[scene_loc], millis - prev_end_time
 
     def apply(self, traj, mpl_data, time_ms):
         if self.mask_by_remove:
-            mpl_data.scatter.set_visible(False)
-            self.masked_mpl.scatter.set_visible(True)
-        child, millis = self._get_scene_and_time(time_ms)
+            if not self.masked_mpl.scatter.get_visible():
+                mpl_data.scatter.set_visible(False)
+                self.masked_mpl.scatter.set_visible(True)
+        child_ind, child, millis = self._get_scene_and_time(time_ms)
+        if self.last_child and self.last_child != child_ind:
+            self.children[self.last_child].applied_last_but_not_this(
+                self.masked_traj, self.masked_mpl)
+        self.last_child = child_ind
         child.apply(self.masked_traj, self.masked_mpl, millis)
+
+    def applied_last_but_not_this(self, traj, mpl_data):
         if self.mask_by_remove:
             mpl_data.scatter.set_visible(True)
             self.masked_mpl.scatter.set_visible(False)
+
+        if self.last_child:
+            self.children[self.last_child].applied_last_but_not_this(
+                self.masked_traj, self.masked_mpl
+            )
+            self.last_child = None
+
 
     def finish(self, traj, mpl_data):
         for child in self.children:
@@ -391,6 +419,8 @@ class FrameWorker:
         scene_end_times (list[int]): a strictly increasing list of the times at which
             each scene ends, for performance.
 
+        last_scene (int, optional): the scene we rendered last frame by index
+
         traj (pca_ff.PCTrajectoryFF): the trajectory we are plotting
         s (float): the size of the markers
 
@@ -406,6 +436,7 @@ class FrameWorker:
         self.frame_size = frame_size
         self.dpi = dpi
         self.scenes = scenes
+        self.last_scene = None
         self.traj = traj
         self.s = s
 
@@ -455,12 +486,19 @@ class FrameWorker:
     def get_scene_and_time(self, frame_num):
         """Determines the which scene and when in the scene the given frame is"""
         millis = frame_num * self.ms_per_frame
+        if self.last_scene:
+            if self.last_scene == 0 and millis < self.scene_end_times[0]:
+                return 0, self.scenes[0], millis
+            if (millis > self.scene_end_times[self.last_scene - 1] and
+                    millis < self.scene_end_times[self.last_scene]):
+                return (self.last_scene, self.scenes[self.last_scene],
+                        millis - self.scene_end_times[self.last_scene - 1])
 
         scene_loc = bisect.bisect_right(self.scene_end_times, millis)
         if scene_loc < 0 or scene_loc >= len(self.scenes):
             raise ValueError(f'there is no frame {frame_num}')
         prev_end_time = self.scene_end_times[scene_loc - 1] if scene_loc > 0 else 0
-        return self.scenes[scene_loc], millis - prev_end_time
+        return scene_loc, self.scenes[scene_loc], millis - prev_end_time
 
     def do_all(self):
         """This is meant to be the function that is invoked immediately after initialization,
@@ -481,7 +519,10 @@ class FrameWorker:
                 raise ValueError(f'unexpected message: {msg}')
 
             frame_num = msg[1]
-            scene, time = self.get_scene_and_time(frame_num)
+            scene_ind, scene, time = self.get_scene_and_time(frame_num)
+            if self.last_scene and self.last_scene != scene_ind:
+                self.scenes[self.last_scene].applied_last_but_not_this(self.traj, self.mpl_data)
+            self.last_scene = scene_ind
             scene.apply(self.traj, self.mpl_data, time)
             hndl = io.BytesIO()
             self.mpl_data.figure.set_size_inches(*self.frame_size)
