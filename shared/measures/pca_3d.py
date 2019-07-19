@@ -350,18 +350,12 @@ class MaskedParentScene(Scene):
             snapsh = traj.snapshots[self.outer_traj_snapshot_ind]
             masked_samples = snapsh.projected_samples.numpy()[self.mask].copy()
             masked_labels = snapsh.projected_sample_labels.numpy()[self.mask].copy()
-            print('[frame worker] masking via creating a new masked scatter'
-                  + f'; mask amt = {self.mask.sum().item()}/'
-                  + f'{snapsh.projected_samples.shape[0]}. after. sample:')
-            print(f'  samples: {masked_samples[:10]}')
-            print(f'  labels: {masked_labels[:10]}')
             known_markers = None
             if hasattr(frame_worker, 'markers'):
                 known_markers = frame_worker.markers(snapsh.projected_sample_labels.numpy())
                 for i in range(len(known_markers)):
                     markermask, marker = known_markers[i]
                     known_markers[i] = markermask[self.mask], marker
-                    print(f'marker {marker}, masked: {known_markers[i][0]}')
             masked_scatter = frame_worker.init_scatter(
                 mpl_data.axes, masked_samples, masked_labels, known_markers
             )
@@ -643,6 +637,8 @@ def _init_scatter_gen(scalar_mapping, cmap, norm, markers, ax, data, labels, s,
     scatters = []
 
     for mask, marker in known_markers:
+        if mask.sum() == 0:
+            continue
         masked_data = data[mask]
         marker = marker if isinstance(marker, dict) else {'marker': marker}
         scatters.append(
