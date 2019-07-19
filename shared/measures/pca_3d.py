@@ -239,9 +239,9 @@ class MaskedScatter:
             which are not specified.
     """
     def __init__(self, real_scatter, mask, oth_points):
-        if hasattr(mask, 'numpy')
+        if hasattr(mask, 'numpy'):
             mask = mask.numpy()
-        if hasattr(oth_points, 'numpy')
+        if hasattr(oth_points, 'numpy'):
             oth_points = oth_points.numpy()
 
         self.real_scatter = real_scatter
