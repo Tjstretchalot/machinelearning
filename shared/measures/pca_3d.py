@@ -355,13 +355,12 @@ class MaskedParentScene(Scene):
                   + f'{snapsh.projected_samples.shape[0]}. after. sample:')
             print(f'  samples: {masked_samples[:10]}')
             print(f'  labels: {masked_labels[:10]}')
+            known_markers = None
+            if hasattr(frame_worker, 'markers'):
+                known_markers = (
+                    frame_worker.markers(snapsh.projected_sample_labels.numpy())[self.mask])
             masked_scatter = frame_worker.init_scatter(
-                mpl_data.axes, masked_samples, masked_labels,
-                (
-                    frame_worker.markers(snapsh.projected_sample_labels.numpy())[self.mask]
-                    if hasattr(frame_worker, 'markers')
-                    else None
-                )
+                mpl_data.axes, masked_samples, masked_labels, known_markers
             )
             masked_scatter.remove()
         self.masked_mpl = MaskedMPLData(
