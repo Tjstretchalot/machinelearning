@@ -1001,7 +1001,7 @@ def plot_gen(traj: pca_gen.PCTrajectoryGen, outfile: str, exist_ok: bool,
              markers: str, scalar_mapping: str, norm: str,
              cmap: str = 'cividis', frame_time: float = 16.67, s: float = 1,
              digestor: NPDigestor = None, layer_names: typing.List[str] = None,
-             clusts: typing.Optional[typing.List[typing.Optional[clusters.Clusters]]]):
+             clusts: typing.Optional[typing.List[typing.Optional[clusters.Clusters]]] = None):
     """Plots the given general trajectory in 3-dimensions in a smooth video,
     optionally using the given digestor. Because the general trajectories do
     not have any assumptions about the output layer, more information is needed
