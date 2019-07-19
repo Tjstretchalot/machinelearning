@@ -248,8 +248,8 @@ def find_clusters(samples: np.ndarray) -> Clusters:
     if unique_labels.shape[0] == 1 and num_per[0] == samples.shape[0]:
         return Clusters(
             samples,
-            np.zeros((0, samples.shape[1])),
-            np.zeros(0),
+            np.zeros((0, samples.shape[1]), dtype='float32'),
+            np.zeros(0, dtype='float32'),
             {'clustering': args, 'other': args_meta}
         )
 
