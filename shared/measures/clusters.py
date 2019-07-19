@@ -247,8 +247,8 @@ def find_clusters(samples: np.ndarray) -> Clusters:
     centers = (
         sums / (
             num_per.astype('float64')
-            .reshape(1, num_per.shape[0])
-            .repeat(sums.shape[1], 0)
+            .reshape(num_per.shape[0], 1)
+            .repeat(sums.shape[1], 1)
         ).astype(samples.dtype)
     )
 
