@@ -357,10 +357,10 @@ class MaskedParentScene(Scene):
             print(f'  labels: {masked_labels[:10]}')
             known_markers = None
             if hasattr(frame_worker, 'markers'):
-                all_markers = frame_worker.markers(snapsh.projected_sample_labels.numpy())
-                print(f'all_markers subset = {all_markers[:5]}')
-                print(f'mask dtype = {self.mask.dtype}')
-                known_markers = all_markers[self.mask]
+                known_markers = frame_worker.markers(snapsh.projected_sample_labels.numpy())
+                for i in range(len(known_markers)):
+                    markermask, marker = known_markers[i]
+                    known_markers[i] = markermask[self.mask], marker
             masked_scatter = frame_worker.init_scatter(
                 mpl_data.axes, masked_samples, masked_labels, known_markers
             )
