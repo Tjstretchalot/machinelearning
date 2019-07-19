@@ -564,6 +564,15 @@ class ConcattedScatter:
 
         raise AttributeError(f'no such attribute: {name}')
 
+    def get_visible(self):
+        """Gets if this scatter is visible"""
+        return self.scatters[0][1].get_visible()
+
+    def set_visible(self, val):
+        """Sets the visibility of this scatter"""
+        for _, scatter in self.scatters:
+            scatter.set_visible(val)
+
 
 class GenFrameWorker(FrameWorker):
     """A frame worker which accepts a general pc trajectory and the associated
