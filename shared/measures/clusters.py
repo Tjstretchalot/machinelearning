@@ -208,7 +208,7 @@ def find_clusters(samples: np.ndarray) -> Clusters:
         'eps': None,
         'xi': 0.05,
         'predecessor_correction': True,
-        'min_cluster_size': None,
+        'min_cluster_size': 0.2,
         'algorithm': 'auto',
         'leaf_size': 30,
         'n_jobs': None
@@ -235,10 +235,13 @@ def find_clusters(samples: np.ndarray) -> Clusters:
     # we are also going to want to centers of our labels
     sums = np.zeros((unique_labels.shape[0], samples.shape[1]), dtype='float64')
     num_per = np.zeros(unique_labels.shape[0], dtype='int64')
+    new_labels = np.zeros(samples.shape[0], dtype='int32')
 
     # crunch numbers
     for lbl_ind, lbl in enumerate(unique_labels):
-        masked = samples[labels == lbl]
+        mask = labels == lbl
+        new_labels[mask] = lbl
+        masked = samples[mask]
         sums[lbl_ind] = masked.sum(axis=0)
         num_per[lbl_ind] = masked.shape[0]
 
@@ -252,11 +255,7 @@ def find_clusters(samples: np.ndarray) -> Clusters:
         )
     ).astype(samples.dtype)
 
-    # recalculate labels for points based on the nearest center
-    labels = sklearn.metrics.pairwise_distances_argmin(
-        samples, centers, metric=args_meta['nearest_center_metric']).astype('int32')
-
-    return Clusters(samples, centers, labels, {
+    return Clusters(samples, centers, new_labels, {
         'clustering': args,
         'other': args_meta
     })

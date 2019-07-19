@@ -227,6 +227,53 @@ class InterpScene(Scene):
         self.start_np = None
         self.delta_np = None
 
+class MaskedScatter:
+    """Something that acts like a scatter plot from matplotlib
+    except that it's masked in such a way that changing the offsets
+    corresponds to changing a masked set of offsets.
+
+    Attributes:
+        real_scatter (?): the 3d scatter reference
+        mask (ndarray[num_samples], bool): the mask on the points
+        oth_points (ndarray[num_samples, 3], uint8): the default value for points
+            which are not specified.
+    """
+    def __init__(self, real_scatter, mask, oth_points):
+        self.real_scatter = real_scatter
+        self.mask = mask
+        self.oth_points = oth_points
+
+    def __setattr__(self, name, value):
+        if name != '_offsets3d':
+            super().__setattr__(name, value)
+            return
+
+        maskx, masky, maskz = value
+        newx = self.oth_points[:, 0].copy()
+        newy = self.oth_points[:, 1].copy()
+        newz = self.oth_points[:, 2].copy()
+        newx[self.mask] = maskx
+        newy[self.mask] = masky
+        newz[self.mask] = maskz
+        self.real_scatter._offsets3d = (newx, newy, newz) # pylint: disable=protected-access
+
+
+class MaskedMPLData:
+    """A wrapper on another MPLData that applies a mask.
+
+    Attributes:
+        real_mpl (MPLData): the real mpl data this is masking
+        masked_scatter (MaskedScatter): the scatter but masked
+    """
+    def __init__(self, real_mpl, masked_scatter):
+        self.real_mpl = real_mpl
+        self.masked_scatter = masked_scatter
+
+    def __getattr__(self, name):
+        if name == 'scatter':
+            return super().__getattribute__('masked_scatter')
+        return getattr(self.real_mpl, name)
+
 class MaskedParentScene(Scene):
     """Describes a scene which accepts child scenes. The children scenes, however,
     see a different trajectory than the overall trajectory. This is initially intended
@@ -235,12 +282,19 @@ class MaskedParentScene(Scene):
     Attributes:
         masked_traj (union[pca_ff.PCTrajectoryFF, pca_gen.PCTrajectoryGen]):
             the trajectory that children see
+        outer_traj_snapshot_ind (int): the index in the outer snapshot to use
+        mask (tensor[num_samples], dtype uint8): the mask on the outer tensor
+            that we are using
+        masked_mpl (MaskedMPLData): the masked mpl data, initialized on start
         children (list[Scene]): the children scenes
         children_end_times (list[int]): when the children scenes end
     """
-    def __init__(self, masked_traj, children):
+    def __init__(self, masked_traj, outer_traj_snapshot_ind, mask, children):
         super().__init__(sum((child.duration for child in children), 0), 'MaskedParentScene')
         self.masked_traj = masked_traj
+        self.outer_traj_snapshot_ind = outer_traj_snapshot_ind
+        self.mask = mask
+        self.masked_mpl = None
         self.children = children
 
         self.children_end_times = []
@@ -249,9 +303,16 @@ class MaskedParentScene(Scene):
             cursum += child.duration
             self.children_end_times.append(cursum)
 
-    def start(self, traj, mpl_data):
+    def start(self, traj, mpl_data: MPLData):
+        self.masked_mpl = MaskedMPLData(
+            mpl_data,
+            MaskedScatter(
+                mpl_data.scatter,
+                self.mask,
+                traj.snapshots[self.outer_traj_snapshot_ind].projected_samples
+                ))
         for child in self.children:
-            child.start(self.masked_traj, mpl_data)
+            child.start(self.masked_traj, self.masked_mpl)
 
     def _get_scene_and_time(self, time_ms):
         millis = time_ms
@@ -264,11 +325,11 @@ class MaskedParentScene(Scene):
 
     def apply(self, traj, mpl_data, time_ms):
         child, millis = self._get_scene_and_time(time_ms)
-        child.apply(self.masked_traj, mpl_data, millis)
+        child.apply(self.masked_traj, self.masked_mpl, millis)
 
     def finish(self, traj, mpl_data):
         for child in self.children:
-            child.finish(self.masked_traj, mpl_data)
+            child.finish(self.masked_traj, self.masked_mpl)
 
 class FrameWorker:
     """Describes a frame worker. They are initialized each with enough information to make
@@ -624,7 +685,7 @@ def _get_cluster_scene(traj: typing.Union[pca_ff.PCTrajectoryFF, pca_gen.PCTraje
     )
 
     title = f'{layer_name} Cluster {clust_ind+1}'
-    return MaskedParentScene(new_traj, [
+    return MaskedParentScene(new_traj, layer_ind, mask.numpy().astype('bool'), [
         ZoomScene(CLUSTER_ZOOM_TIME, title, old_zoom, new_zoom, 0),
         RotationScene(CLUSTER_SPIN_TIME, title, 0),
         ZoomScene(CLUSTER_ZOOM_TIME, title, new_zoom, old_zoom, 0)
