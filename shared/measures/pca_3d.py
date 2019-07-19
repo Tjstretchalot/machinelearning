@@ -317,6 +317,7 @@ class MaskedParentScene(Scene):
 
         mask_by_remove (bool): if True, we mask by hiding the parent scatter, if
             False we mask by modifying only a subset of the parent scatter
+        mask_visible (bool): True if our masked scatter is currently visibly
     """
     def __init__(self, masked_traj, outer_traj_snapshot_ind, mask, children,
                  mask_by_remove=True):
@@ -328,6 +329,7 @@ class MaskedParentScene(Scene):
         self.children = children
         self.last_child = None
         self.mask_by_remove = mask_by_remove
+        self.mask_visible = False
 
         self.children_end_times = []
         cursum = 0
@@ -348,7 +350,7 @@ class MaskedParentScene(Scene):
                 mpl_data.axes,
                 snapsh.projected_samples[self.mask].contiguous().numpy().copy(),
                 snapsh.projected_sample_labels[self.mask].contiguous().numpy().copy())
-            masked_scatter.set_visible(False)
+            masked_scatter.remove()
         self.masked_mpl = MaskedMPLData(
             mpl_data, masked_scatter, self.outer_traj_snapshot_ind)
         for child in self.children:
@@ -371,10 +373,12 @@ class MaskedParentScene(Scene):
         return scene_loc, self.children[scene_loc], millis - prev_end_time
 
     def apply(self, traj, mpl_data, time_ms):
-        if self.mask_by_remove:
-            if not self.masked_mpl.scatter.get_visible():
-                mpl_data.scatter.set_visible(False)
-                self.masked_mpl.scatter.set_visible(True)
+        if self.mask_by_remove and not self.mask_visible:
+            mpl_data.scatter.remove()
+            if hasattr(self.masked_mpl.scatter, 'add_to_axes'):
+                self.masked_mpl.scatter.add_to_axes(mpl_data.axes)
+            else:
+                mpl_data.axes.add_collection(self.masked_mpl.scatter)
         child_ind, child, millis = self._get_scene_and_time(time_ms)
         if self.last_child and self.last_child != child_ind:
             self.children[self.last_child].applied_last_but_not_this(
@@ -384,8 +388,11 @@ class MaskedParentScene(Scene):
 
     def applied_last_but_not_this(self, traj, mpl_data):
         if self.mask_by_remove:
-            mpl_data.scatter.set_visible(True)
-            self.masked_mpl.scatter.set_visible(False)
+            self.masked_mpl.scatter.remove()
+            if hasattr(mpl_data.scatter, 'add_to_axes'):
+                mpl_data.scatter.add_to_axes(mpl_data.axes)
+            else:
+                mpl_data.axes.add_collection(mpl_data.scatter)
 
         if self.last_child:
             self.children[self.last_child].applied_last_but_not_this(
@@ -570,6 +577,14 @@ class ConcattedScatter:
         """Sets the visibility of this scatter"""
         for _, scatter in self.scatters:
             scatter.set_visible(val)
+
+    def remove(self):
+        for _, scatter in self.scatters:
+            scatter.remove()
+
+    def add_to_axes(self, ax):
+        for _, scatter in self.scatters:
+            ax.add_collection(scatter)
 
 
 class GenFrameWorker(FrameWorker):
