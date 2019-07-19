@@ -115,7 +115,7 @@ class Scene:
         self.duration = duration
         self.title = title
 
-    def start(self, traj, mpl_data):
+    def start(self, frame_worker, traj, mpl_data):
         """Called before any frames start rendering"""
         pass
 
@@ -195,7 +195,7 @@ class InterpScene(Scene):
         self.delta_np = None
         self.lims = None
 
-    def start(self, traj, mpl_data):
+    def start(self, frame_worker, traj, mpl_data):
         self.start_np = traj.snapshots[self.from_snapshot_idx].projected_samples[:, :3].numpy()
         end_np = traj.snapshots[self.to_snapshot_idx].projected_samples[:, :3].numpy()
         self.delta_np = end_np - self.start_np
@@ -269,15 +269,30 @@ class MaskedMPLData:
     Attributes:
         real_mpl (MPLData): the real mpl data this is masking
         masked_scatter (MaskedScatter): the scatter but masked
+        snapshot_offset (int): the offset from the true snapshot idx
     """
-    def __init__(self, real_mpl, masked_scatter):
+    def __init__(self, real_mpl, masked_scatter, snapshot_offset):
         self.real_mpl = real_mpl
         self.masked_scatter = masked_scatter
+        self.snapshot_offset = snapshot_offset
 
     def __getattr__(self, name):
-        if name == 'scatter':
-            return super().__getattribute__('masked_scatter')
         return getattr(self.real_mpl, name)
+
+    @property
+    def scatter(self):
+        """Returns the underlying scatter plot but masked"""
+        return self.masked_scatter
+
+    @property
+    def current_snapsh_idx(self):
+        """Returns the current snapshot relative to the masked trajectory"""
+        return self.real_mpl.current_snapsh_idx - self.snapshot_offset
+
+    @current_snapsh_idx.setter
+    def current_snapsh_idx(self, value):
+        """Sets the current snapshot relative to the masked trajectory"""
+        self.real_mpl.current_snapsh_idx = value + self.snapshot_offset
 
 class MaskedParentScene(Scene):
     """Describes a scene which accepts child scenes. The children scenes, however,
@@ -293,14 +308,19 @@ class MaskedParentScene(Scene):
         masked_mpl (MaskedMPLData): the masked mpl data, initialized on start
         children (list[Scene]): the children scenes
         children_end_times (list[int]): when the children scenes end
+
+        mask_by_remove (bool): if True, we mask by hiding the parent scatter, if
+            False we mask by modifying only a subset of the parent scatter
     """
-    def __init__(self, masked_traj, outer_traj_snapshot_ind, mask, children):
+    def __init__(self, masked_traj, outer_traj_snapshot_ind, mask, children,
+                 mask_by_remove = True):
         super().__init__(sum((child.duration for child in children), 0), 'MaskedParentScene')
         self.masked_traj = masked_traj
         self.outer_traj_snapshot_ind = outer_traj_snapshot_ind
         self.mask = mask
         self.masked_mpl = None
         self.children = children
+        self.mask_by_remove = False
 
         self.children_end_times = []
         cursum = 0
@@ -308,14 +328,21 @@ class MaskedParentScene(Scene):
             cursum += child.duration
             self.children_end_times.append(cursum)
 
-    def start(self, traj, mpl_data: MPLData):
-        self.masked_mpl = MaskedMPLData(
-            mpl_data,
-            MaskedScatter(
+    def start(self, frame_worker, traj, mpl_data: MPLData):
+        if self.mask_by_remove:
+            masked_scatter = MaskedScatter(
                 mpl_data.scatter,
                 self.mask,
                 traj.snapshots[self.outer_traj_snapshot_ind].projected_samples
-                ))
+            )
+        else:
+            snapsh = traj.snapshots[self.outer_traj_snapshot_ind]
+            masked_scatter = frame_worker.init_scatter(
+                mpl_data.axes,
+                snapsh.projected_samples.numpy(),
+                snapsh.projected_sample_labels.numpy())
+        self.masked_mpl = MaskedMPLData(
+            mpl_data, masked_scatter, self.outer_traj_snapshot_ind)
         for child in self.children:
             child.start(self.masked_traj, self.masked_mpl)
 
@@ -329,8 +356,14 @@ class MaskedParentScene(Scene):
         return self.children[scene_loc], millis - prev_end_time
 
     def apply(self, traj, mpl_data, time_ms):
+        if self.mask_by_remove:
+            mpl_data.scatter.set_visible(False)
+            self.masked_mpl.scatter.set_visible(True)
         child, millis = self._get_scene_and_time(time_ms)
         child.apply(self.masked_traj, self.masked_mpl, millis)
+        if self.mask_by_remove:
+            mpl_data.scatter.set_visible(True)
+            self.masked_mpl.scatter.set_visible(False)
 
     def finish(self, traj, mpl_data):
         for child in self.children:
@@ -412,7 +445,7 @@ class FrameWorker:
     def start_scenes(self):
         """Starts all the scenes"""
         for scene in self.scenes:
-            scene.start(self.traj, self.mpl_data)
+            scene.start(self, self.traj, self.mpl_data)
 
     def finish_scenes(self):
         """Finishes all the scenes"""
