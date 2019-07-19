@@ -322,6 +322,8 @@ class MaskedParentScene(Scene):
     def __init__(self, masked_traj, outer_traj_snapshot_ind, mask, children,
                  mask_by_remove=True):
         super().__init__(sum((child.duration for child in children), 0), 'MaskedParentScene')
+        if mask.dtype != 'uint8':
+            raise ValueError(f'expected mask dtype is uint8, got {mask.dtype}')
         self.masked_traj = masked_traj
         self.outer_traj_snapshot_ind = outer_traj_snapshot_ind
         self.mask = mask
