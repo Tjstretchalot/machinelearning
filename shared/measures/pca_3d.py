@@ -308,7 +308,7 @@ class MaskedParentScene(Scene):
         masked_traj (union[pca_ff.PCTrajectoryFF, pca_gen.PCTrajectoryGen]):
             the trajectory that children see
         outer_traj_snapshot_ind (int): the index in the outer snapshot to use
-        mask (tensor[num_samples], dtype uint8): the mask on the outer tensor
+        mask (ndarray[num_samples], dtype bool): the mask on the outer tensor
             that we are using
         masked_mpl (MaskedMPLData): the masked mpl data, initialized on start
         children (list[Scene]): the children scenes
@@ -322,8 +322,8 @@ class MaskedParentScene(Scene):
     def __init__(self, masked_traj, outer_traj_snapshot_ind, mask, children,
                  mask_by_remove=True):
         super().__init__(sum((child.duration for child in children), 0), 'MaskedParentScene')
-        if mask.dtype != 'uint8':
-            raise ValueError(f'expected mask dtype is uint8, got {mask.dtype}')
+        if mask.dtype != np.dtype('bool'):
+            raise ValueError(f'expected mask dtype is bool, got {mask.dtype}')
         self.masked_traj = masked_traj
         self.outer_traj_snapshot_ind = outer_traj_snapshot_ind
         self.mask = mask
@@ -348,8 +348,8 @@ class MaskedParentScene(Scene):
             )
         else:
             snapsh = traj.snapshots[self.outer_traj_snapshot_ind]
-            masked_samples = snapsh.projected_samples[self.mask].contiguous().numpy().copy()
-            masked_labels = snapsh.projected_sample_labels[self.mask].contiguous().numpy().copy()
+            masked_samples = snapsh.projected_samples.numpy()[self.mask].copy()
+            masked_labels = snapsh.projected_sample_labels.numpy()[self.mask].copy()
             print('[frame worker] masking via creating a new masked scatter'
                   + f'; mask amt = {self.mask.sum().item()}/'
                   + f'{snapsh.projected_samples.shape[0]}. after. sample:')
