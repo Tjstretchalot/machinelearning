@@ -374,6 +374,7 @@ class MaskedParentScene(Scene):
 
     def apply(self, traj, mpl_data, time_ms):
         if self.mask_by_remove and not self.mask_visible:
+            self.mask_visible = True
             mpl_data.scatter.remove()
             if hasattr(self.masked_mpl.scatter, 'add_to_axes'):
                 self.masked_mpl.scatter.add_to_axes(mpl_data.axes)
@@ -388,6 +389,7 @@ class MaskedParentScene(Scene):
 
     def applied_last_but_not_this(self, traj, mpl_data):
         if self.mask_by_remove:
+            self.mask_visible = False
             self.masked_mpl.scatter.remove()
             if hasattr(mpl_data.scatter, 'add_to_axes'):
                 mpl_data.scatter.add_to_axes(mpl_data.axes)
