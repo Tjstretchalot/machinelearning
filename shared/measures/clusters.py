@@ -249,7 +249,7 @@ def find_clusters(samples: np.ndarray) -> Clusters:
         return Clusters(
             samples,
             np.zeros((0, samples.shape[1]), dtype='float32'),
-            np.zeros((samples.shape[0],), dtype='float32'),
+            np.zeros((samples.shape[0],), dtype='int32'),
             {'clustering': args, 'other': args_meta}
         )
 
