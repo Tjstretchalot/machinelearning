@@ -327,7 +327,7 @@ class MaskedParentScene(Scene):
         self.masked_mpl = None
         self.children = children
         self.last_child = None
-        self.mask_by_remove = False
+        self.mask_by_remove = mask_by_remove
 
         self.children_end_times = []
         cursum = 0
