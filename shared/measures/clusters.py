@@ -244,7 +244,13 @@ def find_clusters(samples: np.ndarray) -> Clusters:
 
 
     # calculate centers of each cluster
-    centers = (sums / num_per.astype('float64')).astype(samples.dtype)
+    centers = (
+        sums / (
+            num_per.astype('float64')
+            .reshape(1, num_per.shape[0])
+            .repeat(sums.shape[1], 0)
+        ).astype(samples.dtype)
+    )
 
     # recalculate labels for points based on the nearest center
     labels = sklearn.metrics.pairwise_distances_argmin(
