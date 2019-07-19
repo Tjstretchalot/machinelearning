@@ -344,7 +344,7 @@ class MaskedParentScene(Scene):
         self.masked_mpl = MaskedMPLData(
             mpl_data, masked_scatter, self.outer_traj_snapshot_ind)
         for child in self.children:
-            child.start(self.masked_traj, self.masked_mpl)
+            child.start(frame_worker, self.masked_traj, self.masked_mpl)
 
     def _get_scene_and_time(self, time_ms):
         millis = time_ms
@@ -577,8 +577,8 @@ def _frame_worker_target(img_queue, rec_queue, send_queue, ms_per_frame, frame_s
         worker.do_all()
     except:
         traceback.print_exc()
-        with open(logfile, 'r') as infile:
-            traceback.print_exc(file=infile)
+        with open(logfile, 'w') as outfile:
+            traceback.print_exc(file=outfile)
         raise
 
 def _frame_worker_target_gen(img_queue, rec_queue, send_queue, ms_per_frame, frame_size,
@@ -613,8 +613,8 @@ def _frame_worker_target_gen(img_queue, rec_queue, send_queue, ms_per_frame, fra
         worker.do_all()
     except:
         traceback.print_exc()
-        with open(logfile, 'r') as infile:
-            traceback.print_exc(file=infile)
+        with open(logfile, 'w') as outfile:
+            traceback.print_exc(file=outfile)
         raise
 
 class FrameWorkerConnection:
