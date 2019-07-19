@@ -344,10 +344,13 @@ class MaskedParentScene(Scene):
             )
         else:
             snapsh = traj.snapshots[self.outer_traj_snapshot_ind]
+            print('frame worker using remove-and-replace scatter (from '
+                  + f'{snapsh.projected_samples.shape[0]} to {self.mask.sum().item()} samples)')
             masked_scatter = frame_worker.init_scatter(
                 mpl_data.axes,
                 snapsh.projected_samples[self.mask].contiguous().numpy().copy(),
                 snapsh.projected_sample_labels[self.mask].contiguous().numpy().copy())
+            masked_scatter.set_visible(False)
         self.masked_mpl = MaskedMPLData(
             mpl_data, masked_scatter, self.outer_traj_snapshot_ind)
         for child in self.children:
