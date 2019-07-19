@@ -346,10 +346,16 @@ class MaskedParentScene(Scene):
             )
         else:
             snapsh = traj.snapshots[self.outer_traj_snapshot_ind]
+            masked_samples = snapsh.projected_samples[self.mask].contiguous().numpy().copy()
+            masked_labels = snapsh.projected_sample_labels[self.mask].contiguous().numpy().copy()
+            print('[frame worker] masking via creating a new masked scatter'
+                  + f'; mask amt = {self.mask.sum().item()}/'
+                  + f'{snapsh.projected_samples.shape[0]}. after. sample:')
+            print(f'  samples: {masked_samples[:10]}')
+            print(f'  labels: {masked_labels[:10]}')
             masked_scatter = frame_worker.init_scatter(
-                mpl_data.axes,
-                snapsh.projected_samples[self.mask].contiguous().numpy().copy(),
-                snapsh.projected_sample_labels[self.mask].contiguous().numpy().copy())
+                mpl_data.axes, masked_samples, masked_labels
+            )
             masked_scatter.remove()
         self.masked_mpl = MaskedMPLData(
             mpl_data, masked_scatter, self.outer_traj_snapshot_ind)
@@ -581,10 +587,12 @@ class ConcattedScatter:
             scatter.set_visible(val)
 
     def remove(self):
+        """Removes this from the parent"""
         for _, scatter in self.scatters:
             scatter.remove()
 
     def add_to_axes(self, ax):
+        """Adds this back to the parent"""
         for _, scatter in self.scatters:
             ax.add_collection(scatter)
 
