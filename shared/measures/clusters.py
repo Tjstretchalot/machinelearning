@@ -220,7 +220,7 @@ def find_clusters(samples: np.ndarray) -> Clusters:
     }
 
     # compute clusters
-    precomp = sklearn.metrics.pairwise_distances(args_meta['precompute_metric'])
+    precomp = sklearn.metrics.pairwise_distances(samples, metric=args_meta['precompute_metric'])
     optics = sklearn.cluster.OPTICS(**args)
     optics.fit(precomp)
 
