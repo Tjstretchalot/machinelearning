@@ -361,6 +361,7 @@ class MaskedParentScene(Scene):
                 for i in range(len(known_markers)):
                     markermask, marker = known_markers[i]
                     known_markers[i] = markermask[self.mask], marker
+                    print(f'marker {marker}, masked: {known_markers[i][0]}')
             masked_scatter = frame_worker.init_scatter(
                 mpl_data.axes, masked_samples, masked_labels, known_markers
             )
