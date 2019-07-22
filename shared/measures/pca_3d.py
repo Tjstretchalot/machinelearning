@@ -220,9 +220,7 @@ class InterpScene(Scene):
         self.start_np = traj.snapshots[self.from_snapshot_idx].projected_samples[:, :3].numpy()
         end_np = traj.snapshots[self.to_snapshot_idx].projected_samples[:, :3].numpy()
         self.delta_np = end_np - self.start_np
-        minlim = min(float(self.start_np.min()), float(end_np.min()))
-        maxlim = max(float(self.start_np.max()), float(end_np.max()))
-        self.lims = (minlim, maxlim)
+        self.lims = _get_square_bounds(traj.snapshots[self.from_snapshot_idx].projected_samples)
 
 
     def apply(self, traj, mpl_data, time_ms):
@@ -237,9 +235,9 @@ class InterpScene(Scene):
         data = self.start_np + self.delta_np * interp_perc
         mpl_data.current_snapsh_idx = -1
         mpl_data.scatter._offsets3d = (data[:, 0], data[:, 1], data[:, 2]) # pylint: disable=protected-access
-        mpl_data.axes.set_xlim(*self.lims)
-        mpl_data.axes.set_ylim(*self.lims)
-        mpl_data.axes.set_zlim(*self.lims)
+        mpl_data.axes.set_xlim(*self.lims[0])
+        mpl_data.axes.set_ylim(*self.lims[1])
+        mpl_data.axes.set_zlim(*self.lims[2])
 
         rot = 45 + 360 * rot_perc
         mpl_data.axes.view_init(30, rot)
