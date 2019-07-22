@@ -151,11 +151,15 @@ class ZoomScene(Scene):
         if isinstance(start_zoom[0], (int, float)):
             self.start_zoom = (start_zoom, start_zoom, start_zoom)
         else:
+            if len(start_zoom) != 3:
+                raise ValueError(f'expected 3 (x, y) pairs in start_zoom, got {start_zoom}')
             self.start_zoom = start_zoom
 
         if isinstance(end_zoom[0], (int, float)):
             self.end_zoom = (end_zoom, end_zoom, end_zoom)
         else:
+            if len(end_zoom) != 3:
+                raise ValueError(f'expected 3 (x, y) pairs in end_zoom, got {end_zoom}')
             self.end_zoom = end_zoom
         self.snapshot_idx = snapshot_idx
 
@@ -785,6 +789,7 @@ class FrameWorkerConnection:
         self.send_queue.put(('img', frame_num))
 
 def _get_square_bounds(pts: torch.tensor) -> typing.Tuple[typing.Tuple[float, float]]:
+    tus.check_tensors(pts=(pts, ('samples', 'features'), (torch.float32, torch.float64)))
     nfeatures = pts.shape[1]
     pts_min = pts.min(dim=0)[0] # tensor[nfeatures]
     pts_max = pts.max(dim=0)[0] # tensor[nfeatures]
@@ -793,10 +798,17 @@ def _get_square_bounds(pts: torch.tensor) -> typing.Tuple[typing.Tuple[float, fl
     centers = torch.cat((pts_min.reshape(1, nfeatures), # tensor[nfeatures]
                         pts_max.reshape(1, nfeatures)), dim=0).mean(dim=0)
 
-    return tuple(
+    result = tuple(
         (_min.item(), _max.item())
         for (_min, _max) in zip(centers - size, centers + size)
     )
+
+    if len(result) != nfeatures:
+        raise ValueError('_get_square_bounds post-condition failed: '
+                         + f'result={result}, len(result)={len(result)}, '
+                         + f'nfeatures={nfeatures}, pts.shape = {pts.shape}')
+
+    return result
 
 def _get_cluster_scene(traj: typing.Union[pca_ff.PCTrajectoryFF, pca_gen.PCTrajectoryGen],
                        layer_ind: int, layer_name: str, clust: clusters.Clusters,
