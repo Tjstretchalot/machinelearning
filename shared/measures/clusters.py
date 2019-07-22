@@ -13,6 +13,7 @@ import sklearn.metrics
 if not hasattr(sklearn.cluster, 'OPTICS'):
     raise ValueError(f'update scikit-learn to >=0.21.2 for clustering!')
 
+import hdbscan
 import shared.typeutils as tus
 import shared.filetools as filetools
 import shared.measures.utils as mutils
@@ -198,45 +199,19 @@ class Clusters:
 def find_clusters(samples: np.ndarray) -> Clusters:
     """Attempts to locate clusters in the given samples in the most generic
     way possible."""
-    args = {
-        'min_samples': 5,
-        'max_eps_style': 0.5, # 50% of max eucl. pairwise dist
-        'metric': 'precomputed',
-        'p': 2,
-        'metric_params': None,
-        'cluster_method': 'xi',
-        'eps': None,
-        'xi': 0.05,
-        'predecessor_correction': True,
-        'min_cluster_size': 0.2,
-        'algorithm': 'auto',
-        'leaf_size': 30,
-        'n_jobs': None
-    }
+    args = {}
     args_meta = {
-        'precompute_metric': 'minkowski',
-        'method': 'sklearn.cluster.OPTICS',
-        'nearest_center_metric': 'euclidean' # this is for associating points AFTER clusters found
+        'method': 'hdbscan.HDBSCAN'
     }
 
 
-    # compute clusters
-    precomp = sklearn.metrics.pairwise_distances(samples, metric=args_meta['precompute_metric'])
-    if 'max_eps_style' in args:
-        if args['max_eps_style'] == 'inf':
-            args['max_eps'] = np.inf
-        elif args['max_eps_style'] == 'mean':
-            args['max_eps'] = precomp.mean()
-        else:
-            args['max_eps'] = args['max_eps_style'] * precomp.max()
-        del args['max_eps_style']
-    optics = sklearn.cluster.OPTICS(**args) # pylint: disable=unexpected-keyword-arg
-    optics.fit(precomp)
+    clusts = hdbscan.HDBSCAN(**args)
+    clusts.fit(samples)
 
     # optics makes a heirarchy, but we wish to flatten that. first we determine
     # how many clusters there are which actually have points belonging to them
     # -1 is for unclustered points, which we will clsuter later
-    labels = optics.labels_
+    labels = clusts.labels_
     unique_labels = np.unique(labels)
     if -1 in unique_labels:
         unique_labels = np.ascontiguousarray(unique_labels[unique_labels != -1])
