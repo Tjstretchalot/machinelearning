@@ -200,7 +200,7 @@ def find_clusters(samples: np.ndarray) -> Clusters:
     way possible."""
     args = {
         'min_samples': 5,
-        'max_eps': np.inf,
+        'max_eps_style': 0.5, # 50% of max eucl. pairwise dist
         'metric': 'precomputed',
         'p': 2,
         'metric_params': None,
@@ -219,9 +219,18 @@ def find_clusters(samples: np.ndarray) -> Clusters:
         'nearest_center_metric': 'euclidean' # this is for associating points AFTER clusters found
     }
 
+
     # compute clusters
     precomp = sklearn.metrics.pairwise_distances(samples, metric=args_meta['precompute_metric'])
-    optics = sklearn.cluster.OPTICS(**args)
+    if 'max_eps_style' in args:
+        if args['max_eps_style'] == 'inf':
+            args['max_eps'] = np.inf
+        elif args['max_eps_style'] == 'mean':
+            args['max_eps'] = precomp.mean()
+        else:
+            args['max_eps'] = args['max_eps_style'] * precomp.max()
+        del args['max_eps_style']
+    optics = sklearn.cluster.OPTICS(**args) # pylint: disable=unexpected-keyword-arg
     optics.fit(precomp)
 
     # optics makes a heirarchy, but we wish to flatten that. first we determine
