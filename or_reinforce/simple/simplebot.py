@@ -117,7 +117,8 @@ class SimpleBot(Bot):
         self.model = _init_or_load_model()
         self.history = deque()
         self.teacher = FFTeacher()
-        self.optimizer = torch.optim.Adam([p for p in self.model.parameters() if p.requires_grad], lr=0.003)
+        self.optimizer = torch.optim.Adam(
+            [p for p in self.model.parameters() if p.requires_grad], lr=0.003)
         self.criterion = torch.nn.MSELoss()
 
         self.spam_loss = False
@@ -180,7 +181,8 @@ class SimpleBot(Bot):
         if self.print_loss_improves:
             if loss < self.best_loss:
                 self.best_loss = loss
-                print(f'[simplebot] loss improved to {loss} for move {og_move.name} reward {reward}')
+                print(f'[simplebot] loss improved to {loss} for move '
+                      + f'{og_move.name} reward {reward}')
                 sys.stdout.flush()
 
     def eval(self, game_state: GameState) -> Move:

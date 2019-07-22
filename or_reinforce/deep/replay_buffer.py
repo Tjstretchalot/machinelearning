@@ -475,7 +475,6 @@ class FileReadableReplayBuffer(ReadableReplayBuffer):
         if bytes_read == 0:
             raise ValueError('am at end of file but ought not be')
 
-
         while bytes_read < self.padded_size:
             amt = self.handle.readinto(self._blockmv[bytes_read:])
             if amt == 0:
@@ -509,7 +508,6 @@ class FileReadableReplayBuffer(ReadableReplayBuffer):
         self.perf.exit()
         return exp
 
-
     def close(self) -> None:
         if not self.handle:
             return
@@ -527,7 +525,6 @@ class FileReadableReplayBuffer(ReadableReplayBuffer):
 
         for i in range(earliest_file, self.shuffle_counter + 1):
             os.remove(self._shuffle_path(i))
-
 
 BALANCE_SIZE = 1024
 BALANCE_SIZE_POWS = [BALANCE_SIZE ** i for i in range(4)]

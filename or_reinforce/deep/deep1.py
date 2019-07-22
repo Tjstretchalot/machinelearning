@@ -21,7 +21,6 @@ import shared.filetools as filetools
 import or_reinforce.utils.qbot as qbot
 import or_reinforce.utils.rewarders as rewarders
 import or_reinforce.utils.encoders as encoders
-import or_reinforce.utils.general as gen
 import or_reinforce.deep.replay_buffer as replay_buffer
 
 from optimax_rogue.game.state import GameState
@@ -31,7 +30,7 @@ from optimax_rogue_bots.randombot import RandomBot
 import shared.pwl as pwl
 
 
-SAVEDIR = os.path.join('out', 'or_reinforce', 'simple', 'simplebot3')
+SAVEDIR = os.path.join('out', 'or_reinforce', 'deep', 'deep1')
 MODELFILE = os.path.join(SAVEDIR, 'model.pt')
 
 MOVE_MAP = [Move.Left, Move.Right, Move.Up, Move.Down]
@@ -451,7 +450,10 @@ class DeepQBot(qbot.QBot):
             return
         player_id = 1 if self.entity_iden == game_state.player_1_iden else 2
         self.replay.add(replay_buffer.Experience(game_state, move, self.cutoff,
-                                                 new_state, reward_raw, player_id))
+                                                 new_state, reward_raw, player_id,
+                                                 None,
+                                                 self.encoder.encode(game_state, move).numpy(),
+                                                 self.encoder.encode(new_state, move).numpy()))
 
     def save(self) -> None:
         pass
@@ -462,7 +464,8 @@ class MyQBotController(qbot.QBotController):
     def pitch(cls):
         return (
             'DeepQBot',
-            'Learns through offline replay of moves with a target network. Encodes the move as input',
+            'Learns through offline replay of moves with a target network. '
+            + 'Encodes the move as input',
         )
 
     @classmethod
@@ -651,20 +654,23 @@ def offline_learning():
             teacher=teacher,
             batch_size=32,
             learning_rate=0.0001,
-            optimizer=torch.optim.Adam([p for p in network.parameters() if p.requires_grad], lr=0.0001),
+            optimizer=torch.optim.Adam(
+                [p for p in network.parameters() if p.requires_grad], lr=0.0001),
             criterion=torch.nn.MSELoss()
         )
         (trainer
-        .reg(tnr.EpochsTracker())
-        .reg(tnr.EpochsStopper(100))
-        .reg(tnr.InfOrNANDetecter())
-        .reg(tnr.InfOrNANStopper())
-        .reg(tnr.DecayTracker())
-        .reg(tnr.DecayStopper(1))
-        .reg(tnr.OnEpochCaller.create_every(update_target, skip=CUTOFF)) # smaller cutoffs require more bootstrapping
-        .reg(tnr.DecayOnPlateau())
+         .reg(tnr.EpochsTracker())
+         .reg(tnr.EpochsStopper(100))
+         .reg(tnr.InfOrNANDetecter())
+         .reg(tnr.InfOrNANStopper())
+         .reg(tnr.DecayTracker())
+         .reg(tnr.DecayStopper(1))
+         .reg(tnr.OnEpochCaller.create_every(update_target, skip=CUTOFF))
+         # smaller cutoffs require more bootstrapping
+         .reg(tnr.DecayOnPlateau())
         )
-        res = trainer.train(network, target_dtype=torch.float32, point_dtype=torch.float32, perf=perf)
+        res = trainer.train(network, target_dtype=torch.float32, point_dtype=torch.float32,
+                            perf=perf)
         if res['inf_or_nan']:
             print('training failed! inf or nan!')
     finally:

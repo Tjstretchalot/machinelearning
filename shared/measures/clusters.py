@@ -200,8 +200,10 @@ def find_clusters(samples: np.ndarray) -> Clusters:
     """Attempts to locate clusters in the given samples in the most generic
     way possible."""
     args = {
-        'min_cluster_size': int(0.2*samples.shape[0])
+        'min_cluster_size': int(0.2*samples.shape[0]),
+        'min_samples': 10
     }
+
     args_meta = {
         'method': 'hdbscan.HDBSCAN'
     }
@@ -210,14 +212,12 @@ def find_clusters(samples: np.ndarray) -> Clusters:
     clusts = hdbscan.HDBSCAN(**args)
     clusts.fit(samples)
 
-    # optics makes a heirarchy, but we wish to flatten that. first we determine
-    # how many clusters there are which actually have points belonging to them
-    # -1 is for unclustered points, which we will clsuter later
+    # first we determine how many clusters there are which actually
+    # have points belonging to them -1 is for unclustered points
     labels = clusts.labels_
     unique_labels = np.unique(labels)
     if -1 in unique_labels:
         unique_labels = np.ascontiguousarray(unique_labels[unique_labels != -1])
-
 
     # we are also going to want to centers of our labels
     sums = np.zeros((unique_labels.shape[0], samples.shape[1]), dtype='float64')

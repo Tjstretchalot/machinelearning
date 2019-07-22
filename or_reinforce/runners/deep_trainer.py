@@ -1,4 +1,16 @@
-"""Launches a game with two bots and watches them with a command spectator
+"""This module can be used to train a deep-network. Training happens by
+repeatedly:
+    - Fetching experiences
+        + This is done in a multiprocessed manner, where each process is
+          involved in spawning its own server and clients and connecting
+          them together
+    - Training
+        + This is done by invoking the deep bots module directly. Command
+          line arguments are passed in for training parameters
+
+Training is defined through SessionSettings which are connected through TrainSettings.
+During the collecting experiences phase, this can be stopped at any time and it will
+resume in approximately the same spot. This is less true for the training phase.
 """
 import shared.setup_torch # pylint: disable=unused-import
 import argparse
@@ -121,8 +133,8 @@ class TrainSettings(ser.Serializable):
         first_reguls = np.linspace(INIT_REGUL, PRE_ANNEAL_TFA_REGUL, 6)
         # first session short to avoid norms being way off
         train_seq.append(SessionSettings(tie_len=111, tar_ticks=1000, train_force_amount=1,
-                                         regul_factor=first_reguls[0], holdover=10000, alpha=0.6, beta=0.4,
-                                         balance=True, balance_technique='action'))
+                                         regul_factor=first_reguls[0], holdover=10000, alpha=0.6,
+                                         beta=0.4, balance=True, balance_technique='action'))
         for i in range(5): # 5 * 2k = 10k samples random
             train_seq.append(SessionSettings(tie_len=111, tar_ticks=2000, train_force_amount=1,
                                              regul_factor=first_reguls[i+1], holdover=10000,
@@ -227,7 +239,9 @@ def main():
     parser.add_argument('--settings', type=str, default=os.path.join(SAVEDIR, 'settings.json'),
                         help='path to the settings file')
     parser.add_argument('--aggressive', action='store_true',
-                        help='no sleeps, use as much cpu as possible')
+                        help='no sleeps, use as much cpu as possible. almost always'
+                        + ' faster to use as many threads as it takes to take up'
+                        + ' about 75% of cpu usage')
     parser.add_argument('--numthreads', type=int, default=10,
                         help='number of threads to use for gathering experiences')
     parser.add_argument('--debug', action='store_true',
@@ -375,12 +389,14 @@ def _get_experiences_async(settings: TrainSettings, executable: str, port_min: i
             return
 
     replay_paths = [os.path.join(settings.bot_folder, f'replay_{i}') for i in range(nthreads)]
-    setting_paths = [os.path.join(settings.bot_folder, f'settings_{i}.json') for i in range(nthreads)]
+    setting_paths = [os.path.join(settings.bot_folder, f'settings_{i}.json')
+                     for i in range(nthreads)]
     workers = []
     serd_settings = ser.serialize_embeddable(settings)
     ports_per = (port_max - port_min) // nthreads
     if ports_per < 3:
-        raise ValueError(f'not enough ports assigned ({nthreads} threads, {port_max-port_min} ports)')
+        raise ValueError('not enough ports assigned '
+                         + f'({nthreads} threads, {port_max-port_min} ports)')
     ticks_per = int(math.ceil(num_ticks_to_do / nthreads))
     for worker in range(nthreads):
         proc = Process(target=_get_experiences_target,
