@@ -138,15 +138,25 @@ class ZoomScene(Scene):
     """Scene which changes the zoom
 
     Attributes:
-        start_zoom (tuple[float, float]): the min/max we start at
-        end_zoom (tuple[float, float]): the min/max we end at
+        start_zoom (tuple[tuple[float, float]]): the min/max we start at for
+            each coordinate. May be specified in constructor with a single
+            tuple[float, float] to use the same for all.
+        end_zoom (tuple[tuple[float, float]]): the min/max we end at, like
+            start_zoom
         snapshot_idx (int): the snapshot that should be visible
     """
 
     def __init__(self, duration, title, start_zoom, end_zoom, snapshot_idx):
         super().__init__(duration, title)
-        self.start_zoom = start_zoom
-        self.end_zoom = end_zoom
+        if isinstance(start_zoom[0], (int, float)):
+            self.start_zoom = (start_zoom, start_zoom, start_zoom)
+        else:
+            self.start_zoom = start_zoom
+
+        if isinstance(end_zoom[0], (int, float)):
+            self.end_zoom = (end_zoom, end_zoom, end_zoom)
+        else:
+            self.end_zoom = end_zoom
         self.snapshot_idx = snapshot_idx
 
     def apply(self, traj, mpl_data, time_ms):
@@ -158,12 +168,13 @@ class ZoomScene(Scene):
         prog = time_ms / self.duration
         perc = mytweening.smoothstep(mytweening.squeeze(prog, 0.1))
 
-        delzoom = (self.end_zoom[0] - self.start_zoom[0], self.end_zoom[1] - self.start_zoom[1])
-        newzoom = (self.start_zoom[0] + delzoom[0] * perc, self.start_zoom[1] + delzoom[1] * perc)
-
-        mpl_data.axes.set_xlim(*newzoom)
-        mpl_data.axes.set_ylim(*newzoom)
-        mpl_data.axes.set_zlim(*newzoom)
+        delzoom = tuple((ez[0] - sz[0], ez[1] - sz[1])
+                        for sz, ez in zip(self.start_zoom, self.end_zoom))
+        newzoom = tuple((sz[0] + dz[0] * perc, sz[1] + dz[1] * perc)
+                        for sz, dz in zip(self.start_zoom, delzoom))
+        mpl_data.axes.set_xlim(*newzoom[0])
+        mpl_data.axes.set_ylim(*newzoom[1])
+        mpl_data.axes.set_zlim(*newzoom[2])
 
 class RotationScene(Scene):
     """Scene which rotates around the y axis"""
@@ -175,12 +186,13 @@ class RotationScene(Scene):
         super().apply(traj, mpl_data, time_ms)
 
         if mpl_data.current_snapsh_idx != self.snapshot_idx:
-            data = traj.snapshots[self.snapshot_idx].projected_samples[:, :3].numpy()
-            mpl_data.scatter._offsets3d = (data[:, 0], data[:, 1], data[:, 2]) # pylint: disable=protected-access
-            minlim, maxlim = float(data.min()), float(data.max())
-            mpl_data.axes.set_xlim(minlim, maxlim)
-            mpl_data.axes.set_ylim(minlim, maxlim)
-            mpl_data.axes.set_zlim(minlim, maxlim)
+            data = traj.snapshots[self.snapshot_idx].projected_samples[:, :3]
+            lims = _get_square_bounds(data)
+            datanp = data.numpy()
+            mpl_data.scatter._offsets3d = (datanp[:, 0], datanp[:, 1], datanp[:, 2]) # pylint: disable=protected-access
+            mpl_data.axes.set_xlim(*lims[0])
+            mpl_data.axes.set_ylim(*lims[1])
+            mpl_data.axes.set_zlim(*lims[2])
             mpl_data.current_snapsh_idx = self.snapshot_idx
 
         prog = time_ms / self.duration
@@ -353,7 +365,7 @@ class MaskedParentScene(Scene):
             known_markers = None
             if hasattr(frame_worker, 'markers'):
                 known_markers = frame_worker.markers(snapsh.projected_sample_labels.numpy())
-                for i in range(len(known_markers)):
+                for i in range(len(known_markers)): # pylint: disable=consider-using-enumerate
                     markermask, marker = known_markers[i]
                     known_markers[i] = markermask[self.mask], marker
             masked_scatter = frame_worker.init_scatter(
@@ -474,16 +486,15 @@ class FrameWorker:
         axtitle = ax.set_title('Title')
         axtitle.set_fontsize(80)
 
-        data = self.traj.snapshots[0].projected_samples[:, :3].numpy()
+        data = self.traj.snapshots[0].projected_samples[:, :3]
         labels = self.traj.snapshots[0].projected_sample_labels.numpy()
-        scatter = self.init_scatter(ax, data, labels)
+        scatter = self.init_scatter(ax, data.numpy(), labels)
         ax.view_init(30, 45)
 
-        minlim = float(data.min())
-        maxlim = float(data.max())
-        ax.set_xlim(minlim, maxlim)
-        ax.set_ylim(minlim, maxlim)
-        ax.set_zlim(minlim, maxlim)
+        lims = _get_square_bounds(data)
+        ax.set_xlim(*lims[0])
+        ax.set_ylim(*lims[1])
+        ax.set_zlim(*lims[2])
 
         self.mpl_data = MPLData(fig, ax, axtitle, scatter, 0)
 
@@ -773,6 +784,20 @@ class FrameWorkerConnection:
         """Notifies this worker that it should render the specified frame number"""
         self.send_queue.put(('img', frame_num))
 
+def _get_square_bounds(pts: torch.tensor) -> typing.Tuple[typing.Tuple[float, float]]:
+    nfeatures = pts.shape[1]
+    pts_min = pts.min(dim=0)[0] # tensor[nfeatures]
+    pts_max = pts.max(dim=0)[0] # tensor[nfeatures]
+
+    size = (pts_max - pts_min).max() # tensor[1]
+    centers = torch.cat((pts_min.reshape(1, nfeatures), # tensor[nfeatures]
+                        pts_max.reshape(1, nfeatures)), dim=0).mean(dim=0)
+
+    return tuple(
+        (_min.item(), _max.item())
+        for (_min, _max) in zip(centers - size, centers + size)
+    )
+
 def _get_cluster_scene(traj: typing.Union[pca_ff.PCTrajectoryFF, pca_gen.PCTrajectoryGen],
                        layer_ind: int, layer_name: str, clust: clusters.Clusters,
                        clust_ind: int) -> Scene:
@@ -797,14 +822,8 @@ def _get_cluster_scene(traj: typing.Union[pca_ff.PCTrajectoryFF, pca_gen.PCTraje
         )
         new_traj = pca_gen.PCTrajectoryGen([new_snap])
 
-    old_zoom = (
-        rel_snap.projected_samples.min().item(),
-        rel_snap.projected_samples.max().item()
-    )
-    new_zoom = (
-        new_snap.projected_samples.min().item(),
-        new_snap.projected_samples.max().item()
-    )
+    old_zoom = _get_square_bounds(rel_snap.projected_samples)
+    new_zoom = _get_square_bounds(new_snap.projected_samples)
 
     title = f'{layer_name} Cluster {clust_ind+1}'
     return MaskedParentScene(new_traj, layer_ind, mask.numpy().astype('bool'), [
@@ -951,11 +970,10 @@ def _plot_ff_real(traj: typing.Union[pca_ff.PCTrajectoryFF, pca_gen.PCTrajectory
             if not norotate:
                 ax.view_init(30, 45)
 
-            minlim = float(snapsh.projected_samples.min())
-            maxlim = float(snapsh.projected_samples.max())
-            ax.set_xlim(minlim, maxlim)
-            ax.set_ylim(minlim, maxlim)
-            ax.set_zlim(minlim, maxlim)
+            lims = _get_square_bounds(snapsh.projected_samples)
+            ax.set_xlim(*lims[0])
+            ax.set_ylim(*lims[1])
+            ax.set_zlim(*lims[2])
 
             if layer_names is not None:
                 _axtitle = ax.set_title(layer_names[target_layer])
@@ -969,11 +987,10 @@ def _plot_ff_real(traj: typing.Union[pca_ff.PCTrajectoryFF, pca_gen.PCTrajectory
                                snapsh.projected_samples[:, 1].numpy(),
                                snapsh.projected_samples[:, 2].numpy())
 
-        minlim = float(snapsh.projected_samples.min())
-        maxlim = float(snapsh.projected_samples.max())
-        ax.set_xlim(minlim, maxlim)
-        ax.set_ylim(minlim, maxlim)
-        ax.set_zlim(minlim, maxlim)
+        lims = _get_square_bounds(snapsh.projected_samples)
+        ax.set_xlim(*lims[0])
+        ax.set_ylim(*lims[1])
+        ax.set_zlim(*lims[2])
 
         if layer_names is not None:
             return (ax, _scatter, _axtitle)
@@ -1012,13 +1029,13 @@ def _plot_ff_real(traj: typing.Union[pca_ff.PCTrajectoryFF, pca_gen.PCTrajectory
                 clust,
                 clust_ind))
 
-    curdat = traj.snapshots[0].projected_samples.numpy()
-    curlim = (float(curdat.min()), float(curdat.max()))
+    curdat = traj.snapshots[0].projected_samples
+    curlim = _get_square_bounds(curdat)
     for i in range(1, traj.num_layers):
         interptitle = f'{layer_names[i - 1]} -> {layer_names[i]}' if layer_names is not None else ''
 
-        newdat = traj.snapshots[i].projected_samples.numpy()
-        newlim = (float(newdat.min()), float(newdat.max()))
+        newdat = traj.snapshots[i].projected_samples
+        newlim = _get_square_bounds(newdat)
         interplim = (min(curlim[0], newlim[0]), max(curlim[1], newlim[1]))
         if interplim[0] != curlim[0] or interplim[1] != curlim[1]:
             scenes.append(ZoomScene(ZOOM_TIME, interptitle, curlim, interplim, i-1))
