@@ -218,8 +218,6 @@ def find_clusters(samples: np.ndarray) -> Clusters:
     if -1 in unique_labels:
         unique_labels = np.ascontiguousarray(unique_labels[unique_labels != -1])
 
-    if len(unique_labels) > 5:
-
 
     # we are also going to want to centers of our labels
     sums = np.zeros((unique_labels.shape[0], samples.shape[1]), dtype='float64')
