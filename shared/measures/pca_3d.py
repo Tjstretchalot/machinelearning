@@ -208,19 +208,18 @@ class RotationScene(Scene):
 
 class InterpScene(Scene):
     """Scene which interpolates between two snapshots while spinning"""
-    def __init__(self, duration, title, from_snapshot_idx, to_snapshot_idx):
+    def __init__(self, duration, title, lims, from_snapshot_idx, to_snapshot_idx):
         super().__init__(duration, title)
         self.from_snapshot_idx = from_snapshot_idx
         self.to_snapshot_idx = to_snapshot_idx
         self.start_np = None
         self.delta_np = None
-        self.lims = None
+        self.lims = lims
 
     def start(self, frame_worker, traj, mpl_data):
         self.start_np = traj.snapshots[self.from_snapshot_idx].projected_samples[:, :3].numpy()
         end_np = traj.snapshots[self.to_snapshot_idx].projected_samples[:, :3].numpy()
         self.delta_np = end_np - self.start_np
-        self.lims = _get_square_bounds(traj.snapshots[self.from_snapshot_idx].projected_samples)
 
 
     def apply(self, traj, mpl_data, time_ms):
@@ -1055,6 +1054,7 @@ def _plot_ff_real(traj: typing.Union[pca_ff.PCTrajectoryFF, pca_gen.PCTrajectory
         scenes.append(InterpScene(
             INTERP_SPIN_TIME,
             interptitle,
+            interplim,
             i - 1,
             i,
         ))
