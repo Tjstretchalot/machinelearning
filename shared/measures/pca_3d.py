@@ -793,11 +793,11 @@ def _get_square_bounds(pts: torch.tensor) -> typing.Tuple[typing.Tuple[float, fl
 
     size = (pts_max - pts_min).max() # tensor[1]
     centers = torch.cat((pts_min.reshape(1, nfeatures), # tensor[nfeatures]
-                        pts_max.reshape(1, nfeatures)), dim=0).mean(dim=0)
+                         pts_max.reshape(1, nfeatures)), dim=0).mean(dim=0)
 
     result = tuple(
         (_min.item(), _max.item())
-        for (_min, _max) in zip(centers - size, centers + size)
+        for (_min, _max) in zip(centers - (size/2), centers + (size/2))
     )
 
     if len(result) != nfeatures:
