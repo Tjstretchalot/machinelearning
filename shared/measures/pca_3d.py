@@ -1048,7 +1048,10 @@ def _plot_ff_real(traj: typing.Union[pca_ff.PCTrajectoryFF, pca_gen.PCTrajectory
 
         newdat = traj.snapshots[i].projected_samples
         newlim = _get_square_bounds(newdat)
-        interplim = (min(curlim[0], newlim[0]), max(curlim[1], newlim[1]))
+        interplim = tuple(
+            (min(fir[0], sec[0]), max(fir[1], sec[1]))
+            for fir, sec in zip(curlim, newlim)
+        )
         if interplim[0] != curlim[0] or interplim[1] != curlim[1]:
             scenes.append(ZoomScene(ZOOM_TIME, interptitle, curlim, interplim, i-1))
         scenes.append(InterpScene(
