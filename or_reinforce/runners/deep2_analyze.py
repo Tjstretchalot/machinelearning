@@ -3,6 +3,7 @@ import argparse
 import os
 import typing
 import json
+import datetime
 
 import shared.setup_torch # pylint: disable=unused-import
 import torch
@@ -187,6 +188,26 @@ def get_unique_states_with_exps(
 
     return torch.cat(tuple(i.unsqueeze(0) for i in result), dim=0), result_exps
 
+def store_meta(network: deep2.Deep2Network, states: torch.tensor,
+               exps: typing.List[replay_buffer.Experience]):
+    """Stores meta information about the performance of the bot"""
+    meta = {}
+
+    cor_marks = _correctness_markers(network, states, exps)
+    ncor = int(cor_marks[0][0].sum())
+    nsamp = int(states.shape[0])
+    pacc = ncor / nsamp
+    meta['time'] = str(datetime.datetime.now())
+    meta['accuracy'] = {'samples': nsamp, 'correct': ncor,
+                        'accuracy': pacc}
+
+    metapath = os.path.join(SAVEDIR, 'meta.json')
+    if os.path.exists(metapath):
+        os.remove(metapath)
+
+    with open(metapath, 'w') as outfile:
+        json.dump(meta, outfile)
+
 def main():
     """Main entry point for analyzing the model"""
     parser = argparse.ArgumentParser(description='Trains the deep.deep1 bot against a random bot')
@@ -242,6 +263,9 @@ def _run(args):
         labels = network(states)
     print(f'loaded {len(states)} states for analysis...')
     train_pwl = pwl.SimplePointWithLabelProducer(states, labels, 4, True)
+
+    print('--storing meta info--')
+    store_meta(network, states, exps)
 
     print('--fetching top 3 pcs--')
     traj: pca_gen.PCTrajectoryGen = pca_gen.find_trajectory(network, train_pwl, 3)
