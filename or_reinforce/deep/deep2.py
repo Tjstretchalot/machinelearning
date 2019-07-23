@@ -276,7 +276,7 @@ class Deep2Network(FeedforwardNetwork):
             AffineLayer.create(ENCODE_DIM),
             StackableLayer.create(ENCODE_DIM, HIDDEN_DIM),
             [StackableLayer.create(HIDDEN_DIM, HIDDEN_DIM) for i in range(5)],
-            torch.nn.Linear(HIDDEN_DIM, OUTPUT_DIM, bias=False),
+            torch.nn.Linear(HIDDEN_DIM, OUTPUT_DIM),
             'tanh'
         )
 

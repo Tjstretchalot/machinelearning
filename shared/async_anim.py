@@ -231,7 +231,6 @@ class MPAnimation:
             raise RuntimeError(f'_spawn_ffmpeg called when ffmpeg_proc is not None (is {self.ffmpeg_proc})')
 
         ffmpeg_path = str(mpl.rcParams['animation.ffmpeg_path'])
-        frame_format = str(mpl.rcParams['animation.frame_format'])
 
         bitrate = mpl.rcParams['animation.bitrate']
 

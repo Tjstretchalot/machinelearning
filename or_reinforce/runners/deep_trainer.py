@@ -100,7 +100,7 @@ ser.register(SessionSettings)
 INIT_REGUL = 6
 PRE_ANNEAL_TFA_REGUL = 4
 POST_ANNEAL_TFA_REGUL = 1
-HALF_TRAIN_ANNEAL_SESSIONS = 75
+HALF_TRAIN_ANNEAL_SESSIONS = 50
 
 class TrainSettings(ser.Serializable):
     """The settings for training the deep bot
@@ -146,7 +146,7 @@ class TrainSettings(ser.Serializable):
                              HALF_TRAIN_ANNEAL_SESSIONS)
         betas = np.linspace(0.4, 1, HALF_TRAIN_ANNEAL_SESSIONS)
         for i, tfa in enumerate(np.linspace(1, 0.1, HALF_TRAIN_ANNEAL_SESSIONS)):
-            # 75*4k = 300k samples linearly decreasing tfa
+            # 50*4k = 200k samples linearly decreasing tfa
             train_seq.extend([
                 SessionSettings(tie_len=111, tar_ticks=2000, train_force_amount=float(tfa),
                                 regul_factor=float(reguls[i]), holdover=10000, alpha=0.6,

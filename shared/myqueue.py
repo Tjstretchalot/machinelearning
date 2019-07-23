@@ -4,7 +4,6 @@ with faster implementations from other libraries without too much development wo
 
 import zmq
 import queue
-import sys
 import time
 
 class ZeroMQQueue:
