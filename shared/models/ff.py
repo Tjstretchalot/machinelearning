@@ -7,7 +7,7 @@ from shared.models.generic import Network
 from shared.teachers import NetworkTeacher
 import shared.weight_inits as wi
 import shared.nonlinearities as nonlins
-import shared.typeutils as tus
+import pytypeutils as tus
 
 import typing
 import math

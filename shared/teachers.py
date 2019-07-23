@@ -7,7 +7,7 @@ from shared.models.generic import Network
 from shared.seqseqprod import Sequence
 from shared.perf_stats import PerfStats, NoopPerfStats
 
-import shared.typeutils as tus
+import pytypeutils as tus
 
 class NetworkTeacher:
     """Describes something that can send points to a particular network."""

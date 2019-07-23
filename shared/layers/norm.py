@@ -7,7 +7,7 @@ unit-variance, but this is not a necessary feature when evaluating the network.
 
 import torch
 
-import shared.typeutils as tus
+import pytypeutils as tus
 
 class EvaluatingAbsoluteNormLayer(torch.nn.Module):
     """A very simple 1-to-1 layer which subtracts of the precomputed mean and divides

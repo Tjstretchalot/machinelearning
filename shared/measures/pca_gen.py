@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 
 import shared.measures.pca as pca
-import shared.typeutils as tus
+import pytypeutils as tus
 import shared.measures.utils as mutils
 import shared.filetools as filetools
 from shared.pwl import PointWithLabelProducer
@@ -107,7 +107,7 @@ class PCTrajectoryGen:
     """
 
     def __init__(self, snapshots: typing.List[PCTrajectoryGenSnapshot]) -> None:
-        tus.check_list(PCTrajectoryGenSnapshot, snapshots=snapshots)
+        tus.check_listlike(snapshots=(snapshots, PCTrajectoryGenSnapshot))
 
         fdtype = snapshots[0].principal_vectors.dtype
         num_pcs = snapshots[0].principal_values.shape[0]
@@ -179,7 +179,7 @@ def to_trajectory(sample_labels: torch.tensor, all_hid_acts: typing.List[torch.t
     tus.check(sample_labels=(sample_labels, torch.tensor),
               all_hid_acts=(all_hid_acts, (list, tuple)),
               num_pcs=(num_pcs, int))
-    tus.check_list(torch.tensor, all_hid_acts=all_hid_acts)
+    tus.check_listlike(all_hid_acts=(all_hid_acts, torch.Tensor))
 
     snapshots = []
     for idx, hid_acts in enumerate(all_hid_acts):

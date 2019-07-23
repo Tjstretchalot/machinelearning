@@ -35,7 +35,7 @@ from shared.layers.affine import AffineLayer
 import shared.nonlinearities as snonlins
 import shared.trainer as tnr
 import shared.perf_stats as perf_stats
-import shared.typeutils as tus
+import pytypeutils as tus
 import shared.filetools as filetools
 import shared.measures.utils as mutils
 

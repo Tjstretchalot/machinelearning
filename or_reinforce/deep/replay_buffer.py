@@ -10,7 +10,7 @@ import random
 from collections import deque
 import numpy as np
 
-import shared.typeutils as tus
+import pytypeutils as tus
 import shared.perf_stats as perf_stats
 from optimax_rogue.game.state import GameState
 from optimax_rogue.logic.moves import Move

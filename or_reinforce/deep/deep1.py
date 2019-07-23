@@ -14,7 +14,7 @@ from shared.models.ff import FeedforwardNetwork, FFTeacher, FFHiddenActivations
 from shared.layers.norm import EvaluatingAbsoluteNormLayer, LearningAbsoluteNormLayer
 import shared.trainer as tnr
 import shared.perf_stats as perf_stats
-import shared.typeutils as tus
+import pytypeutils as tus
 import shared.cp_utils as cp_utils
 import shared.filetools as filetools
 

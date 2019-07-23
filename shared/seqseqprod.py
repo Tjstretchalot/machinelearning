@@ -1,7 +1,7 @@
 """Describes something that is capable of generating sequence to sequence problems to
 present to a (recurrent) neural network"""
 
-import shared.typeutils as tus
+import pytypeutils as tus
 import typing
 from shared.perf_stats import PerfStats, NoopPerfStats
 

@@ -15,7 +15,7 @@ import matplotlib.colors as mcolors
 
 import shared.measures.pca_gen as pca_gen
 import shared.measures.utils as mutils
-import shared.typeutils as tus
+import pytypeutils as tus
 import shared.filetools as filetools
 
 FRAME_SIZE = (19.2, 10.8)
@@ -45,7 +45,7 @@ def plot_trajectory(traj: pca_gen.PCTrajectoryGen, filepath: str, exist_ok: bool
         filepath=(filepath, str),
         exist_ok=(exist_ok, bool),
     )
-    tus.check_list(str, markers=markers)
+    tus.check_listlike(markers=(markers, str))
 
     ots = pca_gen.MaxOTSMapping()
     s = 12

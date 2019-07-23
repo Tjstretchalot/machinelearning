@@ -3,7 +3,7 @@ feature. Helpful when you want a batch norm layer but don't want to tie the affi
 transformation to it"""
 
 import torch
-import shared.typeutils as tus
+import pytypeutils as tus
 
 class AffineLayer(torch.nn.Module):
     """Performs an affine transformation on each feature

@@ -24,7 +24,7 @@ from shared.npmp import NPDigestor
 from shared.trainer import GenericTrainingContext
 import shared.myqueue as myq
 import shared.async_anim as saa
-import shared.typeutils as tus
+import pytypeutils as tus
 import shared.measures.utils as mutils
 import shared.measures.clusters as clusters
 import time as time_
@@ -903,7 +903,7 @@ def _plot_ff_real(traj: typing.Union[pca_ff.PCTrajectoryFF, pca_gen.PCTrajectory
 
     if clusts is not None:
         tus.check(clusts=(clusts, (tuple, list)))
-        tus.check_list((type(None), clusters.Clusters), clusts=clusts)
+        tus.check_listlike(clusts=(clusts, (type(None), clusters.Clusters)))
         if len(clusts) != traj.num_layers:
             raise ValueError(f'expected clusters is length {traj.num_layers}, got {len(clusts)}')
     else:

@@ -14,7 +14,7 @@ if not hasattr(sklearn.cluster, 'OPTICS'):
     raise ValueError(f'update scikit-learn to >=0.21.2 for clustering!')
 
 import hdbscan
-import shared.typeutils as tus
+import pytypeutils as tus
 import shared.filetools as filetools
 import shared.measures.utils as mutils
 

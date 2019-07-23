@@ -1,7 +1,7 @@
 """Capable of downloading and loading the TWL06 Scrabble Word List"""
 
 import typing
-import shared.typeutils as tus
+import pytypeutils as tus
 import random
 import os
 import hashlib
@@ -18,7 +18,7 @@ class WordList:
     """
 
     def __init__(self, words: typing.List[str]):
-        tus.check_list(str, words=words)
+        tus.check_listlike(words=(words, str))
         self.words = words
 
     def permute(self) -> 'WordList':

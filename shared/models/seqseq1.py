@@ -5,7 +5,7 @@ import typing
 import torch
 import torch.nn as nn
 
-import shared.typeutils as tus
+import pytypeutils as tus
 import shared.nonlinearities as nonlins
 from shared.perf_stats import PerfStats, NoopPerfStats
 from shared.models.generic import Network

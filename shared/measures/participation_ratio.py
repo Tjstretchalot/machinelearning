@@ -19,7 +19,7 @@ from shared.trainer import GenericTrainingContext
 import shared.npmp as npmp
 import shared.measures.utils as mutils
 import shared.myqueue as myq
-import shared.typeutils as tus
+import pytypeutils as tus
 
 import uuid
 

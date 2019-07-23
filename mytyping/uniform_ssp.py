@@ -3,7 +3,7 @@
 from shared.seqseqprod import SeqSeqProducer, Sequence
 from shared.perf_stats import PerfStats, NoopPerfStats
 import typing
-import shared.typeutils as tus
+import pytypeutils as tus
 import mytyping.encoding as menc
 
 PRE_ENCODE = True
@@ -21,7 +21,7 @@ class UniformSSP(SeqSeqProducer):
     """
 
     def __init__(self, words: typing.List[str], char_delay: int):
-        tus.check_list(str, words=words)
+        tus.check_listlike(words=(words, str))
         tus.check(char_delay=(char_delay, (int, float)))
         super().__init__(len(words), 1, 2)
 
