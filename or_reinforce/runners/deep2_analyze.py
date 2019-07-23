@@ -205,6 +205,8 @@ def store_meta(network: deep2.Deep2Network, states: torch.tensor,
     if os.path.exists(metapath):
         os.remove(metapath)
 
+    os.makedirs(SAVEDIR, exist_ok=True)
+
     with open(metapath, 'w') as outfile:
         json.dump(meta, outfile)
 
