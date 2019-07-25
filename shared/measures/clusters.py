@@ -37,7 +37,7 @@ class Clusters:
                  calculate_params: typing.Dict[str, typing.Any]):
         tus.check(samples=(samples, np.ndarray), centers=(centers, np.ndarray),
                   labels=(labels, np.ndarray), calculate_params=(calculate_params, dict))
-        tus.check_tensors(
+        tus.check_ndarrays(
             samples=(samples, ('n_samples', 'n_features'),
                      (np.dtype('float32'), np.dtype('float64'))),
             centers=(
